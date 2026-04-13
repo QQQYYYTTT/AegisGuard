@@ -1,0 +1,9 @@
+{
+  "name": "agentguard-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent runtime security platform demo with authorization, blocking, sandbox and audit APIs.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
