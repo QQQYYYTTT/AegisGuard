@@ -1,9 +1,11 @@
 {
-  "name": "agentguard-demo",
-  "version": "0.1.0",
+  "name": "aegisguard",
+  "version": "0.2.0",
   "private": true,
-  "description": "Agent runtime security platform demo with authorization, blocking, sandbox and audit APIs.",
+  "description": "AegisGuard experiment framework for native agent security evaluation and runtime control prototyping.",
   "scripts": {
-    "start": "node server.js"
+    "start": "node backend/src/server.js",
+    "start:backend": "node backend/src/server.js",
+    "check": "node --check backend/src/server.js && node --check frontend/app.js"
   }
 }

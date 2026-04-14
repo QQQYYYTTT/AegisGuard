@@ -1,0 +1,67 @@
+:root {
+  --bg: #eef2f7;
+  --surface: #ffffff;
+  --surface-soft: #f7f9fc;
+  --border: #d9e0ea;
+  --text: #1e2c3a;
+  --muted: #617487;
+  --blue: #1864ab;
+  --cyan: #2a9d8f;
+  --ink: #0f1720;
+  --shadow: 0 18px 42px rgba(19, 39, 60, 0.08);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: linear-gradient(180deg, #f8fbff 0%, #edf2f8 100%); color: var(--text); }
+body { font-size: 16px; }
+h1, h2, h3, h4, p, pre, ul { margin: 0; }
+button, input, textarea { font: inherit; }
+pre { white-space: pre-wrap; word-break: break-word; font-family: "Consolas", "Courier New", monospace; }
+
+.shell { display: grid; grid-template-columns: 300px 1fr; min-height: 100vh; }
+.sidebar { background: linear-gradient(180deg, #0f2740 0%, #143b5c 100%); color: #fff; padding: 24px 18px; display: grid; gap: 18px; }
+.brand { display: grid; grid-template-columns: 64px 1fr; gap: 14px; align-items: center; }
+.brand-mark { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; background: linear-gradient(135deg, #61a8ff 0%, #2ed6c4 100%); font-weight: 900; font-size: 24px; }
+.brand h1 { font-size: 28px; }
+.brand p, .sidebar-panel p, .sidebar-panel li { color: rgba(255,255,255,0.82); line-height: 1.7; }
+.sidebar-panel { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1); border-radius: 22px; padding: 18px; }
+.sidebar-panel strong { display: block; margin: 8px 0; font-size: 22px; }
+.sidebar-panel ul { padding-left: 18px; display: grid; gap: 10px; }
+.tiny-title, .eyebrow { display: inline-block; text-transform: uppercase; letter-spacing: 0.14em; font-size: 12px; font-weight: 800; }
+.main { padding: 28px; }
+.hero { display: flex; justify-content: space-between; gap: 18px; padding: 28px; background: var(--surface); border: 1px solid var(--border); border-radius: 28px; box-shadow: var(--shadow); margin-bottom: 22px; }
+.hero h2 { font-size: 38px; color: var(--ink); margin: 8px 0 12px; line-height: 1.2; }
+.hero-text { max-width: 920px; color: var(--muted); line-height: 1.8; }
+.hero-badges { display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
+.badge, .tag { padding: 10px 14px; border-radius: 999px; background: #e8f1fb; color: var(--blue); font-weight: 800; }
+.badge.success { background: #e7f8f4; color: var(--cyan); }
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 28px; box-shadow: var(--shadow); padding: 22px; }
+.card.wide { grid-column: 1 / -1; }
+.card-head { margin-bottom: 18px; }
+.card-head h3 { margin-top: 6px; font-size: 28px; color: var(--ink); }
+.stack, .matrix, .result-grid { display: grid; gap: 14px; }
+.matrix { grid-template-columns: repeat(2, 1fr); }
+.mini-card, .result-box { background: var(--surface-soft); border: 1px solid var(--border); border-radius: 20px; padding: 16px; }
+.mini-card strong, .result-box h4 { display: block; margin-bottom: 10px; font-size: 19px; color: var(--ink); }
+.mini-card p, .result-box pre, .info-row span { color: var(--muted); line-height: 1.7; }
+.card-title-row, .info-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.info-row { background: var(--surface-soft); border: 1px solid var(--border); border-radius: 18px; padding: 14px 16px; }
+.info-row strong { color: var(--ink); }
+.sim-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.field { display: grid; gap: 8px; }
+.field span { font-weight: 700; color: var(--ink); }
+.field input, .field textarea { width: 100%; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--border); background: #fff; color: var(--text); outline: none; }
+.field textarea { min-height: 132px; resize: vertical; }
+.span-2 { grid-column: span 2; }
+.action-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+button { border: 1px solid var(--border); background: var(--surface-soft); color: var(--blue); border-radius: 14px; padding: 12px 16px; cursor: pointer; font-weight: 800; }
+button.primary { background: linear-gradient(135deg, #1e7ad8 0%, #2a9d8f 100%); border: 0; color: #fff; }
+.result-grid { grid-template-columns: repeat(3, 1fr); }
+
+@media (max-width: 1100px) {
+  .shell { grid-template-columns: 1fr; }
+  .grid, .matrix, .result-grid, .sim-grid, .hero { grid-template-columns: 1fr; display: grid; }
+  .card.wide { grid-column: auto; }
+  .span-2 { grid-column: auto; }
+}
