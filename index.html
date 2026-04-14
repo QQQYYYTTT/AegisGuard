@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Agent Runtime Guardian</title>
+  <title>AegisGuard</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -12,20 +12,20 @@
       <div class="login-brand">
         <div class="brand-orb">AG</div>
         <div>
-          <p class="login-kicker">Adaptive Runtime Security Platform</p>
-          <h1>Agent Runtime Guardian</h1>
-          <p class="login-subtitle">面向 Agent 工具调用、运行时阻断、记忆沙箱与攻击归因的一体化安全系统</p>
+          <p class="login-kicker">Agent Runtime Security Governance</p>
+          <h1>AegisGuard</h1>
+          <p class="login-subtitle">面向 Agent 运行时的安全监管与执行控制系统，围绕可信授权、执行前阻断、双流上下文隔离与攻击链审计构建完整防护闭环。</p>
         </div>
       </div>
 
       <div class="login-grid">
         <section class="login-card">
-          <span class="tiny-title">平台能力</span>
+          <span class="tiny-title">核心能力</span>
           <ul>
-            <li>基于国密授权链路的请求签发与验签</li>
-            <li>执行前阻断与多级运行时决策</li>
-            <li>不可信结果进入记忆沙箱后再回传</li>
-            <li>攻击链可视化回放与证据审计</li>
+            <li>策略中心按任务、会话和动作动态签发 RequireToken 授权令牌</li>
+            <li>Message Gate、Action Gate、Return Gate 输出可执行控制动作</li>
+            <li>记忆沙箱将外部结果隔离到低信任流，仅允许结构化安全摘要回传</li>
+            <li>审计日志与攻击图谱记录从检测到处置的全链路证据</li>
           </ul>
         </section>
 
@@ -43,7 +43,7 @@
             <button class="primary-button" id="loginButton">进入平台</button>
             <button class="ghost-button" id="quickLoginButton">演示模式</button>
           </div>
-          <p class="login-hint">当前为本地演示环境，登录后可进入系统首页与各功能模块。</p>
+          <p class="login-hint">当前为本地演示环境，登录后可查看系统总览、模块说明、运行时模拟与实验验证页面。</p>
         </section>
       </div>
     </div>
@@ -54,8 +54,8 @@
       <div class="brand-block">
         <div class="brand-mark">AG</div>
         <div>
-          <h2>Agent Runtime Guardian</h2>
-          <p>国密授权与记忆沙箱安全平台</p>
+          <h2>AegisGuard</h2>
+          <p>Agent 运行时安全监管与执行控制平台</p>
         </div>
       </div>
 
@@ -64,60 +64,58 @@
       </div>
 
       <section class="sidebar-card">
-        <span class="tiny-title">实时状态</span>
+        <span class="tiny-title">运行状态</span>
         <div class="status-item">
-          <span>系统模式</span>
-          <strong>Runtime Protect</strong>
+          <span>防护模式</span>
+          <strong>Runtime Control</strong>
         </div>
         <div class="status-item">
-          <span>策略引擎</span>
-          <strong>Online</strong>
+          <span>授权中心</span>
+          <strong>SM2 / SM3 / SM4</strong>
         </div>
         <div class="status-item">
-          <span>记忆沙箱</span>
-          <strong>Enabled</strong>
+          <span>上下文隔离</span>
+          <strong>Memory Sandbox</strong>
         </div>
       </section>
 
       <section class="sidebar-card scenario-card">
-        <span class="tiny-title">当前事件</span>
-        <strong id="sidebarScenarioTitle">提示注入越权执行</strong>
-        <p id="sidebarScenarioText">高危 shell 写入请求被执行前阻断，污染性结果已隔离入沙箱。</p>
+        <span class="tiny-title">当前演示场景</span>
+        <strong id="sidebarScenarioTitle">提示注入诱导越权执行</strong>
+        <p id="sidebarScenarioText">系统在 Action Gate 执行前识别高危 shell 写入请求，并结合最小权限授权边界直接阻断。</p>
       </section>
     </aside>
 
     <main class="main">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Unified Security Console</p>
+          <p class="eyebrow">AegisGuard Console</p>
           <h1 id="pageTitle">系统总览</h1>
         </div>
         <div class="topbar-actions">
-          <div class="status-pill">SM2 / SM3 / SM4 Active</div>
-          <div class="status-pill success">Memory Sandbox Online</div>
+          <div class="status-pill">RequireToken Active</div>
+          <div class="status-pill success">Gate Control Online</div>
           <div class="status-pill info" id="clockText">--:--:--</div>
         </div>
       </header>
 
       <section class="hero">
         <div class="hero-main">
-          <span class="tiny-title">Runtime Security Overview</span>
-          <h2 id="heroHeadline">从风险识别到执行前阻断的全链路防护</h2>
-          <p id="heroText">
-            平台对 Agent 的消息、动作、结果回传进行分层校验，通过国密授权校验、运行时策略闸门和记忆沙箱实现可解释、可阻断、可审计的安全防护。
-          </p>
+          <span class="tiny-title" id="heroKicker">System Overview</span>
+          <h2 id="heroHeadline">从可信授权到执行前阻断的 Agent 运行时安全闭环</h2>
+          <p id="heroText">平台以控制平面和执行平面协同工作，围绕授权、检测、阻断、隔离、审计五类能力，构建可验证、可执行、可解释的运行时安全治理体系。</p>
           <div class="hero-metrics" id="heroMetrics"></div>
         </div>
         <div class="hero-side">
           <div class="decision-panel">
-            <span class="tiny-title">实时决策</span>
-            <strong id="heroDecision">DENY</strong>
-            <p id="heroDecisionText">检测到越权写入系统配置文件的高危请求，已在执行前阻断。</p>
+            <span class="tiny-title">当前能力焦点</span>
+            <strong id="heroDecision">BLOCK</strong>
+            <p id="heroDecisionText">在危险动作真正落地前完成校验、决策与控制，而不是只在事后记录风险。</p>
           </div>
           <div class="score-panel">
-            <span class="tiny-title">安全得分</span>
-            <strong id="securityScore">96</strong>
-            <p>基于授权完整性、运行时决策与上下文隔离综合评估</p>
+            <span class="tiny-title">文档对应版本</span>
+            <strong id="securityScore">V8</strong>
+            <p>界面内容已按《开题报告_v8》与《AegisGuard-开题_v6》中的模块体系、功能定位和实验对象重新组织。</p>
           </div>
         </div>
       </section>
