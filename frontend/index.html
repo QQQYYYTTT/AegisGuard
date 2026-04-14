@@ -3,152 +3,124 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AegisGuard Framework</title>
+  <title>AegisGuard</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div class="shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">AG</div>
+  <div class="login-screen" id="loginScreen">
+    <div class="login-panel">
+      <div class="login-brand">
+        <div class="brand-orb">AG</div>
         <div>
+          <p class="login-kicker">Agent Runtime Security Governance</p>
           <h1>AegisGuard</h1>
-          <p>基础实验框架</p>
+          <p class="login-subtitle">面向 Agent 运行时的安全监管与执行控制系统，围绕可信授权、执行前阻断、双流上下文隔离与攻击链审计构建完整防护闭环。</p>
         </div>
       </div>
 
-      <section class="sidebar-panel">
-        <span class="tiny-title">当前目标</span>
-        <strong>第一层实验</strong>
-        <p>先完成主流 Agent 原生安全机制测试，再逐步接入 AegisGuard 控制链路。</p>
+      <div class="login-grid">
+        <section class="login-card">
+          <span class="tiny-title">核心能力</span>
+          <ul>
+            <li>策略中心按任务、会话和动作动态签发 RequireToken 授权令牌</li>
+            <li>Message Gate、Action Gate、Return Gate 输出可执行控制动作</li>
+            <li>记忆沙箱将外部结果隔离到低信任流，仅允许结构化安全摘要回传</li>
+            <li>审计日志与攻击图谱记录从检测到处置的全链路证据</li>
+          </ul>
+        </section>
+
+        <section class="login-form-card">
+          <span class="tiny-title">进入系统</span>
+          <label class="field">
+            <span>账号</span>
+            <input id="usernameInput" type="text" value="security_admin" autocomplete="off">
+          </label>
+          <label class="field">
+            <span>访问令牌</span>
+            <input id="passwordInput" type="password" value="AG-2026-DEMO" autocomplete="off">
+          </label>
+          <div class="login-actions">
+            <button class="primary-button" id="loginButton">进入平台</button>
+            <button class="ghost-button" id="quickLoginButton">演示模式</button>
+          </div>
+          <p class="login-hint">当前为本地演示环境，登录后可查看系统总览、模块说明、运行时模拟与实验验证页面。</p>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="layout hidden" id="appLayout">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="brand-mark">AG</div>
+        <div>
+          <h2>AegisGuard</h2>
+          <p>Agent 运行时安全监管与执行控制平台</p>
+        </div>
+      </div>
+
+      <div class="nav-shell">
+        <nav class="nav" id="nav"></nav>
+      </div>
+
+      <section class="sidebar-card">
+        <span class="tiny-title">运行状态</span>
+        <div class="status-item">
+          <span>防护模式</span>
+          <strong>Runtime Control</strong>
+        </div>
+        <div class="status-item">
+          <span>授权中心</span>
+          <strong>SM2 / SM3 / SM4</strong>
+        </div>
+        <div class="status-item">
+          <span>上下文隔离</span>
+          <strong>Memory Sandbox</strong>
+        </div>
       </section>
 
-      <section class="sidebar-panel">
-        <span class="tiny-title">框架原则</span>
-        <ul>
-          <li>前后端分离</li>
-          <li>实验对象独立建模</li>
-          <li>攻击家族统一编排</li>
-          <li>审计记录结构化存储</li>
-        </ul>
+      <section class="sidebar-card scenario-card">
+        <span class="tiny-title">当前演示场景</span>
+        <strong id="sidebarScenarioTitle">提示注入诱导越权执行</strong>
+        <p id="sidebarScenarioText">系统在 Action Gate 执行前识别高危 shell 写入请求，并结合最小权限授权边界直接阻断。</p>
       </section>
     </aside>
 
     <main class="main">
-      <header class="hero">
+      <header class="topbar">
         <div>
-          <p class="eyebrow">Framework Ready</p>
-          <h2>面向 Agent 原生安全机制测试的基础框架</h2>
-          <p class="hero-text">这版先把代码结构、实验对象、攻击家族、模拟校验与审计记录搭起来，方便后续逐步接 OpenHands、DB-GPT、OpenClaw 和 LangChain 相关测试。</p>
+          <p class="eyebrow">AegisGuard Console</p>
+          <h1 id="pageTitle">系统总览</h1>
         </div>
-        <div class="hero-badges">
-          <span class="badge">frontend/</span>
-          <span class="badge">backend/</span>
-          <span class="badge success">experiment-ready</span>
+        <div class="topbar-actions">
+          <div class="status-pill">RequireToken Active</div>
+          <div class="status-pill success">Gate Control Online</div>
+          <div class="status-pill info" id="clockText">--:--:--</div>
         </div>
       </header>
 
-      <section class="grid">
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <p class="eyebrow">Experiment Plan</p>
-              <h3>实验总体规划</h3>
-            </div>
+      <section class="hero">
+        <div class="hero-main">
+          <span class="tiny-title" id="heroKicker">System Overview</span>
+          <h2 id="heroHeadline">从可信授权到执行前阻断的 Agent 运行时安全闭环</h2>
+          <p id="heroText">平台以控制平面和执行平面协同工作，围绕授权、检测、阻断、隔离、审计五类能力，构建可验证、可执行、可解释的运行时安全治理体系。</p>
+          <div class="hero-metrics" id="heroMetrics"></div>
+        </div>
+        <div class="hero-side">
+          <div class="decision-panel">
+            <span class="tiny-title">当前能力焦点</span>
+            <strong id="heroDecision">BLOCK</strong>
+            <p id="heroDecisionText">在危险动作真正落地前完成校验、决策与控制，而不是只在事后记录风险。</p>
           </div>
-          <div id="planPanel" class="stack"></div>
-        </section>
-
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <p class="eyebrow">Native Agents</p>
-              <h3>主流 Agent 测试对象</h3>
-            </div>
+          <div class="score-panel">
+            <span class="tiny-title">文档对应版本</span>
+            <strong id="securityScore">V8</strong>
+            <p>界面内容已按《开题报告_v8》与《AegisGuard-开题_v6》中的模块体系、功能定位和实验对象重新组织。</p>
           </div>
-          <div id="agentsPanel" class="stack"></div>
-        </section>
-
-        <section class="card wide">
-          <div class="card-head">
-            <div>
-              <p class="eyebrow">Attack Families</p>
-              <h3>攻击家族设计</h3>
-            </div>
-          </div>
-          <div id="attacksPanel" class="matrix"></div>
-        </section>
-
-        <section class="card wide">
-          <div class="card-head">
-            <div>
-              <p class="eyebrow">Experiment Layers</p>
-              <h3>三层对照结构</h3>
-            </div>
-          </div>
-          <div id="layersPanel" class="matrix"></div>
-        </section>
-
-        <section class="card wide">
-          <div class="card-head">
-            <div>
-              <p class="eyebrow">Runtime Sandbox</p>
-              <h3>基础模拟器</h3>
-            </div>
-          </div>
-          <div class="sim-grid">
-            <label class="field span-2">
-              <span>用户任务</span>
-              <textarea id="simUserGoal"></textarea>
-            </label>
-            <label class="field">
-              <span>Agent ID</span>
-              <input id="simAgentId" type="text">
-            </label>
-            <label class="field">
-              <span>Session ID</span>
-              <input id="simSessionId" type="text">
-            </label>
-            <label class="field">
-              <span>工具名</span>
-              <input id="simToolName" type="text">
-            </label>
-            <label class="field">
-              <span>授权 Scope</span>
-              <input id="simScope" type="text">
-            </label>
-            <label class="field span-2">
-              <span>请求 Scope</span>
-              <input id="simRequestedScope" type="text">
-            </label>
-            <label class="field span-2">
-              <span>外部结果 / 工具回执</span>
-              <textarea id="simRawResult"></textarea>
-            </label>
-          </div>
-          <div class="action-row">
-            <button id="loadPromptScenario">载入提示注入场景</button>
-            <button id="loadReplayScenario">载入重放场景</button>
-            <button id="loadPoisonScenario">载入污染场景</button>
-            <button class="primary" id="issueTokenButton">签发 RequireToken</button>
-            <button class="primary" id="verifyRequestButton">执行校验</button>
-          </div>
-          <div class="result-grid">
-            <div class="result-box">
-              <h4>授权对象</h4>
-              <pre id="tokenOutput">等待签发</pre>
-            </div>
-            <div class="result-box">
-              <h4>校验 / 闸门结果</h4>
-              <pre id="verificationOutput">等待执行</pre>
-            </div>
-            <div class="result-box">
-              <h4>审计摘要</h4>
-              <pre id="auditOutput">等待生成</pre>
-            </div>
-          </div>
-        </section>
+        </div>
       </section>
+
+      <section class="content" id="content"></section>
     </main>
   </div>
 
