@@ -1,89 +1,99 @@
-# AegisGuard——开发中
+# AegisGuard
 
-面向 Agent 原生安全机制测试与后续运行时安全接入的基础框架。
+AegisGuard 当前按“前端 + 后端 + 实验资料”来组织仓库，目录更直观：
 
-## 当前目标
+- `frontend/`：前端静态界面
+- `backend/`：后端代码与后端数据
+- `experiments/`：实验记录与报告素材
 
-当前优先服务于第一层实验：
-
-- 对主流 Agent 的原生安全机制做结构化测试
-- 统一整理实验对象、攻击家族、实验层级与记录方式
-- 为后续接入 AegisGuard 授权链路、策略闸门、记忆沙箱和审计闭环预留清晰接口
-
-## 目录结构
+## 目录说明
 
 ```text
 AegisGuard/
-├─ frontend/                 # 独立前端静态应用
-│  ├─ index.html
-│  ├─ app.js
-│  └─ styles.css
-├─ backend/
-│  ├─ data/                  # 审计持久化数据
-│  └─ src/
-│     ├─ adapters/agents/    # 各类 Agent 适配入口预留
-│     ├─ app/                # 服务启动装配
-│     ├─ config/             # 路径、端口等配置
-│     ├─ data/               # 实验对象、攻击家族、场景模板
-│     ├─ lib/                # http / crypto 通用能力
-│     ├─ routes/             # API 路由
-│     └─ services/           # 授权、闸门、沙箱、审计、实验服务
-├─ package.json
-└─ server.js                 # 根入口，转发到 backend/src/server.js
+|-- frontend/                    # 前端静态界面，保持不动
+|-- backend/
+|   |-- cmd/
+|   |   `-- server/              # Go 后端启动入口
+|   |-- internal/
+|   |   |-- audit/               # 审计存储
+|   |   |-- catalog/             # 实验元数据
+|   |   |-- config/              # 配置与路径
+|   |   |-- http/                # 路由与静态资源服务
+|   |   |-- runtime/             # 运行时编排
+|   |   `-- security/            # 授权、闸门、沙箱
+|   `-- data/                    # 后端持久化数据，目前主要是 audit-store.json
+|-- experiments/                 # 实验记录与报告素材
+|-- go.mod
+`-- README.md
 ```
 
-## 当前已经搭好的能力
+## `backend/internal` 和 `backend/data` 的关系
 
-### 1. 实验框架元数据
+现在可以这样理解：
 
-后端已经内置：
+- `backend/internal/`：放 Go 后端的源码
+- `backend/data/`：放 Go 后端运行时产生的数据
 
-- 主流 Agent 测试对象列表
-- 五类攻击家族
-- 三层实验对照结构
-- 第一层实验的总体规划摘要
+也就是说：
 
-### 2. 基础运行时模拟链路
+- 代码在 `backend/cmd` 和 `backend/internal`
+- 数据在 `backend/data`
 
-已经实现：
+这样就和 `frontend/` 对应得比较自然了。
 
-- `RequireToken` 签发
-- 请求校验
-- 闸门决策
-- 记忆沙箱过滤
-- 审计日志持久化
+## 当前后端职责
 
-### 3. 前后端分离
+后端现在按作品模块组织，而不是按具体 Agent 名称组织：
 
-- 前端位于 `frontend/`
-- 后端位于 `backend/`
-- 前端只通过 `/api/*` 访问后端
+- `security/`：令牌签发、令牌校验、策略闸门、记忆沙箱
+- `runtime/`：把授权、拦截、审计串成完整链路
+- `audit/`：审计数据读写
+- `catalog/`：给前端提供实验对象、攻击类型、实验层级等展示数据
+- `http/`：提供 API，并托管前端静态页面
 
-## 后续建议扩展
+## 实验资料怎么放
 
-建议后续优先补这几块：
+`experiments/` 目录是专门给后续写报告和答辩准备的，不属于作品主逻辑。
 
-1. 在 `backend/src/adapters/agents/` 下为 `OpenHands`、`DB-GPT`、`OpenClaw`、`LangChain` 分别建立适配目录。
-2. 为每个 Agent 增加统一接口：
-   - `getNativeSecurityProfile()`
-   - `runBaselineTask()`
-   - `runAttackCase()`
-   - `collectAuditEvidence()`
-3. 增加实验任务编排器，把“攻击家族 × 变体 × 重复次数”真正调度起来。
-4. 增加实验结果导出能力，便于后续论文和答辩制图。
+建议按三层实验分别记录：
 
-## 启动
+- `experiments/native/`：纯 Agent 原生实验
+- `experiments/guardrail/`：第三方或传统防护对照实验
+- `experiments/aegisguard/`：接入你们作品后的实验
+
+每层下面可以继续放：
+
+- `plans/`：测试计划
+- `cases/`：攻击样例和正常任务
+- `results/`：表格、日志、导出结果
+- `notes/`：测试备注
+- `screenshots/`：截图证据
+
+## 启动方式
+
+先确保本机已经安装 Go，并且 `go` 命令能在 PowerShell 里直接执行。
+
+在项目根目录运行：
 
 ```powershell
 npm start
 ```
 
-启动后访问：
+它实际会调用：
+
+```powershell
+go run ./backend/cmd/server
+```
+
+启动后打开：
 
 [http://localhost:8080](http://localhost:8080)
 
-## 检查
+## 说明
 
-```powershell
-npm run check
-```
+后面新增后端功能时，统一往这些地方放：
+
+- `backend/cmd/`
+- `backend/internal/`
+- `backend/data/`
+- `experiments/`

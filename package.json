@@ -4,8 +4,8 @@
   "private": true,
   "description": "AegisGuard experiment framework for native agent security evaluation and runtime control prototyping.",
   "scripts": {
-    "start": "node backend/src/server.js",
-    "start:backend": "node backend/src/server.js",
-    "check": "node --check backend/src/server.js && node --check frontend/app.js"
+    "start": "go run ./backend/cmd/server",
+    "start:backend": "go run ./backend/cmd/server",
+    "check": "node --check frontend/app.js"
   }
 }
