@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"aegisguard/backend/internal/attacks"
 	"aegisguard/backend/internal/audit"
 	"aegisguard/backend/internal/catalog"
 	"aegisguard/backend/internal/config"
@@ -34,6 +35,9 @@ func NewRouter(cfg config.Config) (stdhttp.Handler, error) {
 	})
 	mux.HandleFunc("/api/attack-families", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		writeJSON(w, stdhttp.StatusOK, map[string]any{"items": catalog.AttackFamilies})
+	})
+	mux.HandleFunc("/api/attack-library", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		writeJSON(w, stdhttp.StatusOK, attacks.GetLibrary())
 	})
 	mux.HandleFunc("/api/experiment-layers", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		writeJSON(w, stdhttp.StatusOK, map[string]any{"items": catalog.Layers})
