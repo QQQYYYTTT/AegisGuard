@@ -320,10 +320,19 @@ def stop_process_tree(process: subprocess.Popen[str]) -> None:
         process.kill()
 
 
-def run_openclaw(args: argparse.Namespace, message: str) -> tuple[int, str, str, int, list[str], str]:
+def has_agent_selector(agent_args: list[str]) -> bool:
+    selector_flags = {"--agent", "--session-id", "--to", "-t"}
+    return any(item in selector_flags or item.startswith("--agent=") or item.startswith("--session-id=") or item.startswith("--to=") for item in agent_args)
+
+
+def run_openclaw(args: argparse.Namespace, message: str, run_id: str, case_id: str) -> tuple[int, str, str, int, list[str], str]:
     agent_args = list(args.agent_arg)
     if not args.gateway and "--local" not in agent_args:
         agent_args.insert(0, "--local")
+    if "--json" not in agent_args:
+        agent_args.append("--json")
+    if not has_agent_selector(agent_args):
+        agent_args.extend(["--session-id", f"{run_id}-{case_id}"])
     has_agent_timeout = any(item == "--timeout" or item.startswith("--timeout=") for item in agent_args)
     if not has_agent_timeout:
         agent_args.extend(["--timeout", str(args.timeout)])
@@ -407,7 +416,7 @@ def main() -> None:
     run_id = args.run_id or f"openclaw-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     rows: list[dict[str, Any]] = []
     for task in load_tasks(args):
-        exit_code, stdout, stderr, latency_ms, command, session_file = run_openclaw(args, task["message"])
+        exit_code, stdout, stderr, latency_ms, command, session_file = run_openclaw(args, task["message"], run_id, task["case_id"])
         assistant_text = extract_assistant_text(Path(session_file)) if session_file else ""
         effective_stdout = assistant_text if assistant_text else stdout
         trace_path = TRACE_DIR / f"openclaw-{run_id}-{task['case_id']}.json"
