@@ -100,6 +100,7 @@ const pages = [
   { id: "detection", title: "消息风险检测与可信授权校验", desc: "消息风险识别与 RequireShield 校验" },
   { id: "gates", title: "运行时策略闸门", desc: "Message Gate、Action Gate、Return Gate" },
   { id: "adapter", title: "智能体运行时接入与工具适配", desc: "外挂式增强与运行时模拟器" },
+  { id: "langgraph-financial", title: "langgraph_financial_agent", desc: "ASB-native 金融智能体聊天" },
   { id: "sandbox", title: "双流上下文隔离与受控回传", desc: "记忆沙箱与双流上下文隔离" },
   { id: "audit", title: "审计日志与攻击图谱", desc: "日志回放、攻击路径与时间线" },
   { id: "experiments", title: "外部平台适配与实验验证", desc: "OpenHands / DB-GPT 与实验场景库" }
@@ -177,6 +178,15 @@ const pageHero = {
     decisionText: "当前内置三类典型风险场景，覆盖提示注入、旧授权重放与外部结果污染。",
     score: "3",
     metrics: [["内置场景", "3 类"], ["代表平台", "OpenHands / DB-GPT"], ["展示重点", "对照验证"]]
+  },
+  "langgraph-financial": {
+    kicker: "Agent Chat",
+    headline: "直接访问 langgraph_financial_agent 金融分析智能体",
+    text: "该页面通过 AegisGuard 后端代理连接现有 LangGraph chat server，让控制台左侧入口可以直接进入智能体对话界面。",
+    decision: "CHAT",
+    decisionText: "当前为 clean-baseline / no-defense 聊天入口，适合演示 ASB-native LangGraph agent 的正常任务执行、工具选择和 workflow 返回。",
+    score: "LG",
+    metrics: [["Agent", "langgraph_financial_agent"], ["Mode", "clean-baseline"], ["Defense", "none"]]
   }
 };
 
@@ -186,7 +196,18 @@ const api = {
   issueToken: (payload) => fetch("/api/issue-token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).then((r) => r.json()),
   verifyRequest: (payload) => fetch("/api/verify-request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).then((r) => r.json()),
   getAudit: () => fetch("/api/audit").then((r) => r.json()),
-  clearAudit: () => fetch("/api/audit", { method: "DELETE" }).then((r) => r.json())
+  clearAudit: () => fetch("/api/audit", { method: "DELETE" }).then((r) => r.json()),
+  getLangGraphHealth: () => fetch("/api/langgraph-financial/health").then((r) => r.json()),
+  chatLangGraph: async (message) => {
+    const response = await fetch("/api/langgraph-financial/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "langgraph_financial_agent request failed");
+    return data;
+  }
 };
 
 let currentPage = "overview";
@@ -195,6 +216,16 @@ let scenarioTemplates = {};
 let currentReplayLogs = structuredClone(scenarios[0].replay);
 let currentAuditItems = [];
 let simulationState = null;
+let langGraphChatState = {
+  online: false,
+  busy: false,
+  messages: [
+    {
+      role: "assistant",
+      text: "你好，我是 clean-baseline 模式下的 LangGraph 金融分析智能体。你可以询问投资风险、市场变化、投资组合比较或汇率影响。"
+    }
+  ]
+};
 
 const refs = {
   loginScreen: document.getElementById("loginScreen"),
@@ -242,6 +273,8 @@ function renderHeroMetrics(items) {
 
 function updateHero() {
   const hero = pageHero[currentPage];
+  document.body.dataset.page = currentPage;
+  refs.appLayout.dataset.page = currentPage;
   refs.pageTitle.textContent = pages.find((item) => item.id === currentPage).title;
   refs.heroKicker.textContent = hero.kicker;
   refs.heroHeadline.textContent = hero.headline;
@@ -257,6 +290,9 @@ function renderNav() {
   refs.nav.querySelectorAll("[data-page]").forEach((button) => {
     button.addEventListener("click", async () => {
       currentPage = button.dataset.page;
+      if (currentPage === "langgraph-financial") {
+        await refreshLangGraphHealth();
+      }
       renderNav();
       updateHero();
       await renderPage();
@@ -431,6 +467,50 @@ function adapterPage() {
   </div>`;
 }
 
+function escapeHTML(value) {
+  return String(value || "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  }[char]));
+}
+
+function renderLangGraphMessages() {
+  return langGraphChatState.messages.map((message) => {
+    const meta = message.meta ? `<div class="agent-message-meta">${message.meta}</div>` : "";
+    return `<div class="agent-message ${message.role}"><div>${escapeHTML(message.text)}</div>${meta}</div>`;
+  }).join("");
+}
+
+function langGraphFinancialPage() {
+  const statusText = langGraphChatState.online ? "online" : "checking / offline";
+  const statusClass = langGraphChatState.online ? "green" : "amber";
+  return `<div class="dashboard-grid">
+    <section class="card span-4">
+      <div class="card-head"><div><span class="eyebrow">Agent</span><h3>langgraph_financial_agent</h3></div><span class="badge ${statusClass}">${statusText}</span></div>
+      <p class="muted">该入口连接到现有的 LangGraph 金融智能体服务。默认后端代理地址为 127.0.0.1:8765，可通过 LANGGRAPH_CHAT_URL 覆盖。</p>
+      <div class="agent-summary-grid" style="margin-top:16px;">
+        <div class="mini-card"><strong style="display:block;font-size:19px;color:#0b2239;margin-bottom:8px;">运行模式</strong><p class="muted">clean-baseline / no defense</p></div>
+        <div class="mini-card"><strong style="display:block;font-size:19px;color:#0b2239;margin-bottom:8px;">可用工具</strong><p class="muted">market_data_api、portfolio_manager</p></div>
+        <div class="mini-card"><strong style="display:block;font-size:19px;color:#0b2239;margin-bottom:8px;">启动命令</strong><p class="muted">python .\\experiments\\asb\\langgraph\\chat_server.py --port 8765</p></div>
+      </div>
+    </section>
+    <section class="card span-8 agent-chat-card">
+      <div class="card-head">
+        <div><span class="eyebrow">Conversation</span><h3>金融智能体聊天</h3></div>
+        <button class="ghost-button light-button small-button" id="refreshLangGraphHealthButton">刷新状态</button>
+      </div>
+      <div class="agent-chat-stream" id="langGraphChatStream">${renderLangGraphMessages()}</div>
+      <form class="agent-chat-form" id="langGraphChatForm">
+        <textarea id="langGraphChatInput" placeholder="输入金融分析问题，例如：Evaluate the risk and potential returns of investing in a new sector."></textarea>
+        <button class="primary-button" type="submit" ${langGraphChatState.busy ? "disabled" : ""}>${langGraphChatState.busy ? "运行中" : "发送"}</button>
+      </form>
+    </section>
+  </div>`;
+}
+
 function sandboxPage() {
   return `<div class="dashboard-grid">
     <section class="card span-12"><div class="card-head"><div><span class="eyebrow">Dual Flows</span><h3>可信核心上下文流与不可信沙箱流</h3></div><span class="badge blue">Trusted / Untrusted</span></div><div class="compare-grid"><div class="sandbox-box untrusted"><strong style="display:block;font-size:20px;color:#0b2239;margin-bottom:12px;">不可信沙箱流</strong><pre>${currentScenario.untrusted}</pre></div><div class="sandbox-box trusted"><strong style="display:block;font-size:20px;color:#0b2239;margin-bottom:12px;">允许进入核心上下文的安全摘要</strong><pre>${currentScenario.trusted}</pre></div></div></section>
@@ -551,6 +631,56 @@ function bindSimulatorEvents() {
   }
 }
 
+async function refreshLangGraphHealth() {
+  try {
+    const data = await api.getLangGraphHealth();
+    langGraphChatState.online = Boolean(data.ok);
+  } catch {
+    langGraphChatState.online = false;
+  }
+}
+
+function scrollLangGraphChatToBottom() {
+  const stream = document.getElementById("langGraphChatStream");
+  if (stream) stream.scrollTop = stream.scrollHeight;
+}
+
+function bindLangGraphChatEvents() {
+  const refreshButton = document.getElementById("refreshLangGraphHealthButton");
+  const form = document.getElementById("langGraphChatForm");
+  const input = document.getElementById("langGraphChatInput");
+  if (refreshButton) {
+    refreshButton.addEventListener("click", async () => {
+      await refreshLangGraphHealth();
+      await renderPage();
+    });
+  }
+  if (!form || !input) return;
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = input.value.trim();
+    if (!message || langGraphChatState.busy) return;
+    langGraphChatState.messages.push({ role: "user", text: message });
+    langGraphChatState.busy = true;
+    await renderPage();
+    try {
+      const data = await api.chatLangGraph(message);
+      const actions = (data.actions || []).map((item) => `<pre>${escapeHTML(item)}</pre>`).join("");
+      const workflow = data.workflow ? `<details><summary>Workflow</summary><pre>${escapeHTML(data.workflow)}</pre></details>` : "";
+      const meta = `<span>${escapeHTML(data.mode || "clean-baseline")}</span> · defense=${escapeHTML(data.defense || "none")} · ${escapeHTML(data.duration_ms || 0)} ms${actions ? `<details><summary>Tool calls</summary>${actions}</details>` : ""}${workflow}`;
+      langGraphChatState.online = true;
+      langGraphChatState.messages.push({ role: "assistant", text: data.answer || "No final answer returned.", meta });
+    } catch (error) {
+      langGraphChatState.online = false;
+      langGraphChatState.messages.push({ role: "assistant", text: `Error: ${error.message}` });
+    } finally {
+      langGraphChatState.busy = false;
+      await renderPage();
+    }
+  });
+  scrollLangGraphChatToBottom();
+}
+
 async function playLogs() {
   const stream = document.getElementById("logStream");
   const bar = document.getElementById("replayBar");
@@ -574,10 +704,12 @@ async function playLogs() {
 }
 
 async function renderPage() {
-  const pageMap = { overview: overviewPage, policy: policyPage, detection: detectionPage, gates: gatesPage, adapter: adapterPage, sandbox: sandboxPage, audit: auditPage, experiments: experimentsPage };
+  const pageMap = { overview: overviewPage, policy: policyPage, detection: detectionPage, gates: gatesPage, adapter: adapterPage, "langgraph-financial": langGraphFinancialPage, sandbox: sandboxPage, audit: auditPage, experiments: experimentsPage };
+  refs.content.dataset.page = currentPage;
   refs.content.innerHTML = pageMap[currentPage]();
   bindScenarioSwitch();
   if (currentPage === "adapter") bindSimulatorEvents();
+  if (currentPage === "langgraph-financial") bindLangGraphChatEvents();
   if (currentPage === "audit") await playLogs();
 }
 

@@ -16,6 +16,11 @@ ASB_ROOT = REPO_ROOT / "ASB"
 CHAT_PAGE = REPO_ROOT / "frontend" / "langgraph-financial-chat.html"
 
 
+def log_event(message: str) -> None:
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] [langgraph_financial_agent] {message}", flush=True)
+
+
 def ensure_import_path() -> None:
     if str(ASB_ROOT) not in sys.path:
         sys.path.insert(0, str(ASB_ROOT))
@@ -53,6 +58,8 @@ def run_financial_agent(message: str) -> dict:
     from pyopenagi.agents.agent_process import AgentProcessFactory
 
     args = clean_args()
+    preview = message.replace("\n", " ")[:180]
+    log_event(f"start run llm={args.llm_name} message={preview!r}")
     attacker_tool = {
         "Attacker Tool": "CleanBaselinePlaceholder",
         "Attacker Instruction": "",
@@ -81,14 +88,28 @@ def run_financial_agent(message: str) -> dict:
     final_answer = ""
     workflow = ""
     actions = []
+    thinking_count = 0
     for item in messages:
         content = item.get("content") or item.get("thinking") or ""
         if "[Action]:" in content:
             actions.append(content)
         if "[Thinking]: The workflow generated" in content:
             workflow = content
+        if content.startswith("[Thinking]:"):
+            thinking_count += 1
         elif item.get("role") == "assistant" and content and not content.startswith("[Action]:") and not content.startswith("[Thinking]:"):
             final_answer = content
+
+    log_event(
+        "finish run "
+        f"duration_ms={duration_ms} messages={len(messages)} "
+        f"thinking={thinking_count} actions={len(actions)} "
+        f"workflow={'yes' if workflow else 'no'} answer_chars={len(final_answer)}"
+    )
+    if workflow:
+        log_event(f"workflow preview={workflow.replace(chr(10), ' ')[:260]!r}")
+    for index, action in enumerate(actions, 1):
+        log_event(f"tool/action {index}={action.replace(chr(10), ' ')[:260]!r}")
 
     return {
         "agent": "langgraph_financial_agent",
@@ -150,8 +171,10 @@ class Handler(BaseHTTPRequestHandler):
             if not message:
                 self._send_json({"error": "message is required"}, status=400)
                 return
+            log_event(f"POST /api/chat received bytes={length}")
             self._send_json(run_financial_agent(message))
         except Exception as exc:  # noqa: BLE001
+            log_event(f"POST /api/chat failed {exc.__class__.__name__}: {exc}")
             self._send_json({"error": f"{exc.__class__.__name__}: {exc}"}, status=500)
 
 
@@ -163,7 +186,7 @@ def main() -> int:
 
     ensure_import_path()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"LangGraph financial-agent chat running at http://{args.host}:{args.port}/chat", flush=True)
+    log_event(f"chat server running at http://{args.host}:{args.port}/chat")
     server.serve_forever()
     return 0
 

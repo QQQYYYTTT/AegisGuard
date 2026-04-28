@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	stdhttp "net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"aegisguard/backend/internal/attacks"
 	"aegisguard/backend/internal/audit"
@@ -99,6 +101,20 @@ func NewRouter(cfg config.Config) (stdhttp.Handler, error) {
 		}
 		writeJSON(w, stdhttp.StatusOK, result)
 	})
+	mux.HandleFunc("/api/langgraph-financial/health", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		if r.Method != stdhttp.MethodGet {
+			w.WriteHeader(stdhttp.StatusMethodNotAllowed)
+			return
+		}
+		proxyLangGraph(w, r, cfg.LangGraphChatURL+"/api/health")
+	})
+	mux.HandleFunc("/api/langgraph-financial/chat", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		if r.Method != stdhttp.MethodPost {
+			w.WriteHeader(stdhttp.StatusMethodNotAllowed)
+			return
+		}
+		proxyLangGraph(w, r, cfg.LangGraphChatURL+"/api/chat")
+	})
 
 	fileServer := stdhttp.FileServer(stdhttp.Dir(cfg.FrontendDir))
 	mux.HandleFunc("/", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -146,4 +162,43 @@ func writeJSON(w stdhttp.ResponseWriter, status int, payload any) {
 
 func writeError(w stdhttp.ResponseWriter, status int, err error) {
 	writeJSON(w, status, map[string]any{"error": err.Error()})
+}
+
+func proxyLangGraph(w stdhttp.ResponseWriter, r *stdhttp.Request, target string) {
+	started := time.Now()
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1024*1024))
+	if err != nil {
+		writeError(w, stdhttp.StatusBadRequest, err)
+		return
+	}
+	defer r.Body.Close()
+
+	log.Printf("[langgraph-proxy] %s %s -> %s body_bytes=%d", r.Method, r.URL.Path, target, len(body))
+	req, err := stdhttp.NewRequestWithContext(r.Context(), r.Method, target, strings.NewReader(string(body)))
+	if err != nil {
+		log.Printf("[langgraph-proxy] build request failed: %v", err)
+		writeError(w, stdhttp.StatusInternalServerError, err)
+		return
+	}
+	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+	client := stdhttp.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[langgraph-proxy] upstream unavailable after %s: %v", time.Since(started), err)
+		writeJSON(w, stdhttp.StatusBadGateway, map[string]any{
+			"error": "langgraph_financial_agent service is unavailable",
+			"hint":  "Start it with: python .\\experiments\\asb\\langgraph\\chat_server.py --port 8765",
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	w.WriteHeader(resp.StatusCode)
+	written, copyErr := io.Copy(w, resp.Body)
+	if copyErr != nil {
+		log.Printf("[langgraph-proxy] response copy failed after %s: %v", time.Since(started), copyErr)
+		return
+	}
+	log.Printf("[langgraph-proxy] completed status=%d response_bytes=%d elapsed=%s", resp.StatusCode, written, time.Since(started))
 }

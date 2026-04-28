@@ -303,3 +303,135 @@ npm start
 ```text
 http://localhost:8080
 ```
+
+## 前端访问 langgraph_financial_agent 与查看运行日志
+
+当前主控制台左侧功能框中已经新增 `langgraph_financial_agent` 模块。该模块通过 AegisGuard Go 后端代理访问 LangGraph 金融智能体服务：
+
+```text
+浏览器前端 -> AegisGuard Go 后端 -> LangGraph chat_server.py -> langgraph_financial_agent
+```
+
+如果希望在终端实时看到后端代理过程和 agent 运行过程，不要使用后台隐藏启动方式，建议打开两个 PowerShell 终端分别前台启动。
+
+### 1. 启动 LangGraph 金融智能体服务
+
+在第一个 PowerShell 终端执行：
+
+```powershell
+.\.venv-asb-openclaw\Scripts\python.exe .\experiments\asb\langgraph\chat_server.py --port 8765
+```
+
+启动成功后会看到类似输出：
+
+```text
+[2026-04-28 16:23:50] [langgraph_financial_agent] chat server running at http://127.0.0.1:8765/chat
+```
+
+当前 `chat_server.py` 会打印：
+
+- 收到 `/api/chat` 请求
+- agent 开始运行时使用的模型和输入摘要
+- agent 运行耗时、消息数、thinking 数、tool/action 数
+- workflow 摘要
+- tool/action 摘要
+- 异常信息
+
+### 2. 启动 AegisGuard 主控制台后端
+
+在第二个 PowerShell 终端执行：
+
+```powershell
+$env:GOCACHE=(Join-Path (Get-Location) '.gocache')
+$env:PORT='18080'
+go run .\backend\cmd\server
+```
+
+然后访问：
+
+```text
+http://localhost:18080
+```
+
+进入系统后，点击左侧功能框中的：
+
+```text
+langgraph_financial_agent
+```
+
+即可进入金融智能体聊天界面。
+
+Go 后端会打印代理日志，例如：
+
+```text
+[langgraph-proxy] POST /api/langgraph-financial/chat -> http://127.0.0.1:8765/api/chat body_bytes=...
+[langgraph-proxy] completed status=200 response_bytes=... elapsed=...
+```
+
+### 3. 端口占用处理
+
+如果启动 Go 后端时出现：
+
+```text
+listen tcp :18080: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+```
+
+说明 `18080` 已经被其他进程占用。最简单的处理方式是换一个端口，例如：
+
+```powershell
+$env:GOCACHE=(Join-Path (Get-Location) '.gocache')
+$env:PORT='18081'
+go run .\backend\cmd\server
+```
+
+然后浏览器访问：
+
+```text
+http://localhost:18081
+```
+
+如果必须使用 `18080`，可以先查找占用端口的进程：
+
+```powershell
+netstat -ano | findstr :18080
+```
+
+找到 `LISTENING` 行最后一列的 PID 后结束进程：
+
+```powershell
+taskkill /PID <进程号> /F
+```
+
+再重新启动：
+
+```powershell
+$env:GOCACHE=(Join-Path (Get-Location) '.gocache')
+$env:PORT='18080'
+go run .\backend\cmd\server
+```
+
+### 4. 为什么有时终端看不到 agent 过程
+
+如果使用 `Start-Process -WindowStyle Hidden` 或后台启动脚本，日志通常会被重定向到 `.tmp/*.log`，不会显示在当前终端中。要实时观察过程，请使用上面的两个前台命令启动。
+
+另外，AegisGuard Go 后端只是代理请求；真正的 agent workflow、tool/action 过程由 `experiments/asb/langgraph/chat_server.py` 调用 `langgraph_financial_agent` 时打印。因此需要同时观察两个终端：
+
+- Go 后端终端：查看前端请求是否到达、是否成功转发、耗时和状态码。
+- LangGraph 终端：查看 agent 是否开始运行、生成 workflow、调用工具以及最终返回。
+
+### 5. 服务地址配置
+
+默认情况下，Go 后端会代理到：
+
+```text
+http://127.0.0.1:8765
+```
+
+如果 LangGraph chat server 使用了其他地址，可以通过环境变量覆盖：
+
+```powershell
+$env:LANGGRAPH_CHAT_URL='http://127.0.0.1:8766'
+$env:GOCACHE=(Join-Path (Get-Location) '.gocache')
+$env:PORT='18080'
+go run .\backend\cmd\server
+```
