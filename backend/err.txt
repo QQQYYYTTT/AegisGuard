@@ -1,0 +1,176 @@
+
+2026/04/29 00:01:16 [Recovery] 2026/04/29 - 00:01:16 panic recovered:
+POST /v1/chat/completions HTTP/1.1
+Host: localhost:8090
+Accept: application/json
+Accept-Encoding: gzip, deflate, zstd
+Authorization: *
+Connection: keep-alive
+Content-Length: 1805
+Content-Type: application/json
+User-Agent: OpenAI/Python 2.32.0
+X-Stainless-Arch: other:amd64
+X-Stainless-Async: false
+X-Stainless-Lang: python
+X-Stainless-Os: Windows
+X-Stainless-Package-Version: 2.32.0
+X-Stainless-Raw-Response: true
+X-Stainless-Retry-Count: 0
+X-Stainless-Runtime: CPython
+X-Stainless-Runtime-Version: 3.11.9
+
+
+runtime error: slice bounds out of range [:30] with length 25
+E:/dev_runApp/go/src/runtime/panic.go:129 (0x7ff6042fd573)
+        goPanicSliceAlen: panic(boundsError{x: int64(x), signed: true, y: y, code: boundsSliceAlen})
+D:/Projects/AegisGuard/backend/internal/gateway/proxy.go:100 (0x7ff604676264)
+        (*AegisProxy).director: zap.String("original_auth", originalAuth[:30]+"..."),
+E:/dev_runApp/go/src/net/http/httputil/reverseproxy.go:400 (0x7ff60455b6d1)
+        (*ReverseProxy).ServeHTTP: p.Director(outreq)
+D:/Projects/AegisGuard/backend/internal/gateway/proxy.go:303 (0x7ff604757fab)
+        (*AegisProxy).ServeHTTP: ap.proxy.ServeHTTP(w, r)
+D:/Projects/AegisGuard/backend/internal/http/router.go:173 (0x7ff604757bad)
+        (*Router).handleProxy: r.proxy.ServeHTTP(c.Writer, c.Request)
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185 (0x7ff60474b70a)
+        (*Context).Next: c.handlers[c.index](c)
+D:/Projects/AegisGuard/backend/internal/http/router.go:280 (0x7ff6047563e4)
+        NewRouter.requestLogger.func1: c.Next()
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185 (0x7ff60474fc6e)
+        (*Context).Next: c.handlers[c.index](c)
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/recovery.go:102 (0x7ff60474fc5b)
+        CustomRecoveryWithWriter.func1: c.Next()
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185 (0x7ff60474ea2a)
+        (*Context).Next: c.handlers[c.index](c)
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:633 (0x7ff60474e3e7)
+        (*Engine).handleHTTPRequest: c.Next()
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:589 (0x7ff60474e06c)
+        (*Engine).ServeHTTP: engine.handleHTTPRequest(c)
+D:/Projects/AegisGuard/backend/internal/http/router.go:303 (0x7ff604759664)
+        (*Router).ServeHTTP: r.engine.ServeHTTP(w, req)
+E:/dev_runApp/go/src/net/http/server.go:3340 (0x7ff6045304ed)
+        serverHandler.ServeHTTP: handler.ServeHTTP(rw, req)
+E:/dev_runApp/go/src/net/http/server.go:2109 (0x7ff6045118a4)
+        (*conn).serve: serverHandler{c.server}.ServeHTTP(w, w.req)
+E:/dev_runApp/go/src/runtime/asm_amd64.s:1693 (0x7ff60433bc20)
+        goexit: BYTE    $0x90   // NOP
+
+{"level":"info","ts":1777392077.2597234,"caller":"http/router.go:123","msg":"【网关】收到 Agent 请求","method":"POST","path":"/v1/chat/completions","client_ip":"127.0.0.1","vkey_id":"vsk-test-agent-001","body_size":1805}
+{"level":"info","ts":1777392077.2597234,"caller":"http/router.go:158","msg":"【网关】虚拟密钥验证成功","vkey_id":"vsk-test-agent-001","agent_id":"test-agent-001","scope":"write"}
+
+
+2026/04/29 00:01:17 [Recovery] 2026/04/29 - 00:01:17 panic recovered:
+POST /v1/chat/completions HTTP/1.1
+Host: localhost:8090
+Accept: application/json
+Accept-Encoding: gzip, deflate, zstd
+Authorization: *
+Connection: keep-alive
+Content-Length: 1805
+Content-Type: application/json
+User-Agent: OpenAI/Python 2.32.0
+X-Stainless-Arch: other:amd64
+X-Stainless-Async: false
+X-Stainless-Lang: python
+X-Stainless-Os: Windows
+X-Stainless-Package-Version: 2.32.0
+X-Stainless-Raw-Response: true
+X-Stainless-Retry-Count: 1
+X-Stainless-Runtime: CPython
+X-Stainless-Runtime-Version: 3.11.9
+
+
+runtime error: slice bounds out of range [:30] with length 25
+E:/dev_runApp/go/src/runtime/panic.go:129 (0x7ff6042fd573)
+        goPanicSliceAlen: panic(boundsError{x: int64(x), signed: true, y: y, code: boundsSliceAlen})
+D:/Projects/AegisGuard/backend/internal/gateway/proxy.go:100 (0x7ff604676264)
+        (*AegisProxy).director: zap.String("original_auth", originalAuth[:30]+"..."),
+E:/dev_runApp/go/src/net/http/httputil/reverseproxy.go:400 (0x7ff60455b6d1)
+        (*ReverseProxy).ServeHTTP: p.Director(outreq)
+D:/Projects/AegisGuard/backend/internal/gateway/proxy.go:303 (0x7ff604757fab)
+        (*AegisProxy).ServeHTTP: ap.proxy.ServeHTTP(w, r)
+D:/Projects/AegisGuard/backend/internal/http/router.go:173 (0x7ff604757bad)
+        (*Router).handleProxy: r.proxy.ServeHTTP(c.Writer, c.Request)
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185 (0x7ff60474b70a)
+        (*Context).Next: c.handlers[c.index](c)
+D:/Projects/AegisGuard/backend/internal/http/router.go:280 (0x7ff6047563e4)
+        NewRouter.requestLogger.func1: c.Next()
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185 (0x7ff60474fc6e)
+        (*Context).Next: c.handlers[c.index](c)
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/recovery.go:102 (0x7ff60474fc5b)
+        CustomRecoveryWithWriter.func1: c.Next()
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185 (0x7ff60474ea2a)
+        (*Context).Next: c.handlers[c.index](c)
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:633 (0x7ff60474e3e7)
+        (*Engine).handleHTTPRequest: c.Next()
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:589 (0x7ff60474e06c)
+        (*Engine).ServeHTTP: engine.handleHTTPRequest(c)
+D:/Projects/AegisGuard/backend/internal/http/router.go:303 (0x7ff604759664)
+        (*Router).ServeHTTP: r.engine.ServeHTTP(w, req)
+E:/dev_runApp/go/src/net/http/server.go:3340 (0x7ff6045304ed)
+        serverHandler.ServeHTTP: handler.ServeHTTP(rw, req)
+E:/dev_runApp/go/src/net/http/server.go:2109 (0x7ff6045118a4)
+        (*conn).serve: serverHandler{c.server}.ServeHTTP(w, w.req)
+E:/dev_runApp/go/src/runtime/asm_amd64.s:1693 (0x7ff60433bc20)
+        goexit: BYTE    $0x90   // NOP
+
+{"level":"info","ts":1777392078.2087934,"caller":"http/router.go:123","msg":"【网关】收到 Agent 请求","method":"POST","path":"/v1/chat/completions","client_ip":"127.0.0.1","vkey_id":"vsk-test-agent-001","body_size":1805}
+{"level":"info","ts":1777392078.2087934,"caller":"http/router.go:158","msg":"【网关】虚拟密钥验证成功","vkey_id":"vsk-test-agent-001","agent_id":"test-agent-001","scope":"write"}
+
+
+2026/04/29 00:01:18 [Recovery] 2026/04/29 - 00:01:18 panic recovered:
+POST /v1/chat/completions HTTP/1.1
+Host: localhost:8090
+Accept: application/json
+Accept-Encoding: gzip, deflate, zstd
+Authorization: *
+Connection: keep-alive
+Content-Length: 1805
+Content-Type: application/json
+User-Agent: OpenAI/Python 2.32.0
+X-Stainless-Arch: other:amd64
+X-Stainless-Async: false
+X-Stainless-Lang: python
+X-Stainless-Os: Windows
+X-Stainless-Package-Version: 2.32.0
+X-Stainless-Raw-Response: true
+X-Stainless-Retry-Count: 2
+X-Stainless-Runtime: CPython
+X-Stainless-Runtime-Version: 3.11.9
+
+
+runtime error: slice bounds out of range [:30] with length 25
+E:/dev_runApp/go/src/runtime/panic.go:129 (0x7ff6042fd573)
+        goPanicSliceAlen: panic(boundsError{x: int64(x), signed: true, y: y, code: boundsSliceAlen})
+D:/Projects/AegisGuard/backend/internal/gateway/proxy.go:100 (0x7ff604676264)
+        (*AegisProxy).director: zap.String("original_auth", originalAuth[:30]+"..."),
+E:/dev_runApp/go/src/net/http/httputil/reverseproxy.go:400 (0x7ff60455b6d1)
+        (*ReverseProxy).ServeHTTP: p.Director(outreq)
+D:/Projects/AegisGuard/backend/internal/gateway/proxy.go:303 (0x7ff604757fab)
+        (*AegisProxy).ServeHTTP: ap.proxy.ServeHTTP(w, r)
+D:/Projects/AegisGuard/backend/internal/http/router.go:173 (0x7ff604757bad)
+        (*Router).handleProxy: r.proxy.ServeHTTP(c.Writer, c.Request)
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185 (0x7ff60474b70a)
+        (*Context).Next: c.handlers[c.index](c)
+D:/Projects/AegisGuard/backend/internal/http/router.go:280 (0x7ff6047563e4)
+        NewRouter.requestLogger.func1: c.Next()
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185 (0x7ff60474fc6e)
+        (*Context).Next: c.handlers[c.index](c)
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/recovery.go:102 (0x7ff60474fc5b)
+        CustomRecoveryWithWriter.func1: c.Next()
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185 (0x7ff60474ea2a)
+        (*Context).Next: c.handlers[c.index](c)
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:633 (0x7ff60474e3e7)
+        (*Engine).handleHTTPRequest: c.Next()
+D:/repository/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:589 (0x7ff60474e06c)
+        (*Engine).ServeHTTP: engine.handleHTTPRequest(c)
+D:/Projects/AegisGuard/backend/internal/http/router.go:303 (0x7ff604759664)
+        (*Router).ServeHTTP: r.engine.ServeHTTP(w, req)
+E:/dev_runApp/go/src/net/http/server.go:3340 (0x7ff6045304ed)
+        serverHandler.ServeHTTP: handler.ServeHTTP(rw, req)
+E:/dev_runApp/go/src/net/http/server.go:2109 (0x7ff6045118a4)
+        (*conn).serve: serverHandler{c.server}.ServeHTTP(w, w.req)
+E:/dev_runApp/go/src/runtime/asm_amd64.s:1693 (0x7ff60433bc20)
+        goexit: BYTE    $0x90   // NOP
+
+
+

@@ -8,3 +8,4 @@ __pycache__/
 .gocache/
 node_modules/
 experiments/native/langchain/.env
+*.exe
