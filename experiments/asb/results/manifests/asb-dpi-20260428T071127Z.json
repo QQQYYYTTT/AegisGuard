@@ -1,0 +1,17 @@
+{
+  "run_id": "asb-dpi-20260428T071127Z",
+  "timestamp_utc": "2026-04-28T07:11:27.322677+00:00",
+  "asb_root": "F:\\2026信安赛\\ASB",
+  "attack": "dpi",
+  "attack_description": "Direct Prompt Injection",
+  "config": "config/DPI.yml",
+  "script": "scripts/agent_attack.py",
+  "command": [
+    "D:\\python\\python.exe",
+    "scripts/agent_attack.py",
+    "--cfg_path",
+    "config/DPI.yml"
+  ],
+  "dry_run": true,
+  "returncode": null
+}
