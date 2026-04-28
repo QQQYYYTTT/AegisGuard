@@ -1,1 +1,0 @@
-agent_family,agent_name,agent_version,layer,attack_family,case_id,variant_name,applicable,attack_success,blocked,block_stage,task_completed,false_positive,latency_ms,audit_log_path,screenshot_path,notes

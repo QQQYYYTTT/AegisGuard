@@ -1,0 +1,10 @@
+.venv/
+.venv-*/
+.uv-cache*/
+.tmp/
+__pycache__/
+*.pyc
+.env
+.gocache/
+node_modules/
+experiments/native/langchain/.env

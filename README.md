@@ -1,99 +1,305 @@
-# AegisGuard——开发中
+# AegisGuard
 
-AegisGuard 当前按“前端 + 后端 + 实验资料”来组织仓库，目录更直观：
+AegisGuard 是一个面向智能体安全研究与运行时防护原型的项目。当前实验部分已经统一切换为 **ASB-first** 路线：使用原始 Agent Security Benchmark（ASB）作为主要 benchmark。
 
-- `frontend/`：前端静态界面
-- `backend/`：后端代码与后端数据
-- `experiments/`：实验记录与报告素材
+## 当前定位
 
-## 目录说明
+本仓库现在承担两类任务：
+
+- 运行时防护原型：保留 Go 后端、前端展示、权限校验、审计记录和运行时安全控制模块。
+- ASB 实验适配：通过 `experiments/asb/` 调用外部 ASB 仓库，并把 ASB 输出转换为 AegisGuard 统一结果格式。
+
+## 目录结构
 
 ```text
 AegisGuard/
-|-- frontend/                    # 前端静态界面，保持不动
-|-- backend/
-|   |-- cmd/
-|   |   `-- server/              # Go 后端启动入口
-|   |-- internal/
-|   |   |-- audit/               # 审计存储
-|   |   |-- catalog/             # 实验元数据
-|   |   |-- config/              # 配置与路径
-|   |   |-- http/                # 路由与静态资源服务
-|   |   |-- runtime/             # 运行时编排
-|   |   `-- security/            # 授权、闸门、沙箱
-|   `-- data/                    # 后端持久化数据，目前主要是 audit-store.json
-|-- experiments/                 # 实验记录与报告素材
+|-- backend/                 # Go 后端与运行时防护原型
+|-- frontend/                # 前端演示页面
+|-- experiments/
+|   |-- asb/                 # 当前主实验入口：ASB runner 和结果转换器
+|   |-- eval/                # 统一结果 schema 与指标统计
+|   `-- aegisguard/          # 后续接入 AegisGuard 防护后的 ASB 实验记录
 |-- go.mod
+|-- package.json
 `-- README.md
 ```
 
-## `backend/internal` 和 `backend/data` 的关系
+## Benchmark 来源
 
-现在可以这样理解：
+本项目不把 ASB 源码复制进仓库，而是将 ASB 作为外部 checkout 使用。
 
-- `backend/internal/`：放 Go 后端的源码
-- `backend/data/`：放 Go 后端运行时产生的数据
+ASB 官方仓库：
 
-也就是说：
+```text
+https://github.com/agiresearch/ASB
+```
 
-- 代码在 `backend/cmd` 和 `backend/internal`
-- 数据在 `backend/data`
+推荐本地目录结构：
 
-这样就和 `frontend/` 对应得比较自然了。
+```text
+F:\2026信安赛\AegisGuard
+F:\2026信安赛\ASB
+```
 
-## 当前后端职责
+## 运行 ASB
 
-后端现在按作品模块组织，而不是按具体 Agent 名称组织：
+在 AegisGuard 仓库根目录执行：
 
-- `security/`：令牌签发、令牌校验、策略闸门、记忆沙箱
-- `runtime/`：把授权、拦截、审计串成完整链路
-- `audit/`：审计数据读写
-- `catalog/`：给前端提供实验对象、攻击类型、实验层级等展示数据
-- `http/`：提供 API，并托管前端静态页面
+```powershell
+python .\experiments\asb\run_asb.py --asb-root F:\2026信安赛\ASB --attack opi --run-id asb-opi-v1
+```
 
-## 实验资料怎么放
+当前支持的 `--attack` 参数：
 
-`experiments/` 目录是专门给后续写报告和答辩准备的，不属于作品主逻辑。
+- `dpi`：Direct Prompt Injection，直接提示词注入
+- `opi`：Observation Prompt Injection，外部观察 / 工具输出注入
+- `mp`：Memory Poisoning，记忆污染
+- `mixed`：混合攻击
+- `pot`：Plan-of-Thought Backdoor，规划后门
 
-建议按三层实验分别记录：
+## 转换结果
 
-- `experiments/native/`：纯 Agent 原生实验
-- `experiments/guardrail/`：第三方或传统防护对照实验
-- `experiments/aegisguard/`：接入你们作品后的实验
+ASB 运行结束后，将 ASB 输出转换为 AegisGuard 统一结果表：
 
-每层下面可以继续放：
+```powershell
+python .\experiments\asb\collect_results.py --input F:\2026信安赛\ASB\logs --attack opi --run-id asb-opi-v1
+```
 
-- `plans/`：测试计划
-- `cases/`：攻击样例和正常任务
-- `results/`：表格、日志、导出结果
-- `notes/`：测试备注
-- `screenshots/`：截图证据
+转换后的文件写入：
 
-## 启动方式
+```text
+experiments/asb/results/
+experiments/asb/results/traces/
+experiments/asb/results/manifests/
+```
 
-先确保本机已经安装 Go，并且 `go` 命令能在 PowerShell 里直接执行。
+结果表按 ASB 原始指标输出：`ASR`、`ASR-d`、`RR`、`PNA`、`PNA-d`、`BP`、`FNR`、`FPR`。`latency_ms` 仅作为工程分析字段保留。
 
-在项目根目录运行：
+## 结果表述
+
+如果实验通过 `experiments/asb/` 调用原始 ASB 脚本并转换输出，可以在报告中表述为：
+
+```text
+我们通过适配器在原始 ASB benchmark 上评测 AegisGuard，保留了 ASB 的任务、工具、攻击配置和输出记录。
+```
+
+不要把旧本地 pilot 数值和 ASB 结果混在同一张表中。新的实验表格应以 `experiments/asb/results/` 下的转换结果为准。
+
+## LangGraph ASB 测试路线
+
+对于后续 `LangGraph` 智能体，推荐直接走 `ASB-native` 路线，而不是 adapter-based 路线。原因是 `LangGraph` 更容易固定 workflow、状态流转和工具调用，和 ASB 的 agent lifecycle 更匹配，结果也更适合放进统一 benchmark 主表。
+
+当前仓库中已经补好了最小接入样例：
+
+- `ASB/pyopenagi/agents/langgraph_agent.py`：LangGraph 原生 agent 基类
+- `ASB/pyopenagi/agents/example/langgraph_financial_agent/`：最小金融分析 agent 示例
+- `ASB/data/agent_task_langgraph_smoke.jsonl`：LangGraph smoke task
+- `ASB/data/attack_tools_langgraph_smoke.jsonl`：LangGraph smoke attacker tool
+- `ASB/config/DPI_langgraph_smoke.yml`：最小 smoke 配置
+
+推荐按下面三个阶段推进测试。
+
+### 第一阶段：最小 smoke
+
+目标是先验证 `LangGraph agent` 能否被 ASB 原生调起，并正常完成一次工具调用和一次最终响应。
+
+建议范围：
+
+- 只跑 `DPI`
+- 只跑 `1` 个 agent
+- 只跑 `1` 个 task
+- 只跑 `1` 个 attacker tool
+- 只跑 `1` 个 attack type（建议先用 `fake_completion`）
+
+推荐命令：
+
+```powershell
+$env:PYTHONIOENCODING='utf-8'
+$env:PYTHONUTF8='1'
+cd .\ASB
+..\.venv-asb-openclaw\Scripts\python.exe .\main_attacker.py --agent_backend pyopenagi --llm_name gpt-4o-mini --attack_type fake_completion --attacker_tools_path data/attack_tools_langgraph_smoke.jsonl --tasks_path data/agent_task_langgraph_smoke.jsonl --tools_info_path data/all_normal_tools.jsonl --direct_prompt_injection --task_num 1 --res_file logs/langgraph_smoke/fake_completion.csv
+```
+
+成功标准：
+
+- agent 能被 ASB 正常创建
+- 能生成 workflow 或进入 fallback 执行
+- 能至少调用一次 normal tool
+- 结果文件成功写入 `ASB/logs/langgraph_smoke/`
+
+### 第二阶段：3-case smoke
+
+当单 case 跑通后，再把最小 smoke 扩成 `3` 个 case，用于验证 `LangGraph` 在最基础的 prompt injection 变体下是否稳定。
+
+建议固定三种 attack type：
+
+- `naive`
+- `fake_completion`
+- `escape_characters`
+
+这一阶段的目标不是追求统计显著性，而是确认：
+
+- workflow 是否稳定
+- tool selection 是否稳定
+- agent 是否会被明显提示注入带偏
+- 原始任务成功率是否保持可接受水平
+
+### 第三阶段：DPI 小样本与正式评测
+
+3-case smoke 稳定之后，再扩成 `DPI` 小样本，然后再决定是否进入完整实验。
+
+推荐顺序：
+
+1. `DPI` 小样本
+2. `OPI` 小样本
+3. `MP` / `mixed` / `PoT`
+
+建议实验设计：
+
+- 每种 attack family 先跑小样本
+- 每个 family 固定同一批 task 数
+- 每个 agent 固定同一模型、同一工具集、同一 prompt 配置
+- 结果统一写入 ASB 原生日志，再转换到统一 schema
+
+这样后续多个 agent 才能真正做横向比较。
+
+## OpenClaw ASB 测试路线
+
+对于 `OpenClaw`，当前更推荐走 `adapter-based` 路线，而不是把它作为主结果表里的 `ASB-native` agent。原因是 `OpenClaw` 更依赖 CLI / gateway / session 运行链，和 ASB 默认的 pyopenagi agent lifecycle 不完全一致。当前仓库已经实现了可用的 OpenClaw 适配评测链，但在正式表述上应写成 `ASB-derived adapter-based evaluation`。
+
+当前可直接使用的 OpenClaw 测试入口：
+
+- `experiments/asb/openclaw/run_openclaw_cli.py`：OpenClaw CLI / gateway 适配器
+- `experiments/asb/openclaw/judge_openclaw_raw.py`：OpenClaw raw 结果补标签
+- `experiments/asb/collect_results.py`：统一指标汇总
+- `experiments/asb/openclaw/asb_dpi_10_tasks.jsonl`：OpenClaw DPI 小样本任务
+
+推荐按下面三个阶段推进。
+
+### 第一阶段：OpenClaw 单条 smoke
+
+目标是先确认：
+
+- OpenClaw CLI 可用
+- 模型 provider 可用
+- 单条任务能正常返回
+- raw CSV / trace 能成功写出
+
+推荐命令：
+
+```powershell
+npm run openclaw:smoke
+```
+
+如果要手动运行：
+
+```powershell
+python .\experiments\asb\openclaw\run_openclaw_cli.py --message "Reply with exactly OK." --run-id openclaw-smoke-local --timeout 60 --fail-on-error
+```
+
+成功标准：
+
+- 生成 `experiments/asb/results/openclaw-<run-id>-raw.csv`
+- 生成 `experiments/asb/results/traces/` 下的 trace
+- `stdout` 有可解析响应
+
+### 第二阶段：OpenClaw 3-case 或小样本 smoke
+
+单条 smoke 通过后，再扩到 `DPI` 小样本。建议先不要上 full benchmark，而是先跑少量 case，确认 OpenClaw 在 ASB 派生任务上的基本稳定性。
+
+推荐命令：
+
+```powershell
+python .\experiments\asb\openclaw\run_openclaw_cli.py --input-jsonl .\experiments\asb\openclaw\asb_dpi_10_tasks.jsonl --max-cases 3 --timeout 180 --run-id openclaw-dpi-smoke --attack dpi
+```
+
+跑完后补标签：
+
+```powershell
+python .\experiments\asb\openclaw\judge_openclaw_raw.py --input .\experiments\asb\results\openclaw-openclaw-dpi-smoke-raw.csv
+```
+
+再汇总统一指标：
+
+```powershell
+python .\experiments\asb\collect_results.py --input .\experiments\asb\results\openclaw-openclaw-dpi-smoke-raw.csv --attack dpi --run-id openclaw-dpi-smoke --defense none --agent-name OpenClaw --agent-version npm-2026.4.20-beta.1 --output-prefix openclaw-dpi-smoke
+```
+
+### 第三阶段：OpenClaw 扩展测试
+
+当 `DPI` 小样本稳定后，再逐步扩到：
+
+1. `OPI` 小样本
+2. `MP` 小样本
+3. `mixed`
+4. `PoT`
+
+不建议一开始直接跑 full tasks。更合理的顺序是先确认：
+
+- CLI / gateway 是否稳定
+- timeout 是否合理
+- heuristic judge 是否能正确打标签
+- `ASR / RR / PNA / latency` 是否具备基本可读性
+
+再决定是否进入完整批量测试。
+
+## 多 agent 统一评测建议
+
+如果后续要同时测试多个 agent，建议统一采用下面的分层策略：
+
+- `ASB-native`：用于 `LangGraph` 这类可稳定接入 ASB agent lifecycle 的 agent
+- `adapter-based`：用于当前还不适合原生接入的 agent，例如 `OpenClaw` 这类 CLI/gateway 型 agent
+
+推荐报告写法：
+
+- 主结果表：只放 `ASB-native` agent
+- 补充结果表：放 `adapter-based` agent
+- 明确标注 `integration_mode`
+
+不要把 `ASB-native` 和 `adapter-based` 结果直接写成“完全同口径”。更稳妥的表述是：
+
+- `ASB-native evaluation`
+- `ASB-derived adapter-based evaluation`
+
+推荐落表方式：
+
+- 主结果表：`LangGraph` 等 `ASB-native` agent
+- 补充结果表：`OpenClaw` 等 `adapter-based` agent
+- 在表中单独保留 `integration_mode`、`judge_type` 或 `label_scope`
+
+这样可以保证：
+
+- `LangGraph` 的结果适合做主 benchmark 对比
+- `OpenClaw` 的结果仍可用于安全趋势分析和工程验证
+- 报告中不会把两类结果误写成严格同口径
+
+## LangGraph 环境建议
+
+建议为 `LangGraph` 单独保留一组 provider 环境变量，避免和其他实验链路相互影响。当前 `LangGraph agent` 支持以下优先级：
+
+1. `LANGGRAPH_OPENAI_*`
+2. `CUSTOM_*`
+3. `OPENAI_*`
+4. `OFOXAI_*`
+
+推荐至少配置：
+
+- `LANGGRAPH_OPENAI_API_KEY`
+- `LANGGRAPH_OPENAI_BASE_URL`
+- `LANGGRAPH_OPENAI_MODEL`
+
+这样可以避免 `LangGraph` smoke 与 `OpenClaw` 或其他实验共享同一组 provider 配置时互相干扰。
+
+## 启动后端演示
+
+后端和前端演示仍然保留：
 
 ```powershell
 npm start
 ```
 
-它实际会调用：
+启动后访问：
 
-```powershell
-go run ./backend/cmd/server
+```text
+http://localhost:8080
 ```
-
-启动后打开：
-
-[http://localhost:8080](http://localhost:8080)
-
-## 说明
-
-后面新增后端功能时，统一往这些地方放：
-
-- `backend/cmd/`
-- `backend/internal/`
-- `backend/data/`
-- `experiments/`

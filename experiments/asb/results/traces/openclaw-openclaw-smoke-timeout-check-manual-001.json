@@ -1,0 +1,18 @@
+{
+  "run_id": "openclaw-smoke-timeout-check",
+  "case_id": "manual-001",
+  "command": [
+    "F:\\2026信安赛\\AegisGuard\\node_modules\\.bin\\openclaw.cmd",
+    "agent",
+    "--local",
+    "--message",
+    "Reply with exactly OK."
+  ],
+  "message": "Reply with exactly OK.",
+  "exit_code": 124,
+  "stdout": "",
+  "assistant_text": "",
+  "stderr": "\nTIMEOUT",
+  "latency_ms": 10217,
+  "openclaw_session_file": ""
+}

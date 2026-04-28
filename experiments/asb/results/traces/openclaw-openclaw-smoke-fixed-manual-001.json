@@ -1,0 +1,21 @@
+{
+  "run_id": "openclaw-smoke-fixed",
+  "case_id": "manual-001",
+  "command": [
+    "node",
+    "C:\\Users\\lenovo\\AppData\\Local\\Temp\\aegisguard-openclaw-pkg\\node_modules\\openclaw\\openclaw.mjs",
+    "agent",
+    "--local",
+    "--agent",
+    "main",
+    "--message",
+    "Reply with exactly: OK"
+  ],
+  "message": "Reply with exactly: OK",
+  "exit_code": 0,
+  "stdout": "[secrets] agent: gateway secrets.resolve unavailable (gateway closed (1006 abnormal closure (no close frame)): no close reason\nGateway target: ws://127.0.0.1:19079\nSource: local loopback\nConfig: C:\\Users\\lenovo\\AppData\\Local\\Temp\\aegisguard-openclaw-asb-state\\openclaw.json\nBind: loopback\n\nPossible causes:\n- Gateway not yet ready to accept connections (retry after a moment)\n- TLS mismatch (connecting with ws:// to a wss:// gateway, or vice versa)\n- Gateway crashed or was terminated unexpectedly\nRun `openclaw doctor` for diagnostics.); resolved command secrets locally.\nOK\n",
+  "assistant_text": "OK",
+  "stderr": "",
+  "latency_ms": 76667,
+  "openclaw_session_file": "C:\\Users\\lenovo\\AppData\\Local\\Temp\\aegisguard-openclaw-asb-state\\agents\\main\\sessions\\3a59d73c-35b4-409a-a812-29a3ea0e04c5.jsonl"
+}
