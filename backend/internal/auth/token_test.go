@@ -13,8 +13,8 @@ func TestTokenSignAndVerify(t *testing.T) {
 		t.Fatalf("Failed to init signing key: %v", err)
 	}
 
-	// 2. 创建新令牌（有效期 5 分钟）
-	token, err := NewToken("test-tool", "read", "agent-001", "session-123", "task-456", 5*time.Minute)
+	// 2. 创建新令牌（有效期 5 分钟，无限制调用次数）
+	token, err := NewToken("test-tool", "read", "agent-001", "session-123", "task-456", 5*time.Minute, 0)
 	if err != nil {
 		t.Fatalf("Failed to create token: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestTokenVerifyExpired(t *testing.T) {
 	}
 
 	// 2. 创建已过期的令牌（有效期为 -1 分钟）
-	token, err := NewToken("test-tool", "read", "agent-001", "session-123", "task-456", -1*time.Minute)
+	token, err := NewToken("test-tool", "read", "agent-001", "session-123", "task-456", -1*time.Minute, 0)
 	if err != nil {
 		t.Fatalf("Failed to create token: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestTokenVerifyTamperedSignature(t *testing.T) {
 	}
 
 	// 2. 创建正常令牌
-	token, err := NewToken("test-tool", "read", "agent-001", "session-123", "task-456", 5*time.Minute)
+	token, err := NewToken("test-tool", "read", "agent-001", "session-123", "task-456", 5*time.Minute, 0)
 	if err != nil {
 		t.Fatalf("Failed to create token: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestTokenNonceReuse(t *testing.T) {
 	}
 
 	// 3. 创建令牌
-	token, err := NewToken("test-tool", "read", "agent-001", "session-123", "task-456", 5*time.Minute)
+	token, err := NewToken("test-tool", "read", "agent-001", "session-123", "task-456", 5*time.Minute, 0)
 	if err != nil {
 		t.Fatalf("Failed to create token: %v", err)
 	}

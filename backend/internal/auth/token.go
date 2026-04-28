@@ -71,6 +71,8 @@ type RequireToken struct {
 	Nonce      string    `json:"nonce"`       // 随机数，防止重放攻击
 	RiskLevel  int       `json:"risk_level"`  // 风险等级，由策略中心评估（0-10）
 	SchemaHash string    `json:"schema_hash"` // 工具 Schema 的 SM3 哈希，防止参数篡改
+	MaxCalls   int       `json:"max_calls"`   // 最大调用次数预算（SAGA 风格防 DoS），0 表示无限制
+	CallCount  int       `json:"call_count"`  // 当前已调用次数（由上层应用控制递增，不参与签名）
 	Signature  string    `json:"signature"`   // SM2 数字签名，确保令牌真实性
 }
 
@@ -82,9 +84,10 @@ type RequireToken struct {
 //   - sessionID: 会话 ID
 //   - taskID: 任务 ID
 //   - ttl: 令牌有效期（如 5*time.Minute）
+//   - maxCalls: 最大调用次数预算（防 DoS），0 表示无限制
 //
 // 返回：签名后的令牌对象或错误
-func NewToken(toolName, scope, agentID, sessionID, taskID string, ttl time.Duration) (*RequireToken, error) {
+func NewToken(toolName, scope, agentID, sessionID, taskID string, ttl time.Duration, maxCalls int) (*RequireToken, error) {
 	// 生成随机数（16 字节，32 个十六进制字符）
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
@@ -100,7 +103,9 @@ func NewToken(toolName, scope, agentID, sessionID, taskID string, ttl time.Durat
 		TaskID:    taskID,
 		ExpiresAt: time.Now().Add(ttl), // 计算过期时间
 		Nonce:     hex.EncodeToString(nonce),
-		RiskLevel: 0, // 默认风险等级为 0，后续由策略中心评估
+		RiskLevel: 0,        // 默认风险等级为 0，后续由策略中心评估
+		MaxCalls:  maxCalls, // 设置调用次数预算
+		CallCount: 0,        // 初始调用次数为 0
 	}
 
 	// 对令牌进行 SM2 签名
@@ -139,8 +144,9 @@ func (t *RequireToken) Sign() error {
 // 返回：待签名的字节数组
 func (t *RequireToken) buildSignMessage() []byte {
 	// 使用 "|" 作为分隔符拼接字段
-	// 格式：ToolName|Scope|AgentID|SessionID|TaskID|Nonce|RiskLevel|SchemaHash
-	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%d|%s",
+	// 格式：ToolName|Scope|AgentID|SessionID|TaskID|Nonce|RiskLevel|SchemaHash|MaxCalls
+	// 注意：CallCount 不参与签名，因为它会在每次调用时递增
+	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%d|%s|%d",
 		t.ToolName,
 		t.Scope,
 		t.AgentID,
@@ -149,6 +155,7 @@ func (t *RequireToken) buildSignMessage() []byte {
 		t.Nonce,
 		t.RiskLevel,
 		t.SchemaHash,
+		t.MaxCalls,
 	)
 	return []byte(data)
 }

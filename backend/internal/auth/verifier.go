@@ -33,11 +33,12 @@ func NewVerifier() *Verifier {
 	}
 }
 
-// Verify 执行令牌的全量校验（七项检查）
+// Verify 执行令牌的全量校验（八项检查）
 // 参数：
 //   - token: 待验证的 RequireToken
+//
 // 返回：错误信息（如果验证通过则返回 nil）
-// 
+//
 // 校验项目：
 // 1. 签名有效性 - 使用 SM2 验签
 // 2. 时效性 - 检查是否过期
@@ -46,6 +47,7 @@ func NewVerifier() *Verifier {
 // 5. 会话绑定 - 在 ActionGate 中检查
 // 6. 权限范围 - 在 ActionGate 中检查
 // 7. Schema 指纹 - 预留，用于防止参数篡改
+// 8. 调用次数预算 - 检查是否超过 max_calls（SAGA 风格防 DoS）
 func (v *Verifier) Verify(token *RequireToken) error {
 	// 检查公钥是否已初始化
 	if v.publicKey == nil {
@@ -64,6 +66,11 @@ func (v *Verifier) Verify(token *RequireToken) error {
 
 	// 3. 验证 Nonce 防重放
 	if err := v.verifyNonce(token); err != nil {
+		return err
+	}
+
+	// 8. 验证调用次数预算（SAGA 风格防 DoS）
+	if err := v.verifyCallBudget(token); err != nil {
 		return err
 	}
 
@@ -87,7 +94,7 @@ func (v *Verifier) verifySignature(token *RequireToken) error {
 
 	// 构建与签名时相同的消息体
 	message := token.buildSignMessage()
-	
+
 	// 使用 SM2 算法验证签名
 	valid, err := smcrypto.VerifySignatureHex(v.publicKey, message, token.Signature, signingUID)
 	if err != nil {
@@ -121,7 +128,7 @@ func (v *Verifier) verifyNonce(token *RequireToken) error {
 	if usedNonces[token.Nonce] {
 		return fmt.Errorf("nonce already used: %s", token.Nonce)
 	}
-	
+
 	// 将 Nonce 标记为已使用
 	usedNonces[token.Nonce] = true
 	return nil
@@ -136,6 +143,25 @@ func (v *Verifier) verifySchemaHash(token *RequireToken) error {
 	if token.SchemaHash != "" {
 		// TODO: 对比工具描述的 SM3 哈希值
 	}
+	return nil
+}
+
+// verifyCallBudget 验证调用次数预算（SAGA 风格防 DoS）
+// 参数：token - 待验证的令牌
+// 返回：错误信息（如果超过预算）
+// 注意：这里只检查是否超过预算，不自动递增 CallCount
+// CallCount 的递增由上层应用逻辑控制（如 ActionGate）
+func (v *Verifier) verifyCallBudget(token *RequireToken) error {
+	// 如果 MaxCalls 为 0，表示无限制
+	if token.MaxCalls == 0 {
+		return nil
+	}
+
+	// 检查当前调用次数是否已达到或超过最大限制
+	if token.CallCount >= token.MaxCalls {
+		return fmt.Errorf("call budget exceeded: %d/%d calls used", token.CallCount, token.MaxCalls)
+	}
+
 	return nil
 }
 
