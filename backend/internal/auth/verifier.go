@@ -6,16 +6,15 @@ package auth
 import (
 	"crypto/ecdsa"
 	"fmt"
+	"sync"
 	"time"
 
 	"aegisguard/pkg/smcrypto"
 )
 
-// usedNonces 已使用的 Nonce 集合（内存缓存）
-// 用于防止重放攻击，确保每个令牌只能使用一次
-// 注意：生产环境应使用 Redis 等持久化存储
 var (
 	usedNonces = make(map[string]bool)
+	nonceMu    sync.Mutex
 )
 
 // Verifier 执行平面校验器
@@ -124,12 +123,11 @@ func (v *Verifier) verifyExpiry(token *RequireToken) error {
 // 参数：token - 待验证的令牌
 // 返回：错误信息（如果 Nonce 已使用）
 func (v *Verifier) verifyNonce(token *RequireToken) error {
-	// 检查 Nonce 是否已存在于已使用集合中
+	nonceMu.Lock()
+	defer nonceMu.Unlock()
 	if usedNonces[token.Nonce] {
 		return fmt.Errorf("nonce already used: %s", token.Nonce)
 	}
-
-	// 将 Nonce 标记为已使用
 	usedNonces[token.Nonce] = true
 	return nil
 }

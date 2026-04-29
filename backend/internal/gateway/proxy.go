@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"aegisguard/internal/audit"
@@ -116,7 +117,11 @@ func (ap *AegisProxy) director(req *http.Request) {
 	req.URL.Host = ap.target.Host
 
 	// 解析请求体，判断请求类型
-	body, _ := io.ReadAll(req.Body)
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		ap.logger.Error("读取请求体失败", zap.Error(err))
+		return
+	}
 	req.Body = io.NopCloser(bytes.NewBuffer(body))
 
 	// 根据路径和请求内容，分发到不同 Gate
@@ -145,7 +150,7 @@ func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
 			// 结果被隔离/净化，替换响应体
 			resp.Body = io.NopCloser(bytes.NewBuffer(cleaned))
 			resp.ContentLength = int64(len(cleaned))
-			resp.Header.Set("Content-Length", string(rune(len(cleaned))))
+			resp.Header.Set("Content-Length", strconv.Itoa(len(cleaned)))
 		}
 	}
 

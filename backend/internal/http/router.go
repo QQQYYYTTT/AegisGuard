@@ -111,9 +111,7 @@ func (r *Router) handleProxy(c *gin.Context) {
 
 	// 读取请求体用于日志
 	bodyBytes, _ := c.GetRawData()
-	if len(bodyBytes) > 0 {
-		c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-	}
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	// 提取虚拟密钥
 	authHeader := c.GetHeader("Authorization")

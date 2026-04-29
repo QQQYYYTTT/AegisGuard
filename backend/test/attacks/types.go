@@ -1,6 +1,6 @@
 package attacks
 
-import "aegisguard/backend/internal/catalog"
+import "aegisguard/backend/internal/rules"
 
 type SourceRef struct {
 	Name  string `json:"name"`
@@ -52,7 +52,7 @@ type FamilyBundle struct {
 
 type Library struct {
 	Overview      string                 `json:"overview"`
-	Families      []catalog.AttackFamily `json:"families"`
+	Families      []rules.AttackFamily `json:"families"`
 	Cases         []AttackCase           `json:"cases"`
 	CasesByFamily []FamilyBundle         `json:"casesByFamily"`
 }

@@ -3,7 +3,7 @@ package attacks
 import (
 	"sync"
 
-	"aegisguard/backend/internal/catalog"
+	"aegisguard/backend/internal/rules"
 )
 
 var (
@@ -19,7 +19,7 @@ func GetLibrary() Library {
 }
 
 func buildLibrary() Library {
-	families := catalog.AttackFamilies
+	families := rules.AttackFamilies
 	grouped := make([]FamilyBundle, 0, len(families))
 	for _, family := range families {
 		grouped = append(grouped, FamilyBundle{

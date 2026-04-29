@@ -18,6 +18,9 @@ type Config struct {
 	VKeyConfigPath string // 虚拟密钥配置文件路径
 	LogLevel       string // 日志级别: debug/info/warn/error
 	PolicyMode     string // 策略模式: loose/balanced/strict
+
+	// 存储后端配置
+	VKeyStoreDSN string // 虚拟密钥存储 DSN，如 sqlite:data/vkeys.db
 }
 
 // Load 加载配置
@@ -37,6 +40,7 @@ func Load() Config {
 	vkeyConfigPath := getEnv("AEGIS_VKEY_CONFIG", filepath.Join(rootDir, "config", "vkeys.yaml"))
 	logLevel := getEnv("AEGIS_LOG_LEVEL", "info")
 	policyMode := getEnv("AEGIS_POLICY_MODE", "balanced")
+	vkeyStoreDSN := getEnv("AEGIS_VKEY_STORE_DSN", "sqlite:data/vkeys.db")
 
 	return Config{
 		RootDir:          rootDir,
@@ -50,6 +54,9 @@ func Load() Config {
 		VKeyConfigPath: vkeyConfigPath,
 		LogLevel:       logLevel,
 		PolicyMode:     policyMode,
+
+		// 存储后端配置
+		VKeyStoreDSN: vkeyStoreDSN,
 	}
 }
 
