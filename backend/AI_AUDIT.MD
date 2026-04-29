@@ -2,15 +2,18 @@
 
 ## 总览
 
-审计范围：`internal/vkey/`、`internal/config/`、`internal/gateway/`、`internal/http/`、`internal/gates/`、`internal/auth/`、`internal/audit/`、`pkg/smcrypto/`
+审计范围：`internal/vkey/`、`internal/config/`、`internal/gateway/`、`internal/http/`、`internal/gates/`、`internal/auth/`、`internal/audit/`、`pkg/smcrypto/`、`test/attacks/`
 
 FP Check 验证结果：**10 个 TRUE POSITIVE，1 个 FALSE POSITIVE**
+
+已修复问题：**Finding #1、#2、#3、#4、#5、#6、#7、#8**
 
 ---
 
 ## Finding #1: `CreateStore` DSN 解析算法存在严重逻辑错误
 
 - **Verdict: TRUE POSITIVE**
+- **Status: ✅ 已修复**
 - **Primitive:** C (Logic / Assertion)
 - **Confidence:** **Practical**
 - **Path Evidence:**
@@ -45,14 +48,21 @@ func CreateStore(dsn string) (Store, error) {
 - `scheme = "sqlite:D"` ❌，查不到该 factory → 报错
 
 - **实际影响评估：** [manager.go:68](file:///d:/Projects/AegisGuard/backend/internal/vkey/manager.go#L68) 硬编码调用 `CreateStore("sqlite:data/vkeys.db")`，使用相对路径，**当前不会触发**。但如果用户通过其他方式传入带盘符的 DSN，就会失败。
-- **Fix:** 使用 `strings.SplitN(dsn, ":", 2)` 替代手写循环：
+- **Fix:** 使用 `strings.Index` 区分 scheme 与 Windows 盘符：
 ```go
 func CreateStore(dsn string) (Store, error) {
     scheme := "sqlite"
     path := dsn
-    if parts := strings.SplitN(dsn, ":", 2); len(parts) == 2 && parts[0] != "" {
-        scheme, path = parts[0], parts[1]
+
+    if idx := strings.Index(dsn, ":"); idx > 0 {
+        candidate := dsn[:idx]
+        // 跨平台兼容：Linux 的 scheme 是纯字母，Windows 盘符是单字母（如 D:）
+        if len(candidate) > 1 {
+            scheme = candidate
+            path = dsn[idx+1:]
+        }
     }
+
     if f, ok := storeFactories[scheme]; ok {
         return f(path)
     }
@@ -65,6 +75,7 @@ func CreateStore(dsn string) (Store, error) {
 ## Finding #2: `storeWithCtx` 设计导致 context 立即失效
 
 - **Verdict: TRUE POSITIVE (严重)**
+- **Status: ✅ 已修复**
 - **Primitive:** B (State / Lifecycle)
 - **Confidence:** **Practical**
 - **Path Evidence:**
@@ -106,6 +117,7 @@ func (c *storeWithCtx) Save(ctx context.Context, key *VirtualKey) error {
 ## Finding #3: `usedNonces` 全局 map 存在竞态条件
 
 - **Verdict: TRUE POSITIVE**
+- **Status: ✅ 已修复**
 - **Primitive:** B (State / Lifecycle) — Race Condition
 - **Confidence:** **Practical**
 - **Path Evidence:**
@@ -154,6 +166,7 @@ func (v *Verifier) verifyNonce(token *RequireToken) error {
 ## Finding #4: `loadFromConfig` 中 Viper 全局状态污染
 
 - **Verdict: TRUE POSITIVE (低影响)**
+- **Status: ✅ 已修复**
 - **Primitive:** D (Environment / Boundary)
 - **Confidence:** **Probable**
 - **Path Evidence:**
@@ -188,6 +201,7 @@ func (m *Manager) loadFromConfig() error {
 ## Finding #5: `proxy.go` 中 `Content-Length` 设置错误
 
 - **Verdict: TRUE POSITIVE (严重)**
+- **Status: ✅ 已修复**
 - **Primitive:** C (Logic / Assertion)
 - **Confidence:** **Practical**
 - **Path Evidence:**
@@ -212,6 +226,7 @@ resp.Header.Set("Content-Length", strconv.Itoa(len(cleaned)))
 ## Finding #6: `director` 中 `io.ReadAll` 后未检查错误
 
 - **Verdict: TRUE POSITIVE**
+- **Status: ✅ 已修复**
 - **Primitive:** A (Taint / Flow)
 - **Confidence:** **Theoretical**
 - **Path Evidence:**
@@ -240,6 +255,7 @@ req.Body = io.NopCloser(bytes.NewBuffer(body))
 ## Finding #7: `handleProxy` 中 `GetRawData()` 后 body 恢复不完整
 
 - **Verdict: TRUE POSITIVE**
+- **Status: ✅ 已修复**
 - **Primitive:** C (Logic / Assertion)
 - **Confidence:** **Probable**
 - **Path Evidence:**
@@ -268,6 +284,7 @@ c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 ## Finding #8: `InMemoryStore` 无并发保护
 
 - **Verdict: TRUE POSITIVE (实际不可达)**
+- **Status: ✅ 已修复**
 - **Primitive:** B (State / Lifecycle) — Race Condition
 - **Confidence:** **Practical**
 - **Path Evidence:**
@@ -405,6 +422,103 @@ ctx := context.WithValue(c.Request.Context(), "vkey_info", vk)
 
 ---
 
+## Finding #12: `audit.Store` 完整链路断裂 — 死代码
+
+- **Verdict: TRUE POSITIVE (架构缺陷)**
+- **Primitive:** C (Logic / Assertion) — 信任边界崩溃
+- **Confidence:** **Practical**
+- **Path Evidence:**
+  - [audit/store.go](file:///d:/Projects/AegisGuard/backend/internal/audit/store.go) — 完整实现，**零引用**
+  - [audit/logger.go](file:///d:/Projects/AegisGuard/backend/internal/audit/logger.go) — `LogRequest` / `LogResponse` 方法体全是 TODO
+  - [proxy.go:130](file:///d:/Projects/AegisGuard/backend/internal/gateway/proxy.go#L130) — `ap.auditor.LogRequest(req, body)` 调用空方法
+  - [config.go:48](file:///d:/Projects/AegisGuard/backend/internal/config/config.go#L48) — `AuditFile` 配置指向 `data/audit-store.json`，但从未被使用
+  - [data/audit-store.json](file:///d:/Projects/AegisGuard/backend/data/audit-store.json) — 孤立文件，从未被读写
+- **问题描述：**
+
+整个审计日志持久化链路完全断裂：
+
+```
+proxy.go: ap.auditor.LogRequest(req, body)
+    ↓
+logger.go: func (l *Logger) LogRequest(req *http.Request, body []byte) {
+               // TODO: 实现请求日志记录     ← 空方法，到此为止
+           }
+    ↓
+audit.Store ← 从未被 Logger 持有，从未被实例化，从未被调用
+```
+
+全局搜索 `audit.Store` / `audit.NewStore`，**零引用**。`audit.Store` 是 100% 死代码。
+
+**实际影响：** 审计日志功能完全失效，所有请求/响应日志丢失，无法追溯安全事件。
+
+- **Fix:** 让 `Logger` 持有 `Store` 实例，在 `LogRequest/LogResponse` 中调用持久化：
+```go
+type Logger struct {
+    store *Store
+}
+
+func NewLogger(storePath string) (*Logger, error) {
+    store, err := NewStore(storePath)
+    if err != nil {
+        return nil, err
+    }
+    return &Logger{store: store}, nil
+}
+
+func (l *Logger) LogRequest(req *http.Request, body []byte) {
+    // 实际写入 store
+}
+```
+
+---
+
+## Finding #13: `test/attacks/` 导入不存在的包 — 编译失败
+
+- **Verdict: TRUE POSITIVE**
+- **Primitive:** C (Logic / Assertion)
+- **Confidence:** **Practical**
+- **Path Evidence:**
+  - [test/attacks/library.go:6](file:///d:/Projects/AegisGuard/backend/test/attacks/library.go#L6) — `import "aegisguard/backend/internal/catalog"`
+  - [test/attacks/types.go:3](file:///d:/Projects/AegisGuard/backend/test/attacks/types.go#L3) — 同上
+  - 实际包路径：`aegisguard/internal/rules/catalog.go`
+- **问题描述：**
+
+`test/attacks/` 导入 `aegisguard/backend/internal/catalog`，但实际包路径是 `aegisguard/internal/rules`。`catalog` 包位于 `internal/rules/catalog.go`，不在 `backend/internal/` 下。
+
+**实际影响：** `go build ./...` 直接报错，整个项目无法编译通过。
+
+- **Fix:** 修正导入路径：
+```go
+import "aegisguard/internal/rules"
+```
+
+---
+
+## Finding #14: `VKeyStoreDSN` 配置项形同虚设
+
+- **Verdict: TRUE POSITIVE**
+- **Primitive:** C (Logic / Assertion)
+- **Confidence:** **Practical**
+- **Path Evidence:**
+  - [config.go:43](file:///d:/Projects/AegisGuard/backend/internal/config/config.go#L43) — `VKeyStoreDSN` 定义 + 环境变量 `AEGIS_VKEY_STORE_DSN`
+  - [manager.go:68](file:///d:/Projects/AegisGuard/backend/internal/vkey/manager.go#L68) — 硬编码 `CreateStore("sqlite:data/vkeys.db")`
+- **问题描述：**
+
+配置系统定义了 `VKeyStoreDSN` 字段和 `AEGIS_VKEY_STORE_DSN` 环境变量，允许用户自定义存储后端。但 `NewManager` 完全忽略配置，硬编码 `sqlite:data/vkeys.db`。
+
+**实际影响：** 用户无法通过环境变量切换存储后端（如切换到 InMemory 或自定义 SQLite 路径），配置项形同虚设。
+
+- **Fix:** `NewManager` 应使用配置项：
+```go
+func NewManager(configPath string, dsn string) (*Manager, error) {
+    ...
+    store, err := CreateStore(dsn)  // 使用传入的 DSN，而非硬编码
+    ...
+}
+```
+
+---
+
 ## 代码质量评估
 
 | 维度 | 评分 | 说明 |
@@ -412,42 +526,29 @@ ctx := context.WithValue(c.Request.Context(), "vkey_info", vk)
 | **可读性** | ⭐⭐⭐⭐ | 命名清晰，注释充分，模块职责分明 |
 | **时间复杂度** | ⭐⭐⭐⭐ | 大部分操作 O(1) 或 O(n)，滑动窗口设计合理 |
 | **空间复杂度** | ⭐⭐⭐ | `usedNonces` 和 `InMemoryStore` 无限增长，无清理机制 |
-| **架构设计** | ⭐⭐⭐⭐ | Store 接口抽象良好，Manager 双存储回退设计合理 |
+| **架构设计** | ⭐⭐⭐ | Store 接口抽象良好，但 audit 链路断裂、配置项悬空 |
 
 ---
 
 ## FP Check 验证汇总
 
-| # | 发现 | Verdict | 实际影响 |
-|:---|:---|:---|:---|
-| 1 | DSN 解析错误 | **TRUE POSITIVE** | 算法有缺陷，但硬编码相对路径使当前不受影响 |
-| 2 | storeWithCtx context 已取消 | **TRUE POSITIVE** | 所有 SQLite 操作 100% 失败 |
-| 3 | Nonce 竞态条件 | **TRUE POSITIVE** | 并发 map 读写会 panic，TOCTOU 可被利用 |
-| 4 | Viper 全局状态 | **TRUE POSITIVE** | 架构隐患，当前单实例不受影响 |
-| 5 | Content-Length 错误 | **TRUE POSITIVE** | `string(rune())` 转换错误，响应损坏 |
-| 6 | io.ReadAll 忽略 error | **TRUE POSITIVE** | 异常情况下 Gate 拿到不完整数据 |
-| 7 | GetRawData body 恢复 | **TRUE POSITIVE** | 空 body 时不恢复，但 LLM 请求都有 body |
-| 8 | InMemoryStore 并发 | **TRUE POSITIVE** | 代码确实不安全，但实际路径中未被使用 |
-| 9 | selectRepresentativeEvents 重复 | **TRUE POSITIVE** | 事件可能重复添加，仅日志噪音 |
-| 10 | 全局密钥线程安全 | **TRUE POSITIVE** | 启动后只读不写，当前不受影响 |
-| 11 | context string key | **FALSE POSITIVE** | 代码风格问题，不是安全漏洞 |
+| # | 发现 | Verdict | Status | 实际影响 |
+|:---|:---|:---|:---|:---|
+| 1 | DSN 解析错误 | **TRUE POSITIVE** | ✅ 已修复 | 算法有缺陷，但硬编码相对路径使当前不受影响 |
+| 2 | storeWithCtx context 已取消 | **TRUE POSITIVE** | ✅ 已修复 | 所有 SQLite 操作 100% 失败 |
+| 3 | Nonce 竞态条件 | **TRUE POSITIVE** | ✅ 已修复 | 并发 map 读写会 panic，TOCTOU 可被利用 |
+| 4 | Viper 全局状态 | **TRUE POSITIVE** | ✅ 已修复 | 架构隐患，当前单实例不受影响 |
+| 5 | Content-Length 错误 | **TRUE POSITIVE** | ✅ 已修复 | `string(rune())` 转换错误，响应损坏 |
+| 6 | io.ReadAll 忽略 error | **TRUE POSITIVE** | ✅ 已修复 | 异常情况下 Gate 拿到不完整数据 |
+| 7 | GetRawData body 恢复 | **TRUE POSITIVE** | ✅ 已修复 | 空 body 时不恢复，但 LLM 请求都有 body |
+| 8 | InMemoryStore 并发 | **TRUE POSITIVE** | ✅ 已修复 | 代码确实不安全，但实际路径中未被使用 |
+| 9 | selectRepresentativeEvents 重复 | **TRUE POSITIVE** | 未修复 | 事件可能重复添加，仅日志噪音 |
+| 10 | 全局密钥线程安全 | **TRUE POSITIVE** | 未修复 | 启动后只读不写，当前不受影响 |
+| 11 | context string key | **FALSE POSITIVE** | 无需修复 | 代码风格问题，不是安全漏洞 |
+| 12 | audit.Store 死代码 | **TRUE POSITIVE** | 未修复 | 审计日志完全失效，链路断裂 |
+| 13 | test/attacks 导入错误 | **TRUE POSITIVE** | 未修复 | 项目无法编译 |
+| 14 | VKeyStoreDSN 配置悬空 | **TRUE POSITIVE** | 未修复 | 用户无法自定义存储后端 |
 
-**统计：10 个 TRUE POSITIVE，1 个 FALSE POSITIVE**
+**统计：13 个 TRUE POSITIVE（8 个已修复，5 个未修复），1 个 FALSE POSITIVE**
 
 ---
-
-## 修复优先级
-
-| 优先级 | Finding | 影响 |
-|:---|:---|:---|
-| 🔴 P0 | #2 storeWithCtx context 已取消 | 所有持久化操作立即失败 |
-| � P0 | #5 Content-Length 错误 | 响应头损坏，客户端解析失败 |
-| 🟠 P1 | #3 Nonce 竞态条件 | 重放攻击可成功，并发直接 panic |
-| 🟡 P2 | #1 DSN 解析错误 | Windows 绝对路径下 SQLite 无法工作 |
-| 🟡 P2 | #6 io.ReadAll 忽略 error | 异常情况下行为不可预测 |
-| � P2 | #7 GetRawData body 恢复 | 空 body 时下游拿到空内容 |
-| �🟢 P3 | #4 Viper 全局状态 | 架构隐患，当前无影响 |
-| 🟢 P3 | #8 InMemoryStore 并发 | 代码不安全但实际不可达 |
-| 🟢 P3 | #9 selectRepresentativeEvents 重复 | 日志噪音，不影响安全 |
-| 🟢 P3 | #10 全局密钥非线程安全 | 当前只在启动时设置一次 |
-| ❌ 排除 | #11 context string key | 代码风格问题，非安全漏洞 |

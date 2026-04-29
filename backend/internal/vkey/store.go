@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	_ "modernc.org/sqlite"
 )
@@ -148,6 +149,7 @@ func (s *SQLiteStore) Close() error {
 }
 
 type InMemoryStore struct {
+	mu   sync.RWMutex
 	keys map[string]*VirtualKey
 }
 
@@ -156,11 +158,15 @@ func NewInMemoryStore() *InMemoryStore {
 }
 
 func (s *InMemoryStore) Save(ctx context.Context, key *VirtualKey) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.keys[key.KeyID] = key
 	return nil
 }
 
 func (s *InMemoryStore) Get(ctx context.Context, keyID string) (*VirtualKey, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	key, ok := s.keys[keyID]
 	if !ok {
 		return nil, ErrNotFound
@@ -169,6 +175,8 @@ func (s *InMemoryStore) Get(ctx context.Context, keyID string) (*VirtualKey, err
 }
 
 func (s *InMemoryStore) Delete(ctx context.Context, keyID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.keys[keyID]; !ok {
 		return ErrNotFound
 	}
@@ -177,6 +185,8 @@ func (s *InMemoryStore) Delete(ctx context.Context, keyID string) error {
 }
 
 func (s *InMemoryStore) List(ctx context.Context) ([]*VirtualKey, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	keys := make([]*VirtualKey, 0, len(s.keys))
 	for _, k := range s.keys {
 		keys = append(keys, k)
@@ -185,6 +195,8 @@ func (s *InMemoryStore) List(ctx context.Context) ([]*VirtualKey, error) {
 }
 
 func (s *InMemoryStore) Update(ctx context.Context, key *VirtualKey) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.keys[key.KeyID]; !ok {
 		return ErrNotFound
 	}

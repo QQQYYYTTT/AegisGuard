@@ -123,15 +123,16 @@ func (m *Manager) loadFromStore() error {
 
 // loadFromConfig 从配置文件加载虚拟密钥
 func (m *Manager) loadFromConfig() error {
-	viper.SetConfigFile(m.configPath)
-	viper.SetConfigType("yaml")
+	v := viper.New()
+	v.SetConfigFile(m.configPath)
+	v.SetConfigType("yaml")
 
-	if err := viper.ReadInConfig(); err != nil {
+	if err := v.ReadInConfig(); err != nil {
 		return fmt.Errorf("读取配置文件失败: %w", err)
 	}
 
 	var keys []VirtualKey
-	if err := viper.UnmarshalKey("virtual_keys", &keys); err != nil {
+	if err := v.UnmarshalKey("virtual_keys", &keys); err != nil {
 		return fmt.Errorf("解析虚拟密钥配置失败：%w", err)
 	}
 
