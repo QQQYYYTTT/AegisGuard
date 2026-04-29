@@ -4,6 +4,7 @@
 package vkey
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -59,25 +60,65 @@ func (vk *VirtualKey) IsExpired() bool {
 // Manager 虚拟密钥管理器
 type Manager struct {
 	mu         sync.RWMutex
-	keys       map[string]*VirtualKey // key: vsk-xxxxx
+	store      Store
+	keys       map[string]*VirtualKey // key: vsk-xxxxx  内存缓存
 	logger     *zap.Logger
 	configPath string
 }
 
 // NewManager 创建虚拟密钥管理器
 func NewManager(logger *zap.Logger, configPath string) (*Manager, error) {
+	store, err := CreateStore("sqlite:data/vkeys.db")
+	if err != nil {
+		logger.Warn("创建 SQLite 存储失败，降级为内存存储", zap.Error(err))
+		store = nil
+	}
+	return NewManagerWithStore(logger, configPath, store)
+}
+
+// NewManagerWithStore 创建虚拟密钥管理器（指定存储后端）
+func NewManagerWithStore(logger *zap.Logger, configPath string, store Store) (*Manager, error) {
 	m := &Manager{
 		keys:       make(map[string]*VirtualKey),
+		store:      store,
 		logger:     logger,
 		configPath: configPath,
 	}
 
-	// 加载配置文件
-	if err := m.loadFromConfig(); err != nil {
-		logger.Warn("加载虚拟密钥配置失败，使用空配置", zap.Error(err))
+	if store != nil {
+		if err := m.loadFromStore(); err != nil {
+			logger.Warn("从存储加载虚拟密钥失败，使用配置文件", zap.Error(err))
+			if err := m.loadFromConfig(); err != nil {
+				logger.Warn("加载虚拟密钥配置失败，使用空配置", zap.Error(err))
+			}
+		}
+	} else {
+		if err := m.loadFromConfig(); err != nil {
+			logger.Warn("加载虚拟密钥配置失败，使用空配置", zap.Error(err))
+		}
 	}
 
 	return m, nil
+}
+
+// loadFromStore 从持久化存储加载虚拟密钥
+func (m *Manager) loadFromStore() error {
+	ctx := context.Background()
+	keys, err := m.store.List(ctx)
+	if err != nil {
+		return fmt.Errorf("从存储加载密钥失败: %w", err)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, key := range keys {
+		key := key
+		m.keys[key.KeyID] = key
+	}
+
+	m.logger.Info("从存储加载虚拟密钥", zap.Int("count", len(m.keys)))
+	return nil
 }
 
 // loadFromConfig 从配置文件加载虚拟密钥
@@ -196,6 +237,13 @@ func (m *Manager) CreateKey(agentID, realAPIKey, scope string, rateLimit int, tt
 	m.keys[vkeyID] = vk
 	m.mu.Unlock()
 
+	if m.store != nil {
+		ctx := context.Background()
+		if err := m.store.Save(ctx, vk); err != nil {
+			m.logger.Warn("持久化虚拟密钥失败", zap.Error(err))
+		}
+	}
+
 	m.logger.Info("创建虚拟密钥",
 		zap.String("vkey_id", vkeyID),
 		zap.String("agent_id", agentID),
@@ -216,6 +264,14 @@ func (m *Manager) RevokeKey(vkeyID string) error {
 	}
 
 	vk.Enabled = false
+
+	if m.store != nil {
+		ctx := context.Background()
+		if err := m.store.Update(ctx, vk); err != nil {
+			m.logger.Warn("持久化吊销状态失败", zap.Error(err))
+		}
+	}
+
 	m.logger.Info("吊销虚拟密钥", zap.String("vkey_id", vkeyID))
 	return nil
 }
