@@ -1,0 +1,17 @@
+# AegisGuard 网关凭据配置（模板）
+#
+# 使用方式：
+#   1. 复制此文件为 gateway.yaml
+#       copy config\gateway.yaml.example config\gateway.yaml
+#   2. 修改 target_url 和 llm_api_key 为你的真实凭据
+#   3. 启动网关
+#
+# 安全说明：
+# - gateway.yaml 已被 .gitignore 忽略，不会提交到仓库
+# - 生产环境建议通过环境变量注入敏感字段：
+#     set AEGIS_TARGET_URL=https://api.openai.com
+#     set AEGIS_LLM_API_KEY=sk-xxxxx
+
+gateway_key: agk-dev-001
+target_url: https://api.openai.com
+llm_api_key: sk-your-real-llm-api-key-here
