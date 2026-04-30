@@ -23,7 +23,7 @@ func main() {
 	logger.Info("【启动】配置加载完成",
 		zap.String("port", cfg.Port),
 		zap.String("target_url", cfg.TargetURL),
-		zap.String("vkey_config", cfg.VKeyConfigPath),
+		zap.String("gateway_config", cfg.GatewayConfigPath),
 	)
 
 	router, err := httpapi.NewRouter(cfg)

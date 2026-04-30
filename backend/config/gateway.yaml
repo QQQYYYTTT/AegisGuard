@@ -1,0 +1,16 @@
+# AegisGuard 网关凭据配置
+# 网关密钥(agk-xxx)：Agent 侧配置的认证凭据，用于接入网关
+# LLM API Key(sk-xxx)：网关托管的真实凭据，由管理员设置，Agent 无感知
+#
+# 凭据收敛设计：
+#   Agent .env           →  OPENAI_API_KEY=agk-xxx
+#   Agent .env           →  OPENAI_BASE_URL=http://aegis:8090/v1
+#   网关 gateway.yaml    →  gateway_key + llm_api_key（此处配置）
+#
+# 安全说明：
+# - llm_api_key 仅存在于网关内存中，不会被透传至 Agent 侧
+# - 生产环境建议通过 AEGIS_LLM_API_KEY 环境变量注入，避免明文写入文件
+# - 密钥轮换仅需修改此文件后重启网关，Agent 侧无需任何变更
+
+gateway_key: agk-dev-001
+llm_api_key: sk-your-real-llm-api-key-here

@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/emmansun/gmsm/sm2"
@@ -16,7 +17,7 @@ import (
 // 全局签名密钥和 UID
 // 这些变量在控制平面初始化时设置，用于令牌的签发和验证
 var (
-	signingPrivateKey *sm2.PrivateKey                   // 签名私钥（控制平面持有）
+	signingPrivateKey atomic.Pointer[sm2.PrivateKey]    // 签名私钥（控制平面持有），使用 atomic 保证线程安全
 	signingUID        = []byte("AegisGuard-Agent-Auth") // 自定义 UID，用于区分 AegisGuard 系统
 )
 
@@ -34,7 +35,7 @@ func InitSigningKey(privateKeyHex string) error {
 		if err != nil {
 			return err
 		}
-		signingPrivateKey = keyPair.PrivateKey
+		signingPrivateKey.Store(keyPair.PrivateKey)
 		return nil
 	}
 
@@ -43,7 +44,7 @@ func InitSigningKey(privateKeyHex string) error {
 	if err != nil {
 		return err
 	}
-	signingPrivateKey = privKey
+	signingPrivateKey.Store(privKey)
 	return nil
 }
 
@@ -51,11 +52,12 @@ func InitSigningKey(privateKeyHex string) error {
 // 返回：SM2 公钥对象，用于令牌验证
 // 注意：如果私钥未初始化，返回 nil
 func GetSigningPublicKey() *ecdsa.PublicKey {
-	if signingPrivateKey == nil {
+	privKey := signingPrivateKey.Load()
+	if privKey == nil {
 		return nil
 	}
 	// 从私钥中提取公钥
-	return &signingPrivateKey.PublicKey
+	return &privKey.PublicKey
 }
 
 // RequireToken 运行时授权令牌结构
@@ -121,7 +123,8 @@ func NewToken(toolName, scope, agentID, sessionID, taskID string, ttl time.Durat
 // 返回：错误信息
 func (t *RequireToken) Sign() error {
 	// 检查签名私钥是否已初始化
-	if signingPrivateKey == nil {
+	privKey := signingPrivateKey.Load()
+	if privKey == nil {
 		return fmt.Errorf("signing key not initialized")
 	}
 
@@ -129,7 +132,7 @@ func (t *RequireToken) Sign() error {
 	message := t.buildSignMessage()
 
 	// 使用 SM2 算法进行签名
-	signature, err := smcrypto.SignMessageHex(signingPrivateKey, message, signingUID)
+	signature, err := smcrypto.SignMessageHex(privKey, message, signingUID)
 	if err != nil {
 		return fmt.Errorf("failed to sign token: %w", err)
 	}
