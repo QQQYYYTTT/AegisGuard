@@ -13,4 +13,5 @@
 # - 密钥轮换仅需修改此文件后重启网关，Agent 侧无需任何变更
 
 gateway_key: agk-dev-001
-llm_api_key: sk-your-real-llm-api-key-here
+target_url: https://api.siliconflow.cn/v1
+llm_api_key: sk-yhsyabzfgoaexbtcveausrhspqtacgnffoqugxflludcagpd

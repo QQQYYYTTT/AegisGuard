@@ -71,18 +71,16 @@ API Key，所有 Agent 使用统一的`agk-`前缀网关密钥接入，LLM 凭�
 
 ```yaml
 gateway_key: agk-dev-001
+target_url: https://api.openai.com
 llm_api_key: sk-your-real-llm-api-key-here
 ```
 
-生产环境建议通过环境变量 `AEGIS_LLM_API_KEY` 注入真实 Key，避免明文写入文件。
+生产环境建议通过环境变量 `AEGIS_TARGET_URL` 和 `AEGIS_LLM_API_KEY` 注入敏感字段，避免明文写入文件。
 
 ### 3. 启动网关
 
 ```bash
 cd backend
-
-# 设置转发目标（真实 LLM API 地址）
-export AEGIS_TARGET_URL="https://api.openai.com"
 
 # 启动服务
 go run cmd/server/main.go
@@ -153,6 +151,7 @@ AegisGuard 采用**凭据收敛**设计。管理员在 `config/gateway.yaml` 中
 | 凭据 | 说明 | 谁持有 | 示例 |
 |:---|:---|:---|:---|
 | `gateway_key` | 网关身份凭据，Agent 配置在 `.env` 中用于接入网关 | Agent + 网关 | `agk-dev-001` |
+| `target_url` | 真实 LLM API 地址，网关将请求转发到此地址 | 仅网关（管理员配置） | `https://api.openai.com` |
 | `llm_api_key` | 真实 LLM API Key，由网关托管注入到请求中 | 仅网关（管理员配置） | `sk-xxxxx` |
 
 ### 设计哲学
@@ -232,8 +231,9 @@ Agent 请求:  Authorization: Bearer agk-dev-001
 
 | 变量 | 必填 | 默认值 | 说明 |
 |:---|:---|:---|:---|
-| `AEGIS_TARGET_URL` | 是 | `https://api.openai.com` | 真实 LLM API 地址 |
 | `AEGIS_GATEWAY_CONFIG` | 否 | `config/gateway.yaml` | 网关凭据配置文件路径 |
+| `AEGIS_TARGET_URL` | 否 | 读取 `gateway.yaml` | 覆盖配置文件中的真实 LLM API 地址 |
+| `AEGIS_LLM_API_KEY` | 否 | 读取 `gateway.yaml` | 覆盖配置文件中的真实 LLM API Key |
 | `PORT` | 否 | `8090` | 网关监听端口 |
 | `AEGIS_LOG_LEVEL` | 否 | `info` | 日志级别：debug/info/warn/error |
 | `AEGIS_POLICY_MODE` | 否 | `balanced` | 策略模式：loose/balanced/strict |
@@ -243,12 +243,14 @@ Agent 请求:  Authorization: Bearer agk-dev-001
 ```yaml
 # AegisGuard 网关凭据配置
 gateway_key: agk-dev-001
+target_url: https://api.openai.com
 llm_api_key: sk-your-real-llm-api-key-here
 ```
 
 - `gateway_key`：Agent 侧配置的统一网关密钥，必须以 `agk-` 开头
+- `target_url`：真实的 LLM API 地址，网关将请求转发到此地址
 - `llm_api_key`：网关托管的真实 LLM API Key，仅存在于网关内存中
-- 生产环境建议通过 `AEGIS_LLM_API_KEY` 环境变量注入 `llm_api_key`
+- 生产环境可通过 `AEGIS_TARGET_URL` 和 `AEGIS_LLM_API_KEY` 环境变量覆盖对应字段
 
 ---
 
@@ -259,12 +261,8 @@ llm_api_key: sk-your-real-llm-api-key-here
 ```yaml
 # gateway.yaml
 gateway_key: agk-internal-001
+target_url: "http://vllm-internal:8000"
 llm_api_key: ""                    # 内网服务通常不需要 API Key
-```
-
-```yaml
-# 环境变量
-AEGIS_TARGET_URL: "http://vllm-internal:8000"
 ```
 
 ### 调用商业 LLM API（OpenAI / DeepSeek / Qwen）
@@ -272,12 +270,8 @@ AEGIS_TARGET_URL: "http://vllm-internal:8000"
 ```yaml
 # gateway.yaml
 gateway_key: agk-default-001
+target_url: "https://api.openai.com"
 llm_api_key: "sk-xxxxxxxxxxxxxxxxxxxx"    # 企业统一的 LLM API Key
-```
-
-```yaml
-# 环境变量  
-AEGIS_TARGET_URL: "https://api.openai.com"
 ```
 
 ### 多团队、多模型场景
@@ -287,13 +281,13 @@ AEGIS_TARGET_URL: "https://api.openai.com"
 ```
 网关实例A（研发团队）：
   gateway_key: agk-rd-001
+  target_url: https://api.deepseek.com
   llm_api_key: sk-deepseek-key
-  AEGIS_TARGET_URL: https://api.deepseek.com
 
 网关实例B（数据团队）：
   gateway_key: agk-data-001
+  target_url: https://dashscope.aliyuncs.com
   llm_api_key: sk-qwen-key
-  AEGIS_TARGET_URL: https://dashscope.aliyuncs.com
 ```
 
 ---

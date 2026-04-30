@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"aegisguard/internal/audit"
@@ -23,7 +22,6 @@ type AegisProxy struct {
 	vkeyMgr     *vkey.Manager
 	messageGate *gates.MessageGate
 	actionGate  *gates.ActionGate
-	returnGate  *gates.ReturnGate
 	auditor     *audit.Logger
 	logger      *zap.Logger
 }
@@ -39,14 +37,12 @@ func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, logger *zap.Logger) 
 		vkeyMgr:     vkeyMgr,
 		messageGate: gates.NewMessageGate(),
 		actionGate:  gates.NewActionGate(),
-		returnGate:  gates.NewReturnGate(),
 		auditor:     audit.NewLogger(),
 		logger:      logger,
 	}
 
 	ap.proxy = httputil.NewSingleHostReverseProxy(target)
 	ap.proxy.Director = ap.director
-	ap.proxy.ModifyResponse = ap.modifyResponse
 	ap.proxy.ErrorHandler = ap.errorHandler
 
 	return ap, nil
@@ -89,23 +85,6 @@ func (ap *AegisProxy) director(req *http.Request) {
 	ap.auditor.LogRequest(req, body)
 }
 
-func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
-	body, _ := io.ReadAll(resp.Body)
-	resp.Body = io.NopCloser(bytes.NewBuffer(body))
-
-	if ap.isToolResult(resp) {
-		cleaned := ap.returnGate.Evaluate(body)
-		if cleaned != nil {
-			resp.Body = io.NopCloser(bytes.NewBuffer(cleaned))
-			resp.ContentLength = int64(len(cleaned))
-			resp.Header.Set("Content-Length", strconv.Itoa(len(cleaned)))
-		}
-	}
-
-	ap.auditor.LogResponse(resp, body)
-	return nil
-}
-
 func (ap *AegisProxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) {
 	ap.logger.Error("代理转发失败",
 		zap.String("target", ap.target.String()),
@@ -132,11 +111,6 @@ func (ap *AegisProxy) isToolCall(path string, body []byte) bool {
 	}
 	json.Unmarshal(body, &req)
 	return strings.Contains(path, "/tools") || len(req.Messages) > 0
-}
-
-func (ap *AegisProxy) isToolResult(resp *http.Response) bool {
-	contentType := resp.Header.Get("Content-Type")
-	return strings.Contains(contentType, "application/json")
 }
 
 func (ap *AegisProxy) handleChatRequest(req *http.Request, body []byte) {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type bodyLogWriter struct {
@@ -34,7 +35,9 @@ type Router struct {
 }
 
 func NewRouter(cfg config.Config) (*Router, error) {
-	logger, err := zap.NewProduction()
+	zapCfg := zap.NewProductionConfig()
+	zapCfg.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	logger, err := zapCfg.Build()
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +52,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 	engine.Use(gin.Recovery())
 	engine.Use(requestLogger(logger))
 
-	proxy, err := gateway.NewAegisProxy(cfg.TargetURL, vkeyMgr, logger)
+	proxy, err := gateway.NewAegisProxy(vkeyMgr.GetTargetURL(), vkeyMgr, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +62,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 		proxy:     proxy,
 		vkeyMgr:   vkeyMgr,
 		logger:    logger,
-		targetURL: cfg.TargetURL,
+		targetURL: vkeyMgr.GetTargetURL(),
 	}
 
 	router.registerRoutes()
@@ -92,6 +95,22 @@ func (r *Router) handleProxy(c *gin.Context) {
 		zap.String("path", path),
 		zap.String("client_ip", clientIP),
 		zap.Int("body_size", len(bodyBytes)),
+	)
+
+	// 调试：完整打印请求头和请求体
+	headersStr := ""
+	for k, vs := range c.Request.Header {
+		for _, v := range vs {
+			headersStr += k + ": " + v + "\n"
+		}
+	}
+	bodyStr := string(bodyBytes)
+	if bodyStr == "" {
+		bodyStr = "(empty)"
+	}
+	r.logger.Debug("请求详情",
+		zap.String("headers", headersStr),
+		zap.String("body", bodyStr),
 	)
 
 	if gatewayKey == "" {

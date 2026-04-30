@@ -15,7 +15,6 @@ type Config struct {
 
 	// 网关凭据配置
 	GatewayConfigPath string // 网关凭据配置文件路径 (gateway.yaml)
-	TargetURL         string // 真实 LLM API 地址，如 https://api.openai.com
 	LogLevel          string // 日志级别: debug/info/warn/error
 	PolicyMode        string // 策略模式: loose/balanced/strict
 }
@@ -33,21 +32,19 @@ func Load() Config {
 	langGraphChatURL := getEnv("LANGGRAPH_CHAT_URL", "http://127.0.0.1:8765")
 
 	// 网关核心配置
-	targetURL := getEnv("AEGIS_TARGET_URL", "https://api.openai.com")
 	gatewayConfigPath := getEnv("AEGIS_GATEWAY_CONFIG", filepath.Join(rootDir, "config", "gateway.yaml"))
 	logLevel := getEnv("AEGIS_LOG_LEVEL", "info")
 	policyMode := getEnv("AEGIS_POLICY_MODE", "balanced")
 
 	return Config{
-		RootDir:     rootDir,
-		FrontendDir: filepath.Join(rootDir, "frontend"),
-		AuditFile:   filepath.Join(rootDir, "backend", "data", "audit-store.json"),
-		Port:        port,
+		RootDir:          rootDir,
+		FrontendDir:      filepath.Join(rootDir, "frontend"),
+		AuditFile:        filepath.Join(rootDir, "backend", "data", "audit-store.json"),
+		Port:             port,
 		LangGraphChatURL: langGraphChatURL,
 
 		// 网关核心配置
 		GatewayConfigPath: gatewayConfigPath,
-		TargetURL:         targetURL,
 		LogLevel:          logLevel,
 		PolicyMode:        policyMode,
 	}
