@@ -1,6 +1,6 @@
 # AegisGuard Backend
 
-AegisGuard 后端——面向 Agent 执行链路的动态防护与行为管控系统。采用**非侵入式反向代理架构**，Agent 仅需修改 `BASE_URL` 配置即可接入，无需改动任何业务代码。
+AegisGuard 后端——面向 Agent 执行链路的运行时安全防护与行为管控系统。采用**非侵入式反向代理架构**，Agent 仅需修改 `BASE_URL` 和 `API_KEY` 配置即可接入，无需改动任何业务代码。
 
 ---
 
@@ -8,12 +8,53 @@ AegisGuard 后端——面向 Agent 执行链路的动态防护与行为管控�
 
 | 特性 | 状态 | 说明 |
 |:---|:---|:---|
-| **零侵入接入** | ✅ 已完成 | Agent 通过配置 `BASE_URL` 指向网关，无需代码改动 |
-| **虚拟密钥签发** | 🔧 开发中 | 动态签发 `vsk-` 前缀虚拟密钥，网关自动替换为真实 API Key |
+| **零侵入接入** | ✅ 已完成 | Agent 通过配置 `BASE_URL` 和网关密钥接入，无需代码改动 |
+| **凭据收敛** | ✅ 已完成 | 统一网关密钥(agk-xxx)验证身份，LLM API Key 由网关托管，Agent 无感知 |
+| **凭据保险箱** | ✅ 已完成 | 管理员在 `gateway.yaml` 中配置真实 LLM Key，Agent 永远看不到 |
 | **三层安全闸门** | ✅ 已完成 | Message Gate → Action Gate → Return Gate，覆盖执行全链路 |
 | **可信授权链路** | 🔧 工程化中 | RequireToken 机制，基于国密 SM2/SM3/SM4 |
 | **双流上下文隔离** | ✅ 已完成 | Trusted Core Context / Sandbox Context，阻断外部污染 |
 | **攻击链审计** | ✅ 已完成 | 时序因果 DAG，支持阻断节点定位与路径回溯 |
+
+---
+
+## 架构设计：凭据收敛模型
+
+AegisGuard 面向**企业内部自部署**场景设计。管理员在 `gateway.yaml` 中设置网关密钥和 LLM
+API Key，所有 Agent 使用统一的`agk-`前缀网关密钥接入，LLM 凭据由网关完全托管。
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Layer 1: Gateway Key (网关身份凭据)                           │
+│  - agk-dev-001，管理员在 gateway.yaml 中统一配置                │
+│  - Agent 的 .env 中配置 OPENAI_API_KEY=agk-dev-001            │
+│  - 仅用于证明"此 Agent 是该网关的合法调用方"                     │
+│  - 泄露后管理员修改 gateway.yaml 即可，所有 Agent 同步更新       │
+└──────────────────────────────────────────────────────────────┘
+                              │ 每次请求携带
+                              ▼
+┌──────────────────────────────────────────────────────────────┐
+│  Layer 2: RequireToken (短期授权令牌)                          │
+│  - 由控制平面签发，TTL = 5 分钟                                │
+│  - 包含: ToolName, Scope, RiskLevel, MaxCalls, Nonce          │
+│  - SM2 签名防篡改，Nonce 防重放                                │
+│  - 过期后网关自动重新签发，Agent 无感知                         │
+└──────────────────────────────────────────────────────────────┘
+                              │ 网关验证后
+                              ▼
+┌──────────────────────────────────────────────────────────────┐
+│  Layer 3: LLM API Key (后端 LLM 凭据)                         │
+│  - 仅存在于网关进程内存中，Agent 永远不会接触到                  │
+│  - 管理员在 gateway.yaml 中配置，支持环境变量注入               │
+│  - 密钥轮换仅需修改 gateway.yaml 后重启网关，Agent 侧零变更     │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**核心原则：**
+- **凭据不落地**：真实 LLM API Key 仅存在于网关受控内存，Agent 只持有网关密钥
+- **Agent 保持"愚钝"**：`.env` 只配一次 `agk-xxx`，永远不改
+- **网关承担所有安全责任**：身份校验、密钥替换、安全闸门全部封死在网关背后
+- **管理员统一管控**：所有密钥配置收敛到 `gateway.yaml`，无需逐个管理 Agent 凭据
 
 ---
 
@@ -24,13 +65,22 @@ AegisGuard 后端——面向 Agent 执行链路的动态防护与行为管控�
 - Go 1.25+
 - （可选）Docker，用于容器化部署
 
-### 2. 启动网关
+### 2. 配置网关凭据
+
+编辑 `config/gateway.yaml`：
+
+```yaml
+gateway_key: agk-dev-001
+target_url: https://api.openai.com
+llm_api_key: sk-your-real-llm-api-key-here
+```
+
+生产环境建议通过环境变量 `AEGIS_TARGET_URL` 和 `AEGIS_LLM_API_KEY` 注入敏感字段，避免明文写入文件。
+
+### 3. 启动网关
 
 ```bash
 cd backend
-
-# 设置转发目标（真实 LLM API）
-export AEGIS_TARGET_URL="https://api.openai.com"
 
 # 启动服务
 go run cmd/server/main.go
@@ -38,7 +88,7 @@ go run cmd/server/main.go
 
 服务启动后监听 `:8090`（可通过 `PORT` 环境变量修改）。
 
-### 3. Agent 接入（零代码改动）
+### 4. Agent 接入（零代码改动）
 
 修改你的 Agent 配置文件或环境变量：
 
@@ -49,12 +99,10 @@ OPENAI_API_KEY="sk-your-real-key"
 
 # 接入 AegisGuard 后（仅改这两行）
 OPENAI_BASE_URL="http://localhost:8090/v1"
-OPENAI_API_KEY="vsk-dev-001"  # 使用虚拟密钥，网关自动替换为真实密钥
+OPENAI_API_KEY="agk-dev-001"  # 使用网关密钥，网关自动替换为真实 LLM Key
 ```
 
 **完成。** Agent 所有流量自动经过安全网关。
-
-> **注意**：虚拟密钥需通过 `/admin/vkeys` API 或配置文件预先创建。详见[虚拟密钥管理](#虚拟密钥管理)章节。
 
 ---
 
@@ -64,12 +112,12 @@ OPENAI_API_KEY="vsk-dev-001"  # 使用虚拟密钥，网关自动替换为真实
 backend/
 ├── cmd/server/           # 服务入口
 ├── config/               # 配置文件目录
-│   └── vkeys.yaml        # 虚拟密钥配置文件
+│   └── gateway.yaml      # 网关凭据配置（网关密钥 + LLM API Key）
 ├── internal/
-│   ├── gateway/          # 反向代理网关（流量入口）
+│   ├── gateway/          # 反向代理网关（流量入口、凭据替换）
 │   ├── gates/            # 三层安全闸门（核心防护）
 │   ├── auth/             # RequireToken 授权链路
-│   ├── vkey/             # 虚拟密钥管理（动态签发）
+│   ├── vkey/             # 网关密钥校验与凭据管理
 │   ├── http/             # HTTP 路由与处理器
 │   ├── sandbox/          # 记忆沙箱与上下文隔离
 │   ├── audit/            # 审计日志与攻击链图谱
@@ -83,10 +131,10 @@ backend/
 
 | 目录 | 职责 | 对应文档章节 |
 |:---|:---|:---|
-| `gateway/` | HTTP 反向代理，请求解析与转发，拦截点挂载 | 2.2.2 执行平面模块 |
+| `gateway/` | HTTP 反向代理，请求转发，凭据替换（agk → sk） | 2.2.2 执行平面模块 |
 | `gates/` | Message/Action/Return Gate 策略决策 | 2.2.3 三层安全闸门 |
 | `auth/` | RequireToken 签发、校验、SM2 签名 | 2.4.2 可信授权与密码学机制 |
-| `vkey/` | 虚拟密钥签发、验证、吊销、生命周期管理 | 虚拟密钥管理 |
+| `vkey/` | 网关密钥校验、LLM API Key 托管与注入 | 网关凭据管理 |
 | `http/` | HTTP 路由注册、请求处理、管理 API | - |
 | `sandbox/` | 可信/不可信上下文隔离、摘要回传 | 2.4.3 上下文污染防护机制 |
 | `audit/` | 结构化日志、时序因果 DAG、攻击链重建 | 2.4.4 审计日志与攻击路径重建 |
@@ -94,82 +142,51 @@ backend/
 
 ---
 
-## 虚拟密钥管理
+## 网关凭据管理
 
 ### 概述
 
-虚拟密钥（Virtual Key）是 AegisGuard 的核心接入机制。Agent 使用 `vsk-` 前缀的虚拟密钥访问网关，网关自动替换为真实的 LLM API Key，实现**零侵入安全接入**。
+AegisGuard 采用**凭据收敛**设计。管理员在 `config/gateway.yaml` 中统一配置以下凭据：
+
+| 凭据 | 说明 | 谁持有 | 示例 |
+|:---|:---|:---|:---|
+| `gateway_key` | 网关身份凭据，Agent 配置在 `.env` 中用于接入网关 | Agent + 网关 | `agk-dev-001` |
+| `target_url` | 真实 LLM API 地址，网关将请求转发到此地址 | 仅网关（管理员配置） | `https://api.openai.com` |
+| `llm_api_key` | 真实 LLM API Key，由网关托管注入到请求中 | 仅网关（管理员配置） | `sk-xxxxx` |
+
+### 设计哲学
+
+- **凭据收敛**：所有凭据管理集中到 `gateway.yaml`，管理员只需维护一个配置文件
+- **凭据不落地**：LLM API Key 仅存在于网关进程内存，Agent 永远接触不到
+- **单点管控**：真实 Key 轮换只需修改 `gateway.yaml` 重启网关，所有 Agent 侧无需任何变更
+- **身份与凭据分离**：`gateway_key` 仅用于身份校验，`llm_api_key` 是后端调用凭据，两者完全解耦
 
 ### 密钥格式
 
 ```
-vsk-{uuid前8位}-{uuid前4位}
+gateway_key: agk-{名称或标识}
 ```
 
-示例：`vsk-a1b2c3d4-e5f6`
+示例：`agk-dev-001`、`agk-prod-01`、`agk-default`
 
-### 密钥结构
+### Agent 配置方式
 
-| 字段 | 说明 | 示例 |
-|:---|:---|:---|
-| `key_id` | 虚拟密钥 ID | `vsk-dev-001` |
-| `agent_id` | Agent 唯一标识 | `agent-dev-001` |
-| `real_api_key` | 真实 LLM API Key | `sk-xxxxx` |
-| `scope` | 权限范围 | `read` / `write` / `admin` |
-| `rate_limit` | 每分钟最大请求数 | `60` |
-| `expires_at` | 过期时间 | `2026-12-31T23:59:59Z` |
-| `enabled` | 是否启用 | `true` / `false` |
-
-### 管理 API
-
-| 端点 | 方法 | 说明 |
-|:---|:---|:---|
-| `/admin/vkeys` | GET | 列出所有虚拟密钥（脱敏） |
-| `/admin/vkeys` | POST | 创建虚拟密钥 |
-| `/admin/vkeys/:id` | GET | 获取虚拟密钥详情 |
-| `/admin/vkeys/:id` | DELETE | 吊销虚拟密钥 |
-
-#### 创建虚拟密钥示例
+Agent 的 `.env` 文件中只需配置统一的网关密钥：
 
 ```bash
-curl -X POST http://localhost:8090/admin/vkeys \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_id": "my-agent-001",
-    "real_api_key": "sk-your-real-openai-key",
-    "scope": "write",
-    "rate_limit": 60
-  }'
+OPENAI_BASE_URL=http://aegis-gateway:8090/v1
+OPENAI_API_KEY=agk-dev-001
 ```
 
-响应：
-```json
-{
-  "virtual_key": {
-    "key_id": "vsk-a1b2c3d4-e5f6",
-    "agent_id": "my-agent-001",
-    "scope": "write",
-    "rate_limit": 60,
-    "enabled": true
-  },
-  "message": "虚拟密钥创建成功，请妥善保管"
-}
-```
+多个 Agent 可共用同一个网关密钥。如需区分不同团队，可配置多个 `gateway_key`（详见配置文件）。
 
-### 配置文件
+### 凭据轮换
 
-虚拟密钥可通过配置文件静态定义（`config/vkeys.yaml`）：
+当真实 LLM API Key 需要更新时：
 
-```yaml
-virtual_keys:
-  - key_id: vsk-dev-001
-    agent_id: agent-dev-001
-    real_api_key: sk-your-real-openai-key-here
-    scope: write
-    rate_limit: 60
-    expires_at: "2026-12-31T23:59:59Z"
-    enabled: true
-```
+1. 编辑 `config/gateway.yaml`，修改 `llm_api_key` 字段
+2. 重启网关
+3. **Agent 侧无需任何修改**，`agk-xxx` 保持不变
 
 ---
 
@@ -190,20 +207,88 @@ virtual_keys:
 
 **关键设计**：所有控制逻辑内联于代理链路，非旁路检测，确保危险动作在执行前被强制阻断。
 
+### 认证流程（凭据替换）
+
+```
+Agent 请求:  Authorization: Bearer agk-dev-001
+                │
+                ▼
+        1. 提取网关密钥 agk-dev-001
+        2. 校验是否匹配 gateway.yaml 中的 gateway_key
+        3. 验证通过后，从 gateway.yaml 读取 llm_api_key
+        4. 替换 Authorization 头: Bearer sk-xxxxx
+        5. 转发请求到真实 LLM API
+                │
+                ▼
+        LLM API 收到真实凭据，正常处理
+```
+
 ---
 
 ## 配置说明
 
-通过环境变量配置：
+### 环境变量
 
 | 变量 | 必填 | 默认值 | 说明 |
 |:---|:---|:---|:---|
-| `AEGIS_TARGET_URL` | 是 | `https://api.openai.com` | 真实 LLM API 地址 |
-| `AEGIS_LISTEN_ADDR` | 否 | `:8090` | 网关监听地址 |
+| `AEGIS_GATEWAY_CONFIG` | 否 | `config/gateway.yaml` | 网关凭据配置文件路径 |
+| `AEGIS_TARGET_URL` | 否 | 读取 `gateway.yaml` | 覆盖配置文件中的真实 LLM API 地址 |
+| `AEGIS_LLM_API_KEY` | 否 | 读取 `gateway.yaml` | 覆盖配置文件中的真实 LLM API Key |
+| `PORT` | 否 | `8090` | 网关监听端口 |
 | `AEGIS_LOG_LEVEL` | 否 | `info` | 日志级别：debug/info/warn/error |
 | `AEGIS_POLICY_MODE` | 否 | `balanced` | 策略模式：loose/balanced/strict |
-| `AEGIS_VKEY_CONFIG` | 否 | `config/vkeys.yaml` | 虚拟密钥配置文件路径 |
-| `AEGIS_VKEY_STORE_DSN` | 否 | `sqlite:data/vkeys.db` | 虚拟密钥存储后端（sqlite/memory） |
+
+### 网关凭据配置文件 (`config/gateway.yaml`)
+
+```yaml
+# AegisGuard 网关凭据配置
+gateway_key: agk-dev-001
+target_url: https://api.openai.com
+llm_api_key: sk-your-real-llm-api-key-here
+```
+
+- `gateway_key`：Agent 侧配置的统一网关密钥，必须以 `agk-` 开头
+- `target_url`：真实的 LLM API 地址，网关将请求转发到此地址
+- `llm_api_key`：网关托管的真实 LLM API Key，仅存在于网关内存中
+- 生产环境可通过 `AEGIS_TARGET_URL` 和 `AEGIS_LLM_API_KEY` 环境变量覆盖对应字段
+
+---
+
+## 场景与接入指南
+
+### 企业内部自建 LLM（vLLM / Ollama）
+
+```yaml
+# gateway.yaml
+gateway_key: agk-internal-001
+target_url: "http://vllm-internal:8000"
+llm_api_key: ""                    # 内网服务通常不需要 API Key
+```
+
+### 调用商业 LLM API（OpenAI / DeepSeek / Qwen）
+
+```yaml
+# gateway.yaml
+gateway_key: agk-default-001
+target_url: "https://api.openai.com"
+llm_api_key: "sk-xxxxxxxxxxxxxxxxxxxx"    # 企业统一的 LLM API Key
+```
+
+### 多团队、多模型场景
+
+对于需要管理多个 LLM API Key 的企业（少量 Key，如 3~5 个），可启动多个网关实例：
+
+```
+网关实例A（研发团队）：
+  gateway_key: agk-rd-001
+  target_url: https://api.deepseek.com
+  llm_api_key: sk-deepseek-key
+
+网关实例B（数据团队）：
+  gateway_key: agk-data-001
+  target_url: https://dashscope.aliyuncs.com
+  llm_api_key: sk-qwen-key
+```
 
 ---
 
@@ -214,7 +299,6 @@ virtual_keys:
 在 `internal/gates/` 下编辑对应文件，实现 `Evaluate` 方法：
 
 ```go
-// gates/action_gate.go
 func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, headers http.Header) (ActionDecision, string) {
     // 1. 提取 Token
     // 2. 全字段校验
@@ -241,31 +325,27 @@ func DetectFramework(req *http.Request) FrameworkType {
 ### 本地快速验证
 
 ```bash
-# 1. 启动网关
+# 1. 编辑 config/gateway.yaml，设置网关密钥和真实 LLM Key
+#    gateway_key: agk-dev-001
+#    llm_api_key: sk-your-real-key
+
+# 2. 启动网关
 go run cmd/server/main.go
 
-# 2. 创建虚拟密钥
-curl -X POST http://localhost:8090/admin/vkeys \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_id": "test-agent",
-    "real_api_key": "sk-your-real-key",
-    "scope": "write"
-  }'
-
-# 3. 使用虚拟密钥测试连通性
+# 3. 使用网关密钥测试连通性
 curl http://localhost:8090/v1/models \
-  -H "Authorization: Bearer vsk-xxxx-xxxx"
+  -H "Authorization: Bearer agk-dev-001"
 
-# 4. 查看所有虚拟密钥
-curl http://localhost:8090/admin/vkeys
+# 4. 使用错误的密钥测试（应返回 401）
+curl http://localhost:8090/v1/models \
+  -H "Authorization: Bearer agk-wrong-key"
 
-# 5. 观察日志输出，确认密钥替换和安全检查
+# 5. 观察日志输出，确认凭据替换和安全检查
 ```
 
-### 与前端联调
+### 前端展示
 
-前端演示服务启动后访问 `http://localhost:8090`，可查看：
+前端演示服务启动后访问 `http://localhost:8090`（需启动前端服务），可查看：
 - 实时阻断决策
 - 国密授权中心
 - 记忆沙箱状态
@@ -273,43 +353,28 @@ curl http://localhost:8090/admin/vkeys
 
 ---
 
-
----
-
 ## 注意事项
 
-### 当前状态
+### 安全建议
 
-1. **虚拟密钥存储**：✅ SQLite 持久化存储，支持内存缓存加速，重启后数据不丢失
-2. **RequireToken SM2 签名**：已集成 `pkg/smcrypto` 国密库
-3. **Nonce 防重放**：当前为内存缓存，生产环境需接入 Redis
-4. **性能优化**：审计日志写入可改为异步，降低关键路径延迟
+1. **生产环境 `llm_api_key` 通过环境变量注入**，避免明文写入配置文件：
+   ```bash
+   export AEGIS_LLM_API_KEY="sk-xxxxxxxx"
+   ```
+2. **网关密钥定期轮换**，修改 `gateway.yaml` 后重启网关即可
+3. **TLS 加密**：生产环境必须在网关前端配置 HTTPS，防止网关密钥传输中泄露
+4. **最小权限**：LLM API Key 应配置企业账号下的最小必要权限（如仅限特定模型、用量限制）
 
 ### 设计理念：竞赛作品 × 工业雏形
 
 本项目虽源于全国大学生信息安全竞赛，但设计之初即以**可发展为工业产品**为目标。核心原则：
 
-- **接口抽象先行**：存储层、缓存层、消息层均设计为可插拔接口，SQLite → PostgreSQL、内存 → Redis 可无缝切换
-- **领域驱动设计**：模块职责边界清晰，auth/vkey/audit/rules 四大领域独立演进，不相互渗透
-- **性能与持久化解耦**：高频读写走内存（sync.Map），冷数据落数据库，零吹牛皮的实用主义
-
-> 评委既考察安全性，也会评估架构是否有「从宿舍到工厂」的能力。
-
-### 开发目标（虚拟密钥签发）
-
-| 功能 | 当前状态 | 目标 | 工业价值 |
-|:---|:---|:---|:---|
-| 持久化存储 | ✅ SQLite 已完成 | PostgreSQL 双模式 | 赛道一：密钥持久化是生产环境刚需 |
-| 动态签发 API | ✅ 已完成 | REST API 创建/吊销/轮换 | 赛道二：密钥生命周期管理是企业标配 |
-| 权限模型 | ⚠️ 仅 scope | RBAC + ABAC 混合权限 | 赛道三：细粒度权限是商业化核心 |
-| 调用追踪 | ⚠️ 内存计数 | 分布式计数器 + 审计日志 | 赛道四：可观测性是 SRE 核心诉求 |
-| 密钥轮换 | ❌ 无 | 新旧密钥并行 + 自动失效 | 赛道五：密钥轮换是安全合规要求 |
-| 自动清理 | ⚠️ 惰性检查 | 定时任务 + 事件触发双机制 | 赛道六：自动化运维减少人工干预 |
+- **接口抽象先行**：核心模块均设计为可插拔接口，便于扩展
+- **领域驱动设计**：模块职责边界清晰，独立演进
+- **实用主义**：平衡开发效率与架构质量
 
 ---
 
 ## 许可证
 
 本项目为竞赛作品，代码仅供学习研究使用。
-
----

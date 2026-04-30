@@ -13,14 +13,10 @@ type Config struct {
 	Port             string // 服务端口
 	LangGraphChatURL string // LangGraph 聊天服务地址
 
-	// 低侵入接入相关配置
-	TargetURL      string // 真实 LLM API 地址，如 https://api.openai.com
-	VKeyConfigPath string // 虚拟密钥配置文件路径
-	LogLevel       string // 日志级别: debug/info/warn/error
-	PolicyMode     string // 策略模式: loose/balanced/strict
-
-	// 存储后端配置
-	VKeyStoreDSN string // 虚拟密钥存储 DSN，如 sqlite:data/vkeys.db
+	// 网关凭据配置
+	GatewayConfigPath string // 网关凭据配置文件路径 (gateway.yaml)
+	LogLevel          string // 日志级别: debug/info/warn/error
+	PolicyMode        string // 策略模式: loose/balanced/strict
 }
 
 // Load 加载配置
@@ -35,12 +31,10 @@ func Load() Config {
 	port := getEnv("PORT", "8090")
 	langGraphChatURL := getEnv("LANGGRAPH_CHAT_URL", "http://127.0.0.1:8765")
 
-	// 低侵入接入核心配置
-	targetURL := getEnv("AEGIS_TARGET_URL", "https://api.openai.com")
-	vkeyConfigPath := getEnv("AEGIS_VKEY_CONFIG", filepath.Join(rootDir, "config", "vkeys.yaml"))
+	// 网关核心配置
+	gatewayConfigPath := getEnv("AEGIS_GATEWAY_CONFIG", filepath.Join(rootDir, "config", "gateway.yaml"))
 	logLevel := getEnv("AEGIS_LOG_LEVEL", "info")
 	policyMode := getEnv("AEGIS_POLICY_MODE", "balanced")
-	vkeyStoreDSN := getEnv("AEGIS_VKEY_STORE_DSN", "sqlite:data/vkeys.db")
 
 	return Config{
 		RootDir:          rootDir,
@@ -49,14 +43,10 @@ func Load() Config {
 		Port:             port,
 		LangGraphChatURL: langGraphChatURL,
 
-		// 低侵入接入配置
-		TargetURL:      targetURL,
-		VKeyConfigPath: vkeyConfigPath,
-		LogLevel:       logLevel,
-		PolicyMode:     policyMode,
-
-		// 存储后端配置
-		VKeyStoreDSN: vkeyStoreDSN,
+		// 网关核心配置
+		GatewayConfigPath: gatewayConfigPath,
+		LogLevel:          logLevel,
+		PolicyMode:        policyMode,
 	}
 }
 
