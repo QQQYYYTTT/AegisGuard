@@ -9,18 +9,25 @@ import (
 	"time"
 
 	"aegisguard/internal/auth"
+
+	"go.uber.org/zap"
 )
 
 type ActionGate struct {
 	verifier    *auth.Verifier    // Token 校验器
 	batchJudge  *BatchWindowJudge // 批量窗口判定器（TrinityGuard 风格）
 	enableBatch bool              // 是否启用批量窗口判定
+	logger      *zap.Logger
 }
 
-func NewActionGate() *ActionGate {
+func NewActionGate(logger *zap.Logger) *ActionGate {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	ag := &ActionGate{
 		verifier:    auth.NewVerifier(),
-		enableBatch: false, // 默认不启用批量判定
+		enableBatch: false,
+		logger:      logger,
 	}
 	return ag
 }
@@ -33,11 +40,15 @@ func NewActionGate() *ActionGate {
 //   - judgeFunc: LLM 判定函数（如果为 nil，则使用规则引擎）
 //
 // 返回：ActionGate 实例
-func NewActionGateWithBatch(windowSize, maxEvents int, judgeInterval time.Duration, judgeFunc JudgeFunc) *ActionGate {
+func NewActionGateWithBatch(windowSize, maxEvents int, judgeInterval time.Duration, judgeFunc JudgeFunc, logger *zap.Logger) *ActionGate {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	ag := &ActionGate{
 		verifier:    auth.NewVerifier(),
-		batchJudge:  NewBatchWindowJudge(windowSize, maxEvents, judgeInterval, judgeFunc),
+		batchJudge:  NewBatchWindowJudge(windowSize, maxEvents, judgeInterval, judgeFunc, logger),
 		enableBatch: true,
+		logger:      logger,
 	}
 	return ag
 }

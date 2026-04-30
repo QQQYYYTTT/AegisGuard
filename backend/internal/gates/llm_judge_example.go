@@ -16,9 +16,7 @@ func SimpleLLMJudge(summary *WindowSummary) (Decision, []string, string) {
 	
 	// 模拟 LLM 响应（实际应用中解析 LLM 返回）
 	decision, monitors, reason := analyzeWithLLM(prompt, summary)
-	
-	fmt.Printf("[LLM Judge] Analyzed window %s: %s\n", summary.WindowID, reason)
-	
+
 	return decision, monitors, reason
 }
 

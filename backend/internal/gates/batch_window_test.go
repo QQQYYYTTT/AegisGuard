@@ -4,11 +4,13 @@ package gates
 import (
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 func TestBatchWindowJudgeBasic(t *testing.T) {
 	// 创建批量判定器
-	judge := NewBatchWindowJudge(10, 5, 2*time.Second, SimpleLLMJudge)
+	judge := NewBatchWindowJudge(10, 5, 2*time.Second, SimpleLLMJudge, zap.NewNop())
 	defer judge.Close()
 
 	// 添加低风险事件
@@ -42,7 +44,7 @@ func TestBatchWindowJudgeBasic(t *testing.T) {
 
 func TestBatchWindowJudgeHighRiskCluster(t *testing.T) {
 	// 创建批量判定器
-	judge := NewBatchWindowJudge(10, 5, 5*time.Second, SimpleLLMJudge)
+	judge := NewBatchWindowJudge(10, 5, 5*time.Second, SimpleLLMJudge, zap.NewNop())
 	defer judge.Close()
 
 	// 连续添加 3 个高风险事件（触发聚集检测）
@@ -65,7 +67,7 @@ func TestBatchWindowJudgeHighRiskCluster(t *testing.T) {
 
 func TestBatchWindowJudgeRiskEscalation(t *testing.T) {
 	// 创建批量判定器
-	judge := NewBatchWindowJudge(10, 5, 5*time.Second, SimpleLLMJudge)
+	judge := NewBatchWindowJudge(10, 5, 5*time.Second, SimpleLLMJudge, zap.NewNop())
 	defer judge.Close()
 
 	// 模拟风险递增模式
@@ -86,7 +88,7 @@ func TestBatchWindowJudgeRiskEscalation(t *testing.T) {
 
 func TestBatchWindowJudgeSuspiciousCombination(t *testing.T) {
 	// 创建批量判定器
-	judge := NewBatchWindowJudge(10, 5, 5*time.Second, SimpleLLMJudge)
+	judge := NewBatchWindowJudge(10, 5, 5*time.Second, SimpleLLMJudge, zap.NewNop())
 	defer judge.Close()
 
 	// 添加危险工具组合
@@ -111,7 +113,7 @@ func TestBatchWindowJudgeSuspiciousCombination(t *testing.T) {
 }
 
 func TestBatchWindowJudgeMonitorManagement(t *testing.T) {
-	judge := NewBatchWindowJudge(10, 5, 5*time.Second, nil)
+	judge := NewBatchWindowJudge(10, 5, 5*time.Second, nil, zap.NewNop())
 	defer judge.Close()
 
 	// 测试监控器启用
@@ -132,7 +134,7 @@ func TestBatchWindowJudgeMonitorManagement(t *testing.T) {
 }
 
 func TestWindowSummaryBuilding(t *testing.T) {
-	judge := NewBatchWindowJudge(10, 3, 5*time.Second, nil)
+	judge := NewBatchWindowJudge(10, 3, 5*time.Second, nil, zap.NewNop())
 	defer judge.Close()
 
 	// 添加多个事件
@@ -173,7 +175,7 @@ func TestWindowSummaryBuilding(t *testing.T) {
 }
 
 func TestRuleBasedJudge(t *testing.T) {
-	judge := NewBatchWindowJudge(10, 5, 5*time.Second, nil)
+	judge := NewBatchWindowJudge(10, 5, 5*time.Second, nil, zap.NewNop())
 	defer judge.Close()
 
 	// 测试规则 1：高风险事件过多

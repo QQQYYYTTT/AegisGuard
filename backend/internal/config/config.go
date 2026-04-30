@@ -16,6 +16,7 @@ type Config struct {
 	// 网关凭据配置
 	GatewayConfigPath string // 网关凭据配置文件路径 (gateway.yaml)
 	LogLevel          string // 日志级别: debug/info/warn/error
+	LogEncoding       string // 日志编码: console/production
 	PolicyMode        string // 策略模式: loose/balanced/strict
 }
 
@@ -31,21 +32,26 @@ func Load() Config {
 	port := getEnv("PORT", "8090")
 	langGraphChatURL := getEnv("LANGGRAPH_CHAT_URL", "http://127.0.0.1:8765")
 
+	// 审计日志路径，支持环境变量覆盖
+	auditFile := getEnv("AEGIS_AUDIT_FILE", filepath.Join(rootDir, "backend", "data", "audit-store.jsonl"))
+
 	// 网关核心配置
 	gatewayConfigPath := getEnv("AEGIS_GATEWAY_CONFIG", filepath.Join(rootDir, "config", "gateway.yaml"))
-	logLevel := getEnv("AEGIS_LOG_LEVEL", "info")
+	logLevel := getEnv("AEGIS_LOG_LEVEL", "debug")
+	logEncoding := getEnv("AEGIS_LOG_ENCODING", "console")
 	policyMode := getEnv("AEGIS_POLICY_MODE", "balanced")
 
 	return Config{
 		RootDir:          rootDir,
 		FrontendDir:      filepath.Join(rootDir, "frontend"),
-		AuditFile:        filepath.Join(rootDir, "backend", "data", "audit-store.json"),
+		AuditFile:        auditFile,
 		Port:             port,
 		LangGraphChatURL: langGraphChatURL,
 
 		// 网关核心配置
 		GatewayConfigPath: gatewayConfigPath,
 		LogLevel:          logLevel,
+		LogEncoding:       logEncoding,
 		PolicyMode:        policyMode,
 	}
 }
