@@ -67,7 +67,12 @@ API Key，所有 Agent 使用统一的`agk-`前缀网关密钥接入，LLM 凭�
 
 ### 2. 配置网关凭据
 
-编辑 `config/gateway.yaml`：
+```bash
+# 复制模板文件（gateway.yaml 已被 .gitignore 忽略，不会提交到仓库）
+copy config\gateway.yaml.example config\gateway.yaml
+```
+
+编辑 `config/gateway.yaml`，填入你的真实凭据：
 
 ```yaml
 gateway_key: agk-dev-001
@@ -75,7 +80,8 @@ target_url: https://api.openai.com
 llm_api_key: sk-your-real-llm-api-key-here
 ```
 
-生产环境建议通过环境变量 `AEGIS_TARGET_URL` 和 `AEGIS_LLM_API_KEY` 注入敏感字段，避免明文写入文件。
+> ⚠️ **安全**：`gateway.yaml` 包含真实 API Key，已在 `.gitignore` 中排除。
+> 生产环境建议通过环境变量 `AEGIS_TARGET_URL` 和 `AEGIS_LLM_API_KEY` 注入敏感字段，避免明文写入文件。
 
 ### 3. 启动网关
 
@@ -184,7 +190,7 @@ OPENAI_API_KEY=agk-dev-001
 
 当真实 LLM API Key 需要更新时：
 
-1. 编辑 `config/gateway.yaml`，修改 `llm_api_key` 字段
+1. 编辑 `config/gateway.yaml`，修改 `llm_api_key` 字段（参考 `gateway.yaml.example` 模板）
 2. 重启网关
 3. **Agent 侧无需任何修改**，`agk-xxx` 保持不变
 
@@ -240,12 +246,16 @@ Agent 请求:  Authorization: Bearer agk-dev-001
 
 ### 网关凭据配置文件 (`config/gateway.yaml`)
 
+参考模板 `config/gateway.yaml.example`：
+
 ```yaml
 # AegisGuard 网关凭据配置
 gateway_key: agk-dev-001
 target_url: https://api.openai.com
 llm_api_key: sk-your-real-llm-api-key-here
 ```
+
+> ⚠️ `gateway.yaml` 已在 `.gitignore` 中，不会提交到仓库。首次使用请从模板复制：`copy config\gateway.yaml.example config\gateway.yaml`
 
 - `gateway_key`：Agent 侧配置的统一网关密钥，必须以 `agk-` 开头
 - `target_url`：真实的 LLM API 地址，网关将请求转发到此地址
@@ -257,6 +267,8 @@ llm_api_key: sk-your-real-llm-api-key-here
 ## 场景与接入指南
 
 ### 企业内部自建 LLM（vLLM / Ollama）
+
+参考 `config/gateway.yaml.example` 复制并修改：
 
 ```yaml
 # gateway.yaml
@@ -325,7 +337,9 @@ func DetectFramework(req *http.Request) FrameworkType {
 ### 本地快速验证
 
 ```bash
-# 1. 编辑 config/gateway.yaml，设置网关密钥和真实 LLM Key
+# 1. 从模板复制配置文件
+#    copy config\gateway.yaml.example config\gateway.yaml
+# 2. 编辑 config/gateway.yaml，设置网关密钥和真实 LLM Key
 #    gateway_key: agk-dev-001
 #    llm_api_key: sk-your-real-key
 
