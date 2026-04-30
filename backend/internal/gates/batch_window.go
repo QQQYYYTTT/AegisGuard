@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // WindowEvent 窗口中的事件
@@ -39,12 +41,14 @@ type BatchWindowJudge struct {
 	maxEvents     int           // 窗口摘要中最多包含的事件数
 	judgeInterval time.Duration // LLM 判定间隔
 	judgeFunc     JudgeFunc     // LLM 判定函数（可注入）
-	
+
 	mu            sync.RWMutex
-	currentWindow []WindowEvent // 当前窗口的事件
-	lastJudgeTime time.Time     // 上次 LLM 判定时间
+	currentWindow []WindowEvent  // 当前窗口的事件
+	lastJudgeTime time.Time      // 上次 LLM 判定时间
 	activeMonitors map[string]bool // 激活的监控器集合
-	
+
+	logger *zap.Logger
+
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -60,9 +64,13 @@ type JudgeFunc func(summary *WindowSummary) (Decision, []string, string)
 //   - judgeFunc: LLM 判定函数（如果为 nil，则使用规则引擎）
 //
 // 返回：BatchWindowJudge 实例
-func NewBatchWindowJudge(windowSize, maxEvents int, judgeInterval time.Duration, judgeFunc JudgeFunc) *BatchWindowJudge {
+func NewBatchWindowJudge(windowSize, maxEvents int, judgeInterval time.Duration, judgeFunc JudgeFunc, logger *zap.Logger) *BatchWindowJudge {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
 	bj := &BatchWindowJudge{
 		windowSize:     windowSize,
 		maxEvents:      maxEvents,
@@ -70,6 +78,7 @@ func NewBatchWindowJudge(windowSize, maxEvents int, judgeInterval time.Duration,
 		judgeFunc:      judgeFunc,
 		currentWindow:  make([]WindowEvent, 0, windowSize),
 		activeMonitors: make(map[string]bool),
+		logger:         logger,
 		ctx:            ctx,
 		cancel:         cancel,
 	}
@@ -129,9 +138,11 @@ func (bj *BatchWindowJudge) evaluateNow(reason string) Decision {
 		bj.activeMonitors[monitor] = true
 	}
 	
-	// 记录日志
-	fmt.Printf("[BatchWindowJudge] %s: decision=%s, reason=%s\n", 
-		reason, decision, logReason)
+	bj.logger.Debug("[BatchWindowJudge] window judged",
+		zap.String("trigger", reason),
+		zap.String("decision", decision.String()),
+		zap.String("reason", logReason),
+	)
 	
 	// 更新判定时间
 	bj.lastJudgeTime = time.Now()

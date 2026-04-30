@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strings"
 
-	"aegisguard/internal/audit"
 	"aegisguard/internal/gates"
 	"aegisguard/internal/vkey"
 
@@ -22,7 +21,6 @@ type AegisProxy struct {
 	vkeyMgr     *vkey.Manager
 	messageGate *gates.MessageGate
 	actionGate  *gates.ActionGate
-	auditor     *audit.Logger
 	logger      *zap.Logger
 }
 
@@ -36,8 +34,7 @@ func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, logger *zap.Logger) 
 		target:      target,
 		vkeyMgr:     vkeyMgr,
 		messageGate: gates.NewMessageGate(),
-		actionGate:  gates.NewActionGate(),
-		auditor:     audit.NewLogger(),
+		actionGate:  gates.NewActionGate(logger),
 		logger:      logger,
 	}
 
@@ -59,7 +56,7 @@ func (ap *AegisProxy) director(req *http.Request) {
 
 	req.Header.Set("Authorization", "Bearer "+llmAPIKey)
 
-	ap.logger.Info("密钥替换完成",
+	ap.logger.Debug("密钥替换完成",
 		zap.String("original_auth", maskedAuth),
 		zap.String("target_host", ap.target.Host),
 		zap.String("target_path", req.URL.Path),
@@ -81,8 +78,6 @@ func (ap *AegisProxy) director(req *http.Request) {
 	} else if ap.isToolCall(req.URL.Path, body) {
 		ap.handleToolCall(req, body)
 	}
-
-	ap.auditor.LogRequest(req, body)
 }
 
 func (ap *AegisProxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) {

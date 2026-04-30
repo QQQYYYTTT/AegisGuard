@@ -7,19 +7,31 @@ import (
 	httpapi "aegisguard/internal/http"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func main() {
+	cfg := config.Load()
+
 	// 初始化 zap 日志
-	logger, err := zap.NewProduction()
+	var logger *zap.Logger
+	var err error
+	if cfg.LogEncoding == "production" {
+		logger, err = zap.NewProduction()
+	} else {
+		devCfg := zap.NewDevelopmentConfig()
+		devCfg.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		logger, err = devCfg.Build()
+	}
 	if err != nil {
 		panic(err)
 	}
 	defer logger.Sync()
 
+	logger.Info("【启动】启动日志编码", zap.String("encoding", cfg.LogEncoding))
+
 	logger.Info("【启动】AegisGuard 网关正在启动...")
 
-	cfg := config.Load()
 	logger.Info("【启动】配置加载完成",
 		zap.String("port", cfg.Port),
 		zap.String("gateway_config", cfg.GatewayConfigPath),
