@@ -477,6 +477,125 @@ function escapeHTML(value) {
   }[char]));
 }
 
+const gateStages = [
+  { id: "message_gate", label: "Message Gate", title: "消息执行闸" },
+  { id: "action_gate", label: "Action Gate", title: "动作执行闸" },
+  { id: "return_gate", label: "Return Gate", title: "返回执行闸" }
+];
+
+const gateActionText = {
+  allow: "放行",
+  degrade: "降级",
+  deny: "阻断",
+  quarantine: "隔离",
+  human_approval: "人工确认"
+};
+
+function normalizeGateTrace(trace) {
+  const items = Array.isArray(trace) ? trace : [];
+  return gateStages.map((stage) => {
+    const found = items.find((item) => item.stage === stage.id);
+    return found || {
+      stage: stage.id,
+      action: "pending",
+      reason: "本轮暂未产生该阶段判决。",
+      triggered_rules: []
+    };
+  });
+}
+
+function gateActionClass(action) {
+  if (["allow", "degrade", "deny", "quarantine", "human_approval"].includes(action)) return action;
+  return "pending";
+}
+
+function renderGatePills(trace) {
+  return normalizeGateTrace(trace).map((gate) => {
+    const stage = gateStages.find((item) => item.id === gate.stage);
+    const action = gate.action || "pending";
+    return `<span class="gate-pill ${gateActionClass(action)}">${stage.label}: ${gateActionText[action] || "待定"}</span>`;
+  }).join("");
+}
+
+function renderGateTrace(trace) {
+  const normalized = normalizeGateTrace(trace);
+  return `<div class="gate-trace">
+    ${normalized.map((gate, index) => {
+      const stage = gateStages.find((item) => item.id === gate.stage);
+      const action = gate.action || "pending";
+      const rules = (gate.triggered_rules || []).length ? gate.triggered_rules.join(", ") : "none";
+      const score = typeof gate.risk_score === "number" ? gate.risk_score.toFixed(2) : "0.00";
+      const basis = gate.decision_basis || "policy";
+      const breakdown = gate.risk_breakdown || {};
+      const bars = ["injection", "goal_deviation", "sensitive", "action_harm"].map((key) => {
+        const value = Number(breakdown[key] || 0);
+        return `<div class="gate-score-row"><span>${key}</span><div><i style="width:${Math.round(value * 100)}%"></i></div><b>${value.toFixed(2)}</b></div>`;
+      }).join("");
+      return `<article class="gate-step ${gateActionClass(action)}">
+        <div class="gate-step-index">${index + 1}</div>
+        <div class="gate-step-body">
+          <div class="gate-step-head">
+            <div><strong>${stage.label}</strong><span>${stage.title}</span></div>
+            <b>${gateActionText[action] || "待定"} · ${score}</b>
+          </div>
+          <p>${escapeHTML(gate.reason)}</p>
+          <div class="gate-rule-row"><span>Rules</span><code>${escapeHTML(rules)}</code></div>
+          <div class="gate-rule-row"><span>Basis</span><code>${escapeHTML(basis)}</code></div>
+          <div class="gate-score-grid">${bars}</div>
+        </div>
+      </article>`;
+    }).join("")}
+  </div>`;
+}
+
+function strongestGateAction(trace) {
+  const rank = { quarantine: 5, deny: 4, human_approval: 3, degrade: 2, allow: 1, pending: 0 };
+  return normalizeGateTrace(trace).reduce((strongest, gate) => {
+    const action = gate.action || "pending";
+    return rank[action] > rank[strongest] ? action : strongest;
+  }, "pending");
+}
+
+function latestGateTrace() {
+  for (let index = langGraphChatState.messages.length - 1; index >= 0; index -= 1) {
+    const trace = langGraphChatState.messages[index].gateTrace;
+    if (trace && trace.length) return trace;
+  }
+  return [];
+}
+
+function renderGateConsole(trace) {
+  const hasTrace = Array.isArray(trace) && trace.length > 0;
+  const overall = hasTrace ? strongestGateAction(trace) : "pending";
+  return `<section class="card span-4 gate-console-card">
+    <div class="card-head">
+      <div><span class="eyebrow">Gate Console</span><h3>三级策略闸门</h3></div>
+      <span class="gate-status ${gateActionClass(overall)}">${gateActionText[overall] || "待运行"}</span>
+    </div>
+    <div class="gate-flow">
+      ${gateStages.map((stage) => `<div class="gate-flow-node"><strong>${stage.label}</strong><span>${stage.title}</span></div>`).join("")}
+    </div>
+    <div class="gate-pill-row">${hasTrace ? renderGatePills(trace) : `<span class="gate-pill pending">等待本轮执行</span>`}</div>
+    <p class="muted gate-console-copy">每次对话都会把用户消息、工具调用和最终返回分别送入闸门，判决过程会随回答一起留痕。</p>
+  </section>`;
+}
+
+function renderLangGraphMeta(data) {
+  const actions = (data.actions || []).map((item) => `<pre>${escapeHTML(item)}</pre>`).join("");
+  const workflow = data.workflow ? `<details><summary>Workflow</summary><pre>${escapeHTML(data.workflow)}</pre></details>` : "";
+  const gates = data.gate_trace && data.gate_trace.length
+    ? `<details open><summary>Gate Trace</summary>${renderGateTrace(data.gate_trace)}</details>`
+    : `<details><summary>Gate Trace</summary><div class="gate-empty">当前响应未返回 gate_trace。请确认服务以 aegisguard_gate 模式启动。</div></details>`;
+  return `<div class="agent-run-strip">
+      <span>${escapeHTML(data.mode || "three-gate-runtime")}</span>
+      <span>defense=${escapeHTML(data.defense || "aegisguard_gate")}</span>
+      <span>${escapeHTML(data.duration_ms || 0)} ms</span>
+    </div>
+    ${gates}
+    ${actions ? `<details><summary>Tool calls</summary>${actions}</details>` : ""}
+    ${workflow}`;
+}
+
 function renderLangGraphMessages() {
   return langGraphChatState.messages.map((message) => {
     const meta = message.meta ? `<div class="agent-message-meta">${message.meta}</div>` : "";
@@ -484,7 +603,7 @@ function renderLangGraphMessages() {
   }).join("");
 }
 
-function langGraphFinancialPage() {
+function langGraphFinancialPageLegacy() {
   const statusText = langGraphChatState.online ? "online" : "checking / offline";
   const statusClass = langGraphChatState.online ? "green" : "amber";
   return `<div class="dashboard-grid">
@@ -507,6 +626,46 @@ function langGraphFinancialPage() {
         <textarea id="langGraphChatInput" placeholder="输入金融分析问题，例如：Evaluate the risk and potential returns of investing in a new sector."></textarea>
         <button class="primary-button" type="submit" ${langGraphChatState.busy ? "disabled" : ""}>${langGraphChatState.busy ? "运行中" : "发送"}</button>
       </form>
+    </section>
+  </div>`;
+}
+
+function langGraphFinancialPage() {
+  const statusText = langGraphChatState.online ? "online" : "checking / offline";
+  const statusClass = langGraphChatState.online ? "green" : "amber";
+  const trace = latestGateTrace();
+  return `<div class="dashboard-grid">
+    <section class="card span-8 agent-intro-card">
+      <div class="card-head">
+        <div><span class="eyebrow">Runtime View</span><h3>langgraph_financial_agent 策略闸门演示</h3></div>
+        <span class="badge ${statusClass}">${statusText}</span>
+      </div>
+      <p class="muted">页面直接展示 Agent 的执行链路：Message Gate 在规划前检查用户消息，Action Gate 在工具执行前检查调用边界，Return Gate 在最终回复前检查污染与敏感输出。</p>
+      <div class="gate-hero-flow">
+        <div><strong>Message Gate</strong><span>消息风险检测 / 目标一致性</span></div>
+        <div><strong>Action Gate</strong><span>工具调用控制 / 最小权限</span></div>
+        <div><strong>Return Gate</strong><span>结果拦截 / 敏感信息识别</span></div>
+      </div>
+      <div class="agent-command-strip">
+        <span>启动命令</span>
+        <code>python .\\experiments\\asb\\langgraph\\chat_server.py --port 8765</code>
+      </div>
+    </section>
+    ${renderGateConsole(trace)}
+    <section class="card span-8 agent-chat-card">
+      <div class="card-head">
+        <div><span class="eyebrow">Conversation</span><h3>金融智能体对话</h3></div>
+        <button class="ghost-button light-button small-button" id="refreshLangGraphHealthButton">刷新状态</button>
+      </div>
+      <div class="agent-chat-stream" id="langGraphChatStream">${renderLangGraphMessages()}</div>
+      <form class="agent-chat-form" id="langGraphChatForm">
+        <textarea id="langGraphChatInput" placeholder="输入金融分析问题，例如：Evaluate the risk and potential returns of investing in a new sector."></textarea>
+        <button class="primary-button" type="submit" ${langGraphChatState.busy ? "disabled" : ""}>${langGraphChatState.busy ? "运行中" : "发送"}</button>
+      </form>
+    </section>
+    <section class="card span-4 gate-evidence-card">
+      <div class="card-head"><div><span class="eyebrow">Evidence</span><h3>本轮留痕</h3></div></div>
+      ${trace.length ? renderGateTrace(trace) : `<div class="gate-empty tall">发送一条消息后，这里会同步展示最近一次的三闸门判决链路。</div>`}
     </section>
   </div>`;
 }
@@ -669,7 +828,12 @@ function bindLangGraphChatEvents() {
       const workflow = data.workflow ? `<details><summary>Workflow</summary><pre>${escapeHTML(data.workflow)}</pre></details>` : "";
       const meta = `<span>${escapeHTML(data.mode || "clean-baseline")}</span> · defense=${escapeHTML(data.defense || "none")} · ${escapeHTML(data.duration_ms || 0)} ms${actions ? `<details><summary>Tool calls</summary>${actions}</details>` : ""}${workflow}`;
       langGraphChatState.online = true;
-      langGraphChatState.messages.push({ role: "assistant", text: data.answer || "No final answer returned.", meta });
+      langGraphChatState.messages.push({
+        role: "assistant",
+        text: data.answer || "No final answer returned.",
+        meta: renderLangGraphMeta(data),
+        gateTrace: data.gate_trace || []
+      });
     } catch (error) {
       langGraphChatState.online = false;
       langGraphChatState.messages.push({ role: "assistant", text: `Error: ${error.message}` });
