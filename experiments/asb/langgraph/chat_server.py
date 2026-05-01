@@ -31,7 +31,7 @@ def clean_args() -> SimpleNamespace:
     return SimpleNamespace(
         agent_backend="pyopenagi",
         llm_name=os.getenv("LANGGRAPH_OPENAI_MODEL") or os.getenv("CUSTOM_MODEL_ID") or os.getenv("OPENAI_MODEL") or "gpt-4o-mini",
-        defense_type=None,
+        defense_type=os.getenv("AEGISGUARD_DEFENSE_TYPE") or "aegisguard_gate",
         attack_type="naive",
         direct_prompt_injection=False,
         observation_prompt_injection=False,
@@ -113,13 +113,14 @@ def run_financial_agent(message: str) -> dict:
 
     return {
         "agent": "langgraph_financial_agent",
-        "mode": "clean-baseline",
-        "defense": "none",
+        "mode": "three-gate-runtime",
+        "defense": args.defense_type or "none",
         "llm": args.llm_name,
         "duration_ms": duration_ms,
         "answer": final_answer,
         "actions": actions,
         "workflow": workflow,
+        "gate_trace": result.get("gate_trace", []),
         "raw_messages": messages,
     }
 
@@ -152,8 +153,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({
                 "ok": True,
                 "agent": "langgraph_financial_agent",
-                "mode": "clean-baseline",
-                "defense": "none",
+                "mode": "three-gate-runtime",
+                "defense": os.getenv("AEGISGUARD_DEFENSE_TYPE") or "aegisguard_gate",
             })
             return
         self._send_json({"error": "not found"}, status=404)
