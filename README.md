@@ -17,11 +17,11 @@ AegisGuard 定位为**企业内部可自部署的运行时安全中间件**，�
 
 ### 目标用户
 
-| 用户群体 | 典型角色 | 关注点 |
-|:---|:---|:---|
-| **Agent 平台开发者与集成方** | 框架开发者、平台运维 | 非侵入接入、兼容 LangChain/AutoGen/OpenHands/DB-GPT 等主流框架、BASE_URL 重定向 / Sidecar 代理两种模式 |
-| **企业安全团队与合规负责人** | CSO、安全架构师、合规审计 | Agent 行为全链路追溯、审计日志与攻击链图谱、满足数据安全与日志留存监管要求 |
-| **高合规行业安全运维人员** | 政务/金融/关基安全运维 | 国密算法（SM2/SM3/SM4/SM9）支持、凭据收敛、调用链保护、密码合规 |
+| 用户群体                | 典型角色           | 关注点                                                                              |
+| :------------------ | :------------- | :------------------------------------------------------------------------------- |
+| **Agent 平台开发者与集成方** | 框架开发者、平台运维     | 非侵入接入、兼容 LangChain/AutoGen/OpenHands/DB-GPT 等主流框架、BASE\_URL 重定向 / Sidecar 代理两种模式 |
+| **企业安全团队与合规负责人**    | CSO、安全架构师、合规审计 | Agent 行为全链路追溯、审计日志与攻击链图谱、满足数据安全与日志留存监管要求                                         |
+| **高合规行业安全运维人员**     | 政务/金融/关基安全运维   | 国密算法（SM2/SM3/SM4/SM9）支持、凭据收敛、调用链保护、密码合规                                          |
 
 ### 适用场景
 
@@ -32,29 +32,31 @@ AegisGuard 定位为**企业内部可自部署的运行时安全中间件**，�
 
 ### 不适用的场景
 
-| 场景 | 原因 |
-|:---|:---|
-| **面向终端个人用户的 SaaS 服务** | AegisGuard 不提供多租户隔离、用户注册、计费等 SaaS 典型能力，定位为私有化部署 |
-| **需要 BYOK 的第三方平台** | AegisGuard 采用凭据收敛模式，LLM API Key 由企业自己管理在网关内，不代理转发用户自持密钥 |
-| **对 Agent 源码有侵入式修改需求的场景** | AegisGuard 的核心设计前提是零侵入接入，若预期对 Agent 源码深度定制，本系统非最优选择 |
-| **公网暴露的 Agent 服务** | AegisGuard 当前面向内网部署，公网暴露需要额外配置 TLS 和认证层，不属于默认支持范围 |
+| 场景                        | 原因                                                      |
+| :------------------------ | :------------------------------------------------------ |
+| **面向终端个人用户的 SaaS 服务**     | AegisGuard 不提供多租户隔离、用户注册、计费等 SaaS 典型能力，定位为私有化部署         |
+| **需要 BYOK 的第三方平台**        | AegisGuard 采用凭据收敛模式，LLM API Key 由企业自己管理在网关内，不代理转发用户自持密钥 |
+| **对 Agent 源码有侵入式修改需求的场景** | AegisGuard 的核心设计前提是零侵入接入，若预期对 Agent 源码深度定制，本系统非最优选择     |
+| **公网暴露的 Agent 服务**        | AegisGuard 当前面向内网部署，公网暴露需要额外配置 TLS 和认证层，不属于默认支持范围       |
 
 ## 目录结构
 
-```text
+```HTML
 AegisGuard/
 |-- backend/                 # Go 后端与运行时防护原型
 |   |-- cmd/server/          # 服务入口
 |   |-- config/              # 配置文件目录
 |   |-- internal/
-|   |   |-- gateway/         # 反向代理网关（流量入口、凭据替换）
-|   |   |-- gates/           # 三层安全闸门（核心防护）
-|   |   |-- auth/            # RequireToken 授权链路
+|   |   |-- contract/        # 双平面通信契约接口（TokenIssuer, GateEvaluator, SandboxManager...）
+|   |   |-- gateway/         # 执行平面：反向代理网关、凭据替换、消费方接口
+|   |   |-- gates/           # 执行平面：三层安全闸门实现（Message/Action/Return Gate）
+|   |   |-- auth/            # 跨平面：RequireToken 签发（控制）+ 校验（执行）
+|   |   |-- http/            # 组合根：HTTP 路由与处理器，通过 contract/ 调用双平面
+|   |   |-- interfaces/      # 跨包共享的 DTO 类型（GateDecision、SandboxContext 等）
+|   |   |-- sandbox/         # 执行平面：记忆沙箱与上下文隔离
+|   |   |-- audit/           # 控制平面：审计日志与攻击链图谱
+|   |   |-- rules/           # 控制平面：攻击场景规则目录
 |   |   |-- vkey/            # 网关密钥校验与凭据管理
-|   |   |-- http/            # HTTP 路由与处理器
-|   |   |-- sandbox/         # 记忆沙箱与上下文隔离
-|   |   |-- audit/           # 审计日志与攻击链图谱
-|   |   |-- control/         # 控制平面（策略/密钥）
 |   |   `-- runtime/         # Agent 框架适配配置
 |   `-- pkg/smcrypto/        # 国密算法封装（SM2/SM3/SM4）
 |-- frontend/                # 前端演示页面
@@ -71,51 +73,27 @@ AegisGuard/
 
 ### 核心特性
 
-| 特性 | 说明 |
-|:---|:---|
-| **零侵入接入** | Agent 通过配置 `BASE_URL` 和网关密钥接入，无需代码改动 |
-| **凭据收敛** | 统一网关密钥(agk-xxx)验证身份，LLM API Key 由网关托管，Agent 无感知 |
+| 特性         | 说明                                               |
+| :--------- | :----------------------------------------------- |
+| **零侵入接入**  | Agent 配置 `BASE_URL` 和网关密钥接入，无需代码改动               |
+| **凭据收敛**   | 统一网关密钥验证身份，LLM API Key 由网关托管，Agent 无感知           |
 | **三层安全闸门** | Message Gate → Action Gate → Return Gate，覆盖执行全链路 |
-| **可信授权链路** | RequireToken 机制，基于国密 SM2/SM3/SM4 |
-| **双流上下文隔离** | Trusted Core Context / Sandbox Context，阻断外部污染 |
-| **攻击链审计** | 时序因果 DAG，支持阻断节点定位与路径回溯 |
+| **可信授权链路** | RequireToken 机制，基于国密 SM2/SM3/SM4                 |
+| **记忆沙箱**   | 可信/不可信上下文隔离，阻断外部污染                               |
+| **攻击链审计**  | 时序因果 DAG，支持阻断节点定位与路径回溯                           |
 
-### 架构设计：凭据收敛模型
+### 双平面架构
 
-AegisGuard 面向**企业内部自部署**场景设计。管理员在 `gateway.yaml` 中设置网关密钥和 LLM API Key，所有 Agent 使用统一的 `agk-` 前缀网关密钥接入，LLM 凭据由网关完全托管。
+代码采用 **逻辑分离、物理聚合** 设计。控制平面与执行平面在 `internal/` 中通过 `contract/` 包解耦：
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Layer 1: Gateway Key (网关身份凭据)                           │
-│  - agk-dev-001，管理员在 gateway.yaml 中统一配置                │
-│  - Agent 的 .env 中配置 OPENAI_API_KEY=agk-dev-001            │
-│  - 仅用于证明"此 Agent 是该网关的合法调用方"                     │
-│  - 泄露后管理员修改 gateway.yaml 即可，所有 Agent 同步更新       │
-└──────────────────────────────────────────────────────────────┘
-                              │ 每次请求携带
-                              ▼
-┌──────────────────────────────────────────────────────────────┐
-│  Layer 2: RequireToken (短期授权令牌)                          │
-│  - 由控制平面签发，TTL = 5 分钟                                │
-│  - 包含: ToolName, Scope, RiskLevel, MaxCalls, Nonce          │
-│  - SM2 签名防篡改，Nonce 防重放                                │
-│  - 过期后网关自动重新签发，Agent 无感知                         │
-└──────────────────────────────────────────────────────────────┘
-                              │ 网关验证后
-                              ▼
-┌──────────────────────────────────────────────────────────────┐
-│  Layer 3: LLM API Key (后端 LLM 凭据)                         │
-│  - 仅存在于网关进程内存中，Agent 永远不会接触到                  │
-│  - 管理员在 gateway.yaml 中配置，支持环境变量注入               │
-│  - 密钥轮换仅需修改 gateway.yaml 后重启网关，Agent 侧零变更     │
-└──────────────────────────────────────────────────────────────┘
-```
+| 平面       | 包                              | 职责                             |
+| -------- | ------------------------------ | ------------------------------ |
+| **控制平面** | `auth/`（签发）、`audit/`、`rules/`  | 策略管理、Token 签发、审计分析、密钥管理        |
+| **执行平面** | `gateway/`、`gates/`、`sandbox/` | 流量拦截、闸门决策、上下文隔离、凭据替换           |
+| **契约层**  | `contract/`                    | 双平面通信接口定义，不含业务逻辑               |
+| **组合根**  | `http/`                        | 路由注册与依赖注入，通过 `contract/` 调用双平面 |
 
-**核心原则：**
-- **凭据不落地**：真实 LLM API Key 仅存在于网关受控内存，Agent 只持有网关密钥
-- **Agent 保持"愚钝"**：`.env` 只配一次 `agk-xxx`，永远不改
-- **网关承担所有安全责任**：身份校验、密钥替换、安全闸门全部封死在网关背后
-- **管理员统一管控**：所有密钥配置收敛到 `gateway.yaml`，无需逐个管理 Agent 凭据
+单进程部署时通过依赖注入组装；后续可切换为多进程/容器化部署，只需替换 `contract/` 接口的实现。
 
 ### 核心工作流程
 
@@ -132,22 +110,19 @@ AegisGuard 面向**企业内部自部署**场景设计。管理员在 `gateway.y
 └─────────┘     └──────────────┘     └─────────────┘     └─────────────┘
 ```
 
-**关键设计**：所有控制逻辑内联于代理链路，非旁路检测，确保危险动作在执行前被强制阻断。
+所有控制逻辑内联于代理链路，非旁路检测，确保危险动作在执行前被强制阻断。
 
-**认证流程（凭据替换）：**
+### 凭据收敛模型
+
+AegisGuard 采用三层凭据设计，管理员在 `gateway.yaml` 统一配置，Agent 只持有网关密钥：
 
 ```
-Agent 请求:  Authorization: Bearer agk-dev-001
-                │
-                ▼
-        1. 提取网关密钥 agk-dev-001
-        2. 校验是否匹配 gateway.yaml 中的 gateway_key
-        3. 验证通过后，从 gateway.yaml 读取 llm_api_key
-        4. 替换 Authorization 头: Bearer sk-xxxxx
-        5. 转发请求到真实 LLM API
-                │
-                ▼
-        LLM API 收到真实凭据，正常处理
+       Agent 请求携带              网关验证后替换              仅网关内存持有
+   ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+   │  Gateway Key     │───→│  RequireToken    │───→│  LLM API Key     │
+   │  agk-xxx         │    │  SM2签名防篡改   │    │  管理员配置      │
+   │  仅身份校验      │    │  Nonce防重放     │    │  Agent永不接触    │
+   └──────────────────┘    └──────────────────┘    └──────────────────┘
 ```
 
 ## Benchmark 来源
@@ -421,24 +396,20 @@ python .\experiments\asb\collect_results.py --input .\experiments\asb\results\op
 ### 环境要求
 
 - Go 1.25+
-- （可选）Docker，用于容器化部署
 
 ### 配置网关凭据
 
 ```bash
-# 复制模板文件（gateway.yaml 已被 .gitignore 忽略，不会提交到仓库）
 cp config/gateway.yaml.example config/gateway.yaml
 ```
 
-编辑 `config/gateway.yaml`，填入你的真实凭据：
+编辑 `config/gateway.yaml`，填入真实凭据：
 
 ```yaml
 gateway_key: agk-dev-001
 target_url: https://api.openai.com
 llm_api_key: sk-your-real-llm-api-key-here
 ```
-
-> ⚠️ `gateway.yaml` 包含真实 API Key，已在 `.gitignore` 中排除。生产环境建议通过环境变量 `AEGIS_TARGET_URL` 和 `AEGIS_LLM_API_KEY` 注入敏感字段，避免明文写入文件。
 
 ### 启动网关
 
@@ -447,327 +418,57 @@ cd backend
 go run cmd/server/main.go
 ```
 
-服务启动后监听 `:8090`（可通过 `PORT` 环境变量修改）。
+服务监听 `:8090`（可通过 `PORT` 环境变量修改）。
 
-### Agent 接入（零代码改动）
+### Agent 接入
 
-修改你的 Agent 配置文件或环境变量：
+仅需修改环境变量指向网关：
 
 ```bash
-# 原来
-OPENAI_BASE_URL="https://api.openai.com/v1"
-OPENAI_API_KEY="sk-your-real-key"
-
-# 接入 AegisGuard 后（仅改这两行）
 OPENAI_BASE_URL="http://localhost:8090/v1"
-OPENAI_API_KEY="agk-dev-001"  # 使用网关密钥，网关自动替换为真实 LLM Key
+OPENAI_API_KEY="agk-dev-001"
 ```
 
-**完成。** Agent 所有流量自动经过安全网关。
+Agent 所有流量自动经过安全网关。
 
 ## 配置说明
 
 ### 环境变量
 
-| 变量 | 必填 | 默认值 | 说明 |
-|:---|:---|:---|:---|
-| `AEGIS_GATEWAY_CONFIG` | 否 | `config/gateway.yaml` | 网关凭据配置文件路径 |
-| `AEGIS_TARGET_URL` | 否 | 读取 `gateway.yaml` | 覆盖配置文件中的真实 LLM API 地址 |
-| `AEGIS_LLM_API_KEY` | 否 | 读取 `gateway.yaml` | 覆盖配置文件中的真实 LLM API Key |
-| `PORT` | 否 | `8090` | 网关监听端口 |
-| `AEGIS_LOG_LEVEL` | 否 | `info` | 日志级别：debug/info/warn/error |
-| `AEGIS_POLICY_MODE` | 否 | `balanced` | 策略模式：loose/balanced/strict |
+| 变量                     | 默认值                   | 说明                         |
+| :--------------------- | :-------------------- | :------------------------- |
+| `PORT`                 | `8090`                | 网关监听端口                     |
+| `AEGIS_GATEWAY_CONFIG` | `config/gateway.yaml` | 网关凭据配置文件路径                 |
+| `AEGIS_TARGET_URL`     | 读取配置                  | 覆盖真实 LLM API 地址            |
+| `AEGIS_LLM_API_KEY`    | 读取配置                  | 覆盖真实 LLM API Key           |
+| `AEGIS_LOG_LEVEL`      | `info`                | 日志级别                       |
+| `AEGIS_POLICY_MODE`    | `balanced`            | 策略模式：loose/balanced/strict |
 
-### 网关凭据配置文件 (`config/gateway.yaml`)
+### 网关凭据配置
 
-参考模板 `config/gateway.yaml.example`：
+`config/gateway.yaml`（已在 `.gitignore` 中）由管理员统一管理：
 
-```yaml
-# AegisGuard 网关凭据配置
-gateway_key: agk-dev-001
-target_url: https://api.openai.com
-llm_api_key: sk-your-real-llm-api-key-here
-```
+| 字段            | 谁持有        | 说明                  |
+| :------------ | :--------- | :------------------ |
+| `gateway_key` | Agent + 网关 | 身份校验，以 `agk-` 开头    |
+| `target_url`  | 仅网关        | 真实 LLM API 地址       |
+| `llm_api_key` | 仅网关        | 真实 LLM API Key，仅存内存 |
 
-> ⚠️ `gateway.yaml` 已在 `.gitignore` 中，不会提交到仓库。首次使用请从模板复制：`cp config/gateway.yaml.example config/gateway.yaml`
+凭据轮换只需修改配置后重启网关，Agent 侧零变更。
 
-- `gateway_key`：Agent 侧配置的统一网关密钥，必须以 `agk-` 开头
-- `target_url`：真实的 LLM API 地址，网关将请求转发到此地址
-- `llm_api_key`：网关托管的真实 LLM API Key，仅存在于网关内存中
-- 生产环境可通过 `AEGIS_TARGET_URL` 和 `AEGIS_LLM_API_KEY` 环境变量覆盖对应字段
-
-## 网关凭据管理
-
-AegisGuard 采用**凭据收敛**设计。管理员在 `config/gateway.yaml` 中统一配置以下凭据：
-
-| 凭据 | 说明 | 谁持有 | 示例 |
-|:---|:---|:---|:---|
-| `gateway_key` | 网关身份凭据，Agent 配置在 `.env` 中用于接入网关 | Agent + 网关 | `agk-dev-001` |
-| `target_url` | 真实 LLM API 地址，网关将请求转发到此地址 | 仅网关（管理员配置） | `https://api.openai.com` |
-| `llm_api_key` | 真实 LLM API Key，由网关托管注入到请求中 | 仅网关（管理员配置） | `sk-xxxxx` |
-
-### 设计哲学
-
-- **凭据收敛**：所有凭据管理集中到 `gateway.yaml`，管理员只需维护一个配置文件
-- **凭据不落地**：LLM API Key 仅存在于网关进程内存，Agent 永远接触不到
-- **单点管控**：真实 Key 轮换只需修改 `gateway.yaml` 重启网关，所有 Agent 侧无需任何变更
-- **身份与凭据分离**：`gateway_key` 仅用于身份校验，`llm_api_key` 是后端调用凭据，两者完全解耦
-
-### 凭据轮换
-
-当真实 LLM API Key 需要更新时：
-
-1. 编辑 `config/gateway.yaml`，修改 `llm_api_key` 字段（参考 `gateway.yaml.example` 模板）
-2. 重启网关
-3. **Agent 侧无需任何修改**，`agk-xxx` 保持不变
-
-## 场景与接入指南
-
-### 企业内部自建 LLM（vLLM / Ollama）
-
-```yaml
-# gateway.yaml
-gateway_key: agk-internal-001
-target_url: "http://vllm-internal:8000"
-llm_api_key: ""                    # 内网服务通常不需要 API Key
-```
-
-### 调用商业 LLM API（OpenAI / DeepSeek / Qwen）
-
-```yaml
-# gateway.yaml
-gateway_key: agk-default-001
-target_url: "https://api.openai.com"
-llm_api_key: "sk-xxxxxxxxxxxxxxxxxxxx"
-```
-
-### 多团队、多模型场景
-
-对于需要管理多个 LLM API Key 的企业（少量 Key，如 3~5 个），可启动多个网关实例：
-
-```
-网关实例A（研发团队）：
-  gateway_key: agk-rd-001
-  target_url: https://api.deepseek.com
-  llm_api_key: sk-deepseek-key
-
-网关实例B（数据团队）：
-  gateway_key: agk-data-001
-  target_url: https://dashscope.aliyuncs.com
-  llm_api_key: sk-qwen-key
-```
-
-## 开发指南
-
-### 添加新的 Gate 决策逻辑
-
-在 `internal/gates/` 下编辑对应文件，实现 `Evaluate` 方法：
-
-```go
-func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, headers http.Header) (ActionDecision, string) {
-    // 1. 提取 Token
-    // 2. 全字段校验
-    // 3. 权限范围检查
-    // 4. 返回决策：Allow/Deny/Quarantine/HumanApproval/Degrade
-}
-```
-
-### 接入新的 Agent 框架
-
-在 `internal/runtime/config.go` 添加框架识别逻辑：
-
-```go
-func DetectFramework(req *http.Request) FrameworkType {
-    // 根据请求特征识别 LangGraph / AutoGen / OpenHands 等
-    // 返回对应的安全策略配置
-}
-```
-
-## 测试验证
-
-### 本地快速验证
+### 本地验证
 
 ```bash
-# 1. 从模板复制配置文件
-#    cp config/gateway.yaml.example config/gateway.yaml
-# 2. 编辑 config/gateway.yaml，设置网关密钥和真实 LLM Key
-#    gateway_key: agk-dev-001
-#    llm_api_key: sk-your-real-key
-
-# 2. 启动网关
 go run cmd/server/main.go
-
-# 3. 使用网关密钥测试连通性
-curl http://localhost:8090/v1/models \
-  -H "Authorization: Bearer agk-dev-001"
-
-# 4. 使用错误的密钥测试（应返回 401）
-curl http://localhost:8090/v1/models \
-  -H "Authorization: Bearer agk-wrong-key"
-
-# 5. 观察日志输出，确认凭据替换和安全检查
+curl http://localhost:8090/v1/models -H "Authorization: Bearer agk-dev-001"
 ```
 
-### 前端展示
+## 安全建议
 
-前端演示服务启动后访问 `http://localhost:8090`（需启动前端服务），可查看：
-
-- 实时阻断决策
-- 国密授权中心
-- 记忆沙箱状态
-- 审计追踪与攻击链图谱
-
-## 前端访问 langgraph_financial_agent 与查看运行日志
-
-当前主控制台左侧功能框中已经新增 `langgraph_financial_agent` 模块。该模块通过 AegisGuard Go 后端代理访问 LangGraph 金融智能体服务：
-
-```text
-浏览器前端 -> AegisGuard Go 后端 -> LangGraph chat_server.py -> langgraph_financial_agent
-```
-
-如果希望在终端实时看到后端代理过程和 agent 运行过程，不要使用后台隐藏启动方式，建议打开两个 PowerShell 终端分别前台启动。
-
-### 1. 启动 LangGraph 金融智能体服务
-
-在第一个 PowerShell 终端执行：
-
-```powershell
-.\.venv-asb-openclaw\Scripts\python.exe .\experiments\asb\langgraph\chat_server.py --port 8765
-```
-
-启动成功后会看到类似输出：
-
-```text
-[2026-04-28 16:23:50] [langgraph_financial_agent] chat server running at http://127.0.0.1:8765/chat
-```
-
-当前 `chat_server.py` 会打印：
-
-- 收到 `/api/chat` 请求
-- agent 开始运行时使用的模型和输入摘要
-- agent 运行耗时、消息数、thinking 数、tool/action 数
-- workflow 摘要
-- tool/action 摘要
-- 异常信息
-
-### 2. 启动 AegisGuard 主控制台后端
-
-在第二个 PowerShell 终端执行：
-
-```powershell
-$env:GOCACHE=(Join-Path (Get-Location) '.gocache')
-$env:PORT='18080'
-go run .\backend\cmd\server
-```
-
-然后访问：
-
-```text
-http://localhost:18080
-```
-
-进入系统后，点击左侧功能框中的：
-
-```text
-langgraph_financial_agent
-```
-
-即可进入金融智能体聊天界面。
-
-Go 后端会打印代理日志，例如：
-
-```text
-[langgraph-proxy] POST /api/langgraph-financial/chat -> http://127.0.0.1:8765/api/chat body_bytes=...
-[langgraph-proxy] completed status=200 response_bytes=... elapsed=...
-```
-
-### 3. 端口占用处理
-
-如果启动 Go 后端时出现：
-
-```text
-listen tcp :18080: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
-```
-
-说明 `18080` 已经被其他进程占用。最简单的处理方式是换一个端口，例如：
-
-```powershell
-$env:GOCACHE=(Join-Path (Get-Location) '.gocache')
-$env:PORT='18081'
-go run .\backend\cmd\server
-```
-
-然后浏览器访问：
-
-```text
-http://localhost:18081
-```
-
-如果必须使用 `18080`，可以先查找占用端口的进程：
-
-```powershell
-netstat -ano | findstr :18080
-```
-
-找到 `LISTENING` 行最后一列的 PID 后结束进程：
-
-```powershell
-taskkill /PID <进程号> /F
-```
-
-再重新启动：
-
-```powershell
-$env:GOCACHE=(Join-Path (Get-Location) '.gocache')
-$env:PORT='18080'
-go run .\backend\cmd\server
-```
-
-### 4. 为什么有时终端看不到 agent 过程
-
-如果使用 `Start-Process -WindowStyle Hidden` 或后台启动脚本，日志通常会被重定向到 `.tmp/*.log`，不会显示在当前终端中。要实时观察过程，请使用上面的两个前台命令启动。
-
-另外，AegisGuard Go 后端只是代理请求；真正的 agent workflow、tool/action 过程由 `experiments/asb/langgraph/chat_server.py` 调用 `langgraph_financial_agent` 时打印。因此需要同时观察两个终端：
-
-- Go 后端终端：查看前端请求是否到达、是否成功转发、耗时和状态码。
-- LangGraph 终端：查看 agent 是否开始运行、生成 workflow、调用工具以及最终返回。
-
-### 5. 服务地址配置
-
-默认情况下，Go 后端会代理到：
-
-```text
-http://127.0.0.1:8765
-```
-
-如果 LangGraph chat server 使用了其他地址，可以通过环境变量覆盖：
-
-```powershell
-$env:LANGGRAPH_CHAT_URL='http://127.0.0.1:8766'
-$env:GOCACHE=(Join-Path (Get-Location) '.gocache')
-$env:PORT='18080'
-go run .\backend\cmd\server
-```
-
-## 注意事项
-
-### 安全建议
-
-1. **生产环境 `llm_api_key` 通过环境变量注入**，避免明文写入配置文件：
-   ```bash
-   export AEGIS_LLM_API_KEY="sk-xxxxxxxx"
-   ```
-2. **网关密钥定期轮换**，修改 `gateway.yaml` 后重启网关即可
-3. **TLS 加密**：生产环境必须在网关前端配置 HTTPS，防止网关密钥传输中泄露
-4. **最小权限**：LLM API Key 应配置企业账号下的最小必要权限（如仅限特定模型、用量限制）
-
-### 设计理念：竞赛作品 × 工业雏形
-
-本项目虽源于全国大学生信息安全竞赛，但设计之初即以**可发展为工业产品**为目标。核心原则：
-
-- **接口抽象先行**：核心模块均设计为可插拔接口，便于扩展
-- **领域驱动设计**：模块职责边界清晰，独立演进
-- **实用主义**：平衡开发效率与架构质量
+- 生产环境通过环境变量 `AEGIS_LLM_API_KEY` 注入 Key，避免明文写入文件
+- 网关密钥定期轮换，修改 `gateway.yaml` 后重启网关
+- 生产环境必须在网关前端配置 HTTPS
+- LLM API Key 应配置最小权限（仅限特定模型、用量限制）
 
 ## 许可证
 

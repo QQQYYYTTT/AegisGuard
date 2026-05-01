@@ -19,8 +19,8 @@ type AegisProxy struct {
 	target      *url.URL
 	proxy       *httputil.ReverseProxy
 	vkeyMgr     *vkey.Manager
-	messageGate *gates.MessageGate
-	actionGate  *gates.ActionGate
+	messageGate MessageEvaluator
+	actionGate  ActionEvaluator
 	logger      *zap.Logger
 }
 

@@ -19,6 +19,9 @@ type Config struct {
 	LogLevel          string // 日志级别: debug/info/warn/error
 	LogEncoding       string // 日志编码: console/production
 	PolicyMode        string // 策略模式: loose/balanced/strict
+
+	// 运行模式
+	DevMode bool // 开发模式：启用实验结果 API、调试端点等
 }
 
 // resolveRootDir 从 CWD 向上查找 go.mod 来确定项目根目录
@@ -65,6 +68,7 @@ func Load() Config {
 	logLevel := getEnv("AEGIS_LOG_LEVEL", "debug")
 	logEncoding := getEnv("AEGIS_LOG_ENCODING", "console")
 	policyMode := getEnv("AEGIS_POLICY_MODE", "balanced")
+	devMode := getEnv("AEGIS_DEV_MODE", "false") == "true"
 
 	return Config{
 		RootDir:          rootDir,
@@ -79,6 +83,7 @@ func Load() Config {
 		LogLevel:          logLevel,
 		LogEncoding:       logEncoding,
 		PolicyMode:        policyMode,
+		DevMode:           devMode,
 	}
 }
 
