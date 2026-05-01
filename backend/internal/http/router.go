@@ -29,13 +29,14 @@ func (w bodyLogWriter) Write(b []byte) (int, error) {
 }
 
 type Router struct {
-	engine    *gin.Engine
-	proxy     *gateway.AegisProxy
-	vkeyMgr   *vkey.Manager
-	auditor   *audit.Logger
+	engine     *gin.Engine
+	proxy      *gateway.AegisProxy
+	vkeyMgr    *vkey.Manager
+	auditor    *audit.Logger
 	auditStore *audit.Store // 直接持有 Store 引用，用于 /audit/logs 读取
-	logger    *zap.Logger
-	targetURL string
+	logger     *zap.Logger
+	targetURL  string
+	cfg        config.Config // 保存配置引用，用于判断运行模式
 }
 
 func NewRouter(cfg config.Config) (*Router, error) {
@@ -91,6 +92,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 		auditStore: auditStore,
 		logger:     logger,
 		targetURL:  vkeyMgr.GetTargetURL(),
+		cfg:        cfg,
 	}
 
 	router.registerRoutes()
@@ -104,6 +106,10 @@ func (r *Router) registerRoutes() {
 	r.engine.Any("/v1/*path", r.handleProxy)
 
 	r.engine.GET("/audit/logs", r.handleAuditLogs)
+
+	if r.cfg.DevMode {
+		r.registerDevRoutes()
+	}
 }
 
 func (r *Router) handleProxy(c *gin.Context) {

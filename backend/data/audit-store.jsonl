@@ -5879,4 +5879,4 @@
       "signatureValid": true
     }
   }
-]
+]{"request_id":"c0c32dc6-6c7d-48f3-90e3-966b4ca3539a","timestamp":"2026-05-01T15:46:59.632242+08:00","gateway_key":"agk-dev-001","method":"POST","path":"/v1/chat/completions","status_code":200,"duration_ms":3371,"body_hash":"0bb7e48266bb45e00272708c31b2ff9c80ffc2d5b2fe0dc419b0886b61964300","client_ip":"127.0.0.1","decision":"allow"}
