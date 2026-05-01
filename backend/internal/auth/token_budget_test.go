@@ -1,4 +1,4 @@
-// backend/internal/auth/token_test.go
+// backend/internal/auth/token_budget_test.go
 package auth
 
 import (

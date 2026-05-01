@@ -1,4 +1,3 @@
-// backend/internal/gates/action_gate.go
 package gates
 
 import (
@@ -104,10 +103,10 @@ func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, h
 			Content:     ag.extractContentSummary(params),
 			RequiresJud: token.RiskLevel >= 40,
 		}
-		
+
 		// 添加到窗口并获取决策
 		batchDecision := ag.batchJudge.AddEvent(event)
-		
+
 		// 如果批量判定器决定阻断，优先执行
 		if batchDecision == Block {
 			return Block, "blocked by batch window judge: suspicious pattern detected"
