@@ -215,6 +215,43 @@ func TestCreateContext(t *testing.T) {
 
 ---
 
+## 国密算法使用指南
+
+国密算法封装在 [`pkg/smcrypto/`](pkg/smcrypto/) 下，所有函数以 `SM2`、`SM3`、`SM4`、`SM9` 前缀命名，调用方直接导入 `aegisguard/pkg/smcrypto` 即可使用。
+
+| 算法 | 函数 | 用途 | 谁需要导入 |
+|---|---|---|---|
+| **SM2** | `GenerateKeyPair()`, `SignMessage()`, `VerifySignature()` | RequireToken 数字签名与验签 | 分工2（`auth/token.go` 签发时签名，`auth/verifier.go` 校验时验签） |
+| **SM3** | `SM3Sum()`, `SM3SumTruncated()`, `SM3Hex()` | 工具 Schema 指纹（防 Rug Pull）、审计日志摘要 | 分工2（`auth/token.go` 生成 schema_hash）、分工3（`audit/` 生成日志摘要） |
+| **SM4** | `SM4GenerateKey()`, `SM4EncryptCBC()`, `SM4DecryptCBC()` | 沙箱敏感数据加密（工具返回的数据库明细、文件内容、API 响应等） | 分工4（`sandbox/filter.go` 中加密敏感返回，需要时才解密回传摘要） |
+| **SM9** | `SM9GenerateSignMasterKey()`, `SM9GenerateSignKey()`, `SM9Sign()`, `SM9Verify()` | 多 Agent 身份绑定，无需证书，用 agent_id 作为标识公钥 | 分工2（`auth/token.go` 可选：多 Agent 场景下用 SM9 替代传统证书） |
+
+### 使用示例
+
+导入方式：
+
+```go
+import "aegisguard/pkg/smcrypto"
+```
+
+SM4 加密沙箱敏感数据：
+
+```go
+key, _ := smcrypto.SM4GenerateKey()
+encrypted, _ := smcrypto.SM4EncryptCBC(key, []byte("敏感数据"))
+decrypted, _ := smcrypto.SM4DecryptCBC(key, encrypted)
+```
+
+SM9 派生 Agent 签名密钥：
+
+```go
+masterPriv, masterPub, _ := smcrypto.SM9GenerateSignMasterKey()
+agentKey, _ := smcrypto.SM9GenerateSignKey(masterPriv, []byte("agent-001@domain"))
+sig, _ := smcrypto.SM9Sign(agentKey, smcrypto.SM3Sum([]byte("消息")))
+ok := smcrypto.SM9Verify(masterPub, []byte("agent-001@domain"), smcrypto.SM3Sum([]byte("消息")), sig)
+```
+
+
 ## PR 合并流程
 
 1. **各自在自己的包开发**，不修改他人包内的文件
