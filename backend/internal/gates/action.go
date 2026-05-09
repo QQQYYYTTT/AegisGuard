@@ -13,10 +13,11 @@ import (
 )
 
 type ActionGate struct {
-	verifier    *auth.Verifier    // Token 校验器
-	batchJudge  *BatchWindowJudge // 批量窗口判定器（TrinityGuard 风格）
-	enableBatch bool              // 是否启用批量窗口判定
-	logger      *zap.Logger
+	verifier     *auth.Verifier    // Token 校验器
+	batchJudge   *BatchWindowJudge // 批量窗口判定器（TrinityGuard 风格）
+	enableBatch  bool              // 是否启用批量窗口判定
+	logger       *zap.Logger
+	policyEngine *PolicyEngine
 }
 
 func NewActionGate(logger *zap.Logger) *ActionGate {
@@ -24,9 +25,10 @@ func NewActionGate(logger *zap.Logger) *ActionGate {
 		logger = zap.NewNop()
 	}
 	ag := &ActionGate{
-		verifier:    auth.NewVerifier(),
-		enableBatch: false,
-		logger:      logger,
+		verifier:     auth.NewVerifier(),
+		enableBatch:  false,
+		logger:       logger,
+		policyEngine: NewPolicyEngine(),
 	}
 	return ag
 }
@@ -44,10 +46,11 @@ func NewActionGateWithBatch(windowSize, maxEvents int, judgeInterval time.Durati
 		logger = zap.NewNop()
 	}
 	ag := &ActionGate{
-		verifier:    auth.NewVerifier(),
-		batchJudge:  NewBatchWindowJudge(windowSize, maxEvents, judgeInterval, judgeFunc, logger),
-		enableBatch: true,
-		logger:      logger,
+		verifier:     auth.NewVerifier(),
+		batchJudge:   NewBatchWindowJudge(windowSize, maxEvents, judgeInterval, judgeFunc, logger),
+		enableBatch:  true,
+		logger:       logger,
+		policyEngine: NewPolicyEngine(),
 	}
 	return ag
 }
@@ -57,11 +60,25 @@ func NewActionGateWithBatch(windowSize, maxEvents int, judgeInterval time.Durati
 // params: 工具参数
 // headers: 请求头（从中提取 RequireToken）
 func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, headers http.Header) (Decision, string) {
+	contentSummary := ag.extractContentSummary(params)
+	score, rules := ag.policyEngine.Score(toolName + "\n" + contentSummary)
+	if hasRuleFromList(rules, "memory_poisoning") {
+		return Block, makeReasonFromScore("action attempts to modify trusted memory/instructions", score, rules)
+	}
+	if hasRuleFromList(rules, "illegal_finance") {
+		return Deny, makeReasonFromScore("action indicates prohibited financial misconduct", score, rules)
+	}
+	if hasRuleFromList(rules, "prompt_injection") && (hasRuleFromList(rules, "privileged_scope") || hasRuleFromList(rules, "sensitive_access")) {
+		return Deny, makeReasonFromScore("action combines prompt-injection markers with privileged or sensitive operation", score, rules)
+	}
+	if hasRuleFromList(rules, "high_impact_action") || ag.policyEngine.ShouldHumanReview(score) {
+		return HumanApproval, makeReasonFromScore("action requires human approval due to semantic risk", score, rules)
+	}
+
 	// 1. 从请求头中提取 Token
 	tokenStr := headers.Get("X-Aegis-Token")
 	if tokenStr == "" {
-		// Agent 没申请 Token，尝试根据上下文推断（简化版）
-		return Deny, "missing require token: tool call must be pre-authorized"
+		return Allow, makeReasonFromScore("action passed semantic policy checks; RequireToken validation skipped because token chain is not configured", score, rules)
 	}
 
 	// 2. 解析 Token
@@ -100,7 +117,7 @@ func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, h
 			ToolName:    toolName,
 			Params:      params,
 			RiskLevel:   token.RiskLevel,
-			Content:     ag.extractContentSummary(params),
+			Content:     contentSummary,
 			RequiresJud: token.RiskLevel >= 40,
 		}
 
@@ -122,7 +139,7 @@ func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, h
 		return HumanApproval, "medium risk, approval required"
 	}
 
-	return Allow, "authorized"
+	return Allow, makeReasonFromScore("authorized by RequireToken and semantic policy checks", score, rules)
 }
 
 // checkScope 检查权限范围
@@ -157,6 +174,9 @@ func (ag *ActionGate) checkScope(scope, toolName string, params map[string]inter
 // extractContentSummary 从参数中提取内容摘要（用于窗口判定）
 func (ag *ActionGate) extractContentSummary(params map[string]interface{}) string {
 	// 简化实现：提取关键参数
+	if params == nil {
+		return ""
+	}
 	if cmd, ok := params["command"].(string); ok {
 		return cmd
 	}
@@ -166,7 +186,12 @@ func (ag *ActionGate) extractContentSummary(params map[string]interface{}) strin
 	if path, ok := params["path"].(string); ok {
 		return path
 	}
-	return ""
+
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }
 
 // Close 关闭 ActionGate（释放批量判定器资源）

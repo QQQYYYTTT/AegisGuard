@@ -18,13 +18,13 @@ defineProps<{
 <template>
   <el-card shadow="hover" class="evidence-card">
     <template #header>
-      <span class="font-semibold text-sm">Evidence Summary</span>
+      <span class="font-semibold text-sm">证据摘要 / Evidence Summary</span>
     </template>
     <el-descriptions :column="2" border size="small">
-      <el-descriptions-item label="Request ID">
+      <el-descriptions-item label="请求 ID / Request ID">
         <code class="text-xs">{{ evidence.request_id }}</code>
       </el-descriptions-item>
-      <el-descriptions-item label="Status">
+      <el-descriptions-item label="状态 / Status">
         <el-tag
           :type="evidence.status < 400 ? 'success' : 'danger'"
           size="small"
@@ -32,19 +32,19 @@ defineProps<{
           {{ evidence.status }}
         </el-tag>
       </el-descriptions-item>
-      <el-descriptions-item label="Method">
+      <el-descriptions-item label="方法 / Method">
         {{ evidence.method }}
       </el-descriptions-item>
-      <el-descriptions-item label="Path">
+      <el-descriptions-item label="路径 / Path">
         <code class="text-xs">{{ evidence.path }}</code>
       </el-descriptions-item>
-      <el-descriptions-item label="Duration">
+      <el-descriptions-item label="耗时 / Duration">
         {{ evidence.duration_ms }}ms
       </el-descriptions-item>
       <el-descriptions-item label="Agent">
         {{ evidence.agent_id }}
       </el-descriptions-item>
-      <el-descriptions-item label="Body Hash (SM3)" :span="2">
+      <el-descriptions-item label="请求体哈希 / Body Hash (SM3)" :span="2">
         <code class="text-xs break-all">{{ evidence.body_hash }}</code>
       </el-descriptions-item>
     </el-descriptions>

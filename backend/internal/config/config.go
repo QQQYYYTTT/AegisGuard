@@ -68,7 +68,7 @@ func Load() Config {
 	logLevel := getEnv("AEGIS_LOG_LEVEL", "debug")
 	logEncoding := getEnv("AEGIS_LOG_ENCODING", "console")
 	policyMode := getEnv("AEGIS_POLICY_MODE", "balanced")
-	devMode := getEnv("AEGIS_DEV_MODE", "false") == "true"
+	devMode := getEnv("AEGIS_DEV_MODE", "true") == "true"
 
 	return Config{
 		RootDir:          rootDir,

@@ -29,6 +29,8 @@ export function useAuditStream() {
     stopPolling();
     pollTimer = setInterval(() => {
       auditStore.fetchLogs();
+      auditStore.fetchAttackChains();
+      auditStore.fetchStats();
     }, intervalMs);
   }
 

@@ -15,17 +15,76 @@ export type GateDecision = {
   agent_id?: string;
 };
 
-export type GateOverview = {
-  message_gate: { status: string; today_count: number; block_count: number };
-  action_gate: { status: string; today_count: number; block_count: number };
-  return_gate: { status: string; today_count: number; block_count: number };
+type RawGateOverview = {
+  message_gate: Record<string, number>;
+  action_gate: Record<string, number>;
+  return_gate: Record<string, number>;
   recent_decisions: GateDecision[];
 };
 
+export type GateOverview = {
+  message_gate: GateSummary;
+  action_gate: GateSummary;
+  return_gate: GateSummary;
+  recent_decisions: GateDecision[];
+};
+
+export type GateSummary = {
+  status: string;
+  today_count: number;
+  block_count: number;
+  decision_counts: Record<string, number>;
+};
+
+export type GateEvaluateRequest =
+  | {
+      type: "message" | "return";
+      body?: Record<string, unknown>;
+      content?: string;
+    }
+  | {
+      type: "action";
+      tool_name: string;
+      params?: Record<string, unknown>;
+      headers?: Record<string, string>;
+    };
+
 type ApiResult<T> = { success: boolean; data: T };
 
+export function normalizeRiskScore(score: number) {
+  if (!Number.isFinite(score)) return 0;
+  if (score > 0 && score <= 1) return Math.round(score * 100);
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+export function normalizeGateDecision(decision: GateDecision): GateDecision {
+  return {
+    ...decision,
+    risk_score: normalizeRiskScore(decision.risk_score)
+  };
+}
+
+export function normalizeGateOverview(raw: RawGateOverview): GateOverview {
+  const buildSummary = (counts: Record<string, number>): GateSummary => {
+    const total = Object.values(counts || {}).reduce((sum, value) => sum + value, 0);
+    return {
+      status: "online",
+      today_count: total,
+      block_count: (counts?.Block || 0) + (counts?.Deny || 0),
+      decision_counts: counts || {}
+    };
+  };
+
+  return {
+    message_gate: buildSummary(raw.message_gate),
+    action_gate: buildSummary(raw.action_gate),
+    return_gate: buildSummary(raw.return_gate),
+    recent_decisions: (raw.recent_decisions || []).map(normalizeGateDecision)
+  };
+}
+
 export const getGateOverview = () => {
-  return http.request<ApiResult<GateOverview>>("get", "/aegis/gate/overview");
+  return http.request<ApiResult<RawGateOverview>>("get", "/aegis/gate/overview");
 };
 
 export const getGateDecisions = (params?: object) => {
@@ -34,7 +93,7 @@ export const getGateDecisions = (params?: object) => {
   });
 };
 
-export const evaluateGate = (data?: object) => {
+export const evaluateGate = (data?: GateEvaluateRequest) => {
   return http.request<ApiResult<GateDecision>>("post", "/aegis/gate/evaluate", {
     data
   });

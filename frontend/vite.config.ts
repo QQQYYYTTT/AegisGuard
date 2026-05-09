@@ -35,6 +35,11 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
           changeOrigin: true,
           secure: false
         },
+        "/aegis": {
+          target: "http://127.0.0.1:8090",
+          changeOrigin: true,
+          secure: false
+        },
         "/v1": {
           target: "http://127.0.0.1:8090",
           changeOrigin: true,

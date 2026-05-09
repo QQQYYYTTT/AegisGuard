@@ -3,13 +3,18 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"aegisguard/internal/audit"
 	"aegisguard/internal/config"
+	"aegisguard/internal/contract"
+	"aegisguard/internal/gates"
 	"aegisguard/internal/gateway"
+	"aegisguard/internal/interfaces"
 	"aegisguard/internal/vkey"
 
 	"github.com/gin-gonic/gin"
@@ -29,14 +34,16 @@ func (w bodyLogWriter) Write(b []byte) (int, error) {
 }
 
 type Router struct {
-	engine     *gin.Engine
-	proxy      *gateway.AegisProxy
-	vkeyMgr    *vkey.Manager
-	auditor    *audit.Logger
-	auditStore *audit.Store // 直接持有 Store 引用，用于 /audit/logs 读取
-	logger     *zap.Logger
-	targetURL  string
-	cfg        config.Config // 保存配置引用，用于判断运行模式
+	engine        *gin.Engine
+	proxy         *gateway.AegisProxy
+	vkeyMgr       *vkey.Manager
+	auditor       *audit.Logger
+	auditStore    *audit.Store // 直接持有 Store 引用，用于 /audit/logs 读取
+	gateQuery     contract.GateQuery
+	gateEvaluator contract.GateEvaluator
+	logger        *zap.Logger
+	targetURL     string
+	cfg           config.Config // 保存配置引用，用于判断运行模式
 }
 
 func NewRouter(cfg config.Config) (*Router, error) {
@@ -84,15 +91,27 @@ func NewRouter(cfg config.Config) (*Router, error) {
 		return nil, err
 	}
 
+	// 创建门控查询和评估器
+	decisionStore := proxy.GetDecisionStore()
+	gateQuery := gates.NewGateQuery(decisionStore)
+	gateEvaluator := gates.NewGateEvaluator(
+		gates.NewMessageGate(),
+		gates.NewActionGate(logger),
+		gates.NewReturnGate(),
+		decisionStore,
+	)
+
 	router := &Router{
-		engine:     engine,
-		proxy:      proxy,
-		vkeyMgr:    vkeyMgr,
-		auditor:    auditor,
-		auditStore: auditStore,
-		logger:     logger,
-		targetURL:  vkeyMgr.GetTargetURL(),
-		cfg:        cfg,
+		engine:        engine,
+		proxy:         proxy,
+		vkeyMgr:       vkeyMgr,
+		auditor:       auditor,
+		auditStore:    auditStore,
+		gateQuery:     gateQuery,
+		gateEvaluator: gateEvaluator,
+		logger:        logger,
+		targetURL:     vkeyMgr.GetTargetURL(),
+		cfg:           cfg,
 	}
 
 	router.registerRoutes()
@@ -106,6 +125,13 @@ func (r *Router) registerRoutes() {
 	r.engine.Any("/v1/*path", r.handleProxy)
 
 	r.engine.GET("/audit/logs", r.handleAuditLogs)
+	r.engine.GET("/aegis/audit/chains", r.handleAuditChains)
+	r.engine.GET("/aegis/audit/stats", r.handleAuditStats)
+
+	// 门控相关API
+	r.engine.GET("/aegis/gate/overview", r.handleGateOverview)
+	r.engine.GET("/aegis/gate/decisions", r.handleGateDecisions)
+	r.engine.POST("/aegis/gate/evaluate", r.handleGateEvaluate)
 
 	if r.cfg.DevMode {
 		r.registerDevRoutes()
@@ -209,9 +235,14 @@ func (r *Router) handleProxy(c *gin.Context) {
 	)
 
 	r.auditor.LogResponse(requestID, audit.LogResponseInput{
-		StatusCode: statusCode,
-		Duration:   duration,
-		Decision:   "allow", // 当前未从 gates 获取决策，统一记为 allow
+		StatusCode:   statusCode,
+		Duration:     duration,
+		Decision:     firstNonEmpty(c.Writer.Header().Get("X-Aegis-Decision"), "allow"),
+		Reason:       c.Writer.Header().Get("X-Aegis-Reason"),
+		GateType:     c.Writer.Header().Get("X-Aegis-Gate-Type"),
+		RiskScore:    parseOptionalInt(c.Writer.Header().Get("X-Aegis-Risk-Score")),
+		RiskLevel:    c.Writer.Header().Get("X-Aegis-Risk-Level"),
+		MatchedRules: splitCSV(c.Writer.Header().Get("X-Aegis-Matched-Rules")),
 	})
 }
 
@@ -259,6 +290,230 @@ func (r *Router) handleAuditLogs(c *gin.Context) {
 		"logs":  display,
 		"total": len(allEvents),
 	})
+}
+
+func (r *Router) handleGateOverview(c *gin.Context) {
+	overview, err := r.gateQuery.Overview()
+	if err != nil {
+		r.logger.Error("获取门控概览失败", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "获取门控概览失败",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    overview,
+	})
+}
+
+func (r *Router) handleGateDecisions(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "50")
+	limit := 50
+	if n, err := parseInt(limitStr); err == nil && n > 0 && n <= 500 {
+		limit = n
+	}
+
+	gateType := c.Query("gate_type")
+	action := c.Query("action")
+
+	decisions, err := r.gateQuery.Decisions(limit, gateType, action)
+	if err != nil {
+		r.logger.Error("获取门控决策失败", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "获取门控决策失败",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    decisions,
+		"total":   len(decisions),
+	})
+}
+
+func (r *Router) handleGateEvaluate(c *gin.Context) {
+	var req struct {
+		Type     string                 `json:"type"` // "message", "action", "return"
+		Body     json.RawMessage        `json:"body,omitempty"`
+		Content  string                 `json:"content,omitempty"`
+		ToolName string                 `json:"tool_name,omitempty"`
+		Params   map[string]interface{} `json:"params,omitempty"`
+		Headers  map[string]string      `json:"headers,omitempty"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "无效的请求体",
+		})
+		return
+	}
+
+	var decision interfaces.Decision
+	var reason string
+	var err error
+
+	switch req.Type {
+	case "message":
+		decision, reason = r.gateEvaluator.EvaluateMessage(buildEvaluationBody(req.Body, req.Content))
+	case "action":
+		httpHeaders := make(http.Header)
+		for k, v := range req.Headers {
+			httpHeaders.Set(k, v)
+		}
+		decision, reason = r.gateEvaluator.EvaluateAction(req.ToolName, req.Params, httpHeaders)
+	case "return":
+		decision, reason = r.gateEvaluator.EvaluateReturn(buildEvaluationBody(req.Body, req.Content))
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "无效的门控类型",
+		})
+		return
+	}
+
+	if err != nil {
+		r.logger.Error("门控评估失败", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "门控评估失败",
+		})
+		return
+	}
+
+	score, level, rules := gates.ExtractReasonMetadata(reason)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": interfaces.GateDecision{
+			RequestID:    "manual",
+			Timestamp:    time.Now(),
+			GateType:     req.Type,
+			Decision:     decision.String(),
+			RiskScore:    score,
+			RiskLevel:    level,
+			MatchedRules: rules,
+			Reason:       reason,
+			ToolName:     req.ToolName,
+		},
+	})
+}
+
+func buildEvaluationBody(raw json.RawMessage, content string) []byte {
+	if len(raw) > 0 && string(raw) != "null" {
+		return raw
+	}
+
+	if strings.TrimSpace(content) == "" {
+		return []byte(`{}`)
+	}
+
+	body, err := json.Marshal(map[string]string{
+		"content": content,
+	})
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return body
+}
+
+func (r *Router) handleAuditChains(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "50")
+	limit := 50
+	if n, err := parseInt(limitStr); err == nil && n > 0 && n <= 500 {
+		limit = n
+	}
+
+	if r.auditStore == nil {
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": []audit.AuditEvent{}, "total": 0})
+		return
+	}
+
+	events, err := r.auditStore.ReadAll()
+	if err != nil {
+		r.logger.Error("read audit chains failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "read audit chains failed"})
+		return
+	}
+	if len(events) > limit {
+		events = events[:limit]
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": events, "total": len(events)})
+}
+
+func (r *Router) handleAuditStats(c *gin.Context) {
+	stats := gin.H{
+		"total_events":          0,
+		"today_events":          0,
+		"attack_chains":         0,
+		"avg_duration_ms":       0,
+		"top_agents":            []gin.H{},
+		"decision_distribution": gin.H{},
+	}
+	if r.auditStore == nil {
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": stats})
+		return
+	}
+
+	events, err := r.auditStore.ReadAll()
+	if err != nil {
+		r.logger.Error("read audit stats failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "read audit stats failed"})
+		return
+	}
+
+	today := time.Now().Format("2006-01-02")
+	decisionDistribution := map[string]int{}
+	totalDuration := int64(0)
+	todayEvents := 0
+	for _, event := range events {
+		if event.Timestamp.Format("2006-01-02") == today {
+			todayEvents++
+		}
+		decision := firstNonEmpty(event.Decision, "unknown")
+		decisionDistribution[decision]++
+		totalDuration += event.DurationMs
+	}
+
+	avgDuration := int64(0)
+	if len(events) > 0 {
+		avgDuration = totalDuration / int64(len(events))
+	}
+	stats["total_events"] = len(events)
+	stats["today_events"] = todayEvents
+	stats["attack_chains"] = len(events)
+	stats["avg_duration_ms"] = avgDuration
+	stats["decision_distribution"] = decisionDistribution
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": stats})
+}
+
+func firstNonEmpty(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
+}
+
+func splitCSV(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item != "" {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func parseOptionalInt(value string) int {
+	n, err := parseInt(value)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // parseInt 简单整数解析，错误时返回默认值

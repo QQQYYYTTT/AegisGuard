@@ -1,11 +1,14 @@
 import { defineStore } from "pinia";
 import { store } from "../utils";
 import {
+  type GateEvaluateRequest,
   type GateDecision,
   type GateOverview,
   getGateOverview,
   getGateDecisions,
-  evaluateGate
+  evaluateGate,
+  normalizeGateDecision,
+  normalizeGateOverview
 } from "@/api/gate";
 
 export type GateState = {
@@ -25,21 +28,22 @@ export const useGateStore = defineStore("aegis-gate", {
       this.loading = true;
       try {
         const res = await getGateOverview();
-        this.overview = res.data;
-        this.decisions = res.data.recent_decisions || [];
+        this.overview = normalizeGateOverview(res.data);
+        this.decisions = this.overview.recent_decisions || [];
       } finally {
         this.loading = false;
       }
     },
     async fetchDecisions(params?: object) {
       const res = await getGateDecisions(params);
-      this.decisions = res.data;
+      this.decisions = (res.data || []).map(normalizeGateDecision);
       return res.data;
     },
-    async evaluate(payload?: object) {
+    async evaluate(payload?: GateEvaluateRequest) {
       const res = await evaluateGate(payload);
-      this.decisions.unshift(res.data);
-      return res.data;
+      const normalized = normalizeGateDecision(res.data);
+      this.decisions.unshift(normalized);
+      return normalized;
     }
   }
 });

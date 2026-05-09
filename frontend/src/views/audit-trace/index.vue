@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, onUnmounted } from "vue";
 import AttackTimeline from "@/components/audit/AttackTimeline.vue";
 import EvidenceCard from "@/components/audit/EvidenceCard.vue";
 import StatCard from "@/components/common/StatCard.vue";
@@ -7,43 +7,48 @@ import { useAuditStream } from "@/hooks/useAuditStream";
 
 defineOptions({ name: "AuditTraceIndex" });
 
-const { events, attackChains, stats, loadLogs, loadChains, loadStats, loading } =
+const { events, attackChains, stats, loadLogs, loadChains, loadStats, loading, startPolling, stopPolling } =
   useAuditStream();
 
 onMounted(() => {
   Promise.all([loadLogs(), loadChains(), loadStats()]);
+  startPolling(5000);
+});
+
+onUnmounted(() => {
+  stopPolling();
 });
 </script>
 
 <template>
   <div class="audit-trace p-4">
-    <h1 class="text-2xl font-bold mb-4">Audit Trail</h1>
+    <h1 class="text-2xl font-bold mb-4">审计追踪 / Audit Trail</h1>
 
     <el-row :gutter="16" class="mb-4">
       <el-col :span="6">
         <StatCard
-          title="Total Events"
+          title="总事件数 / Total Events"
           :value="stats?.total_events || 0"
           color="var(--aegis-primary)"
         />
       </el-col>
       <el-col :span="6">
         <StatCard
-          title="Today Events"
+          title="今日事件 / Today Events"
           :value="stats?.today_events || 0"
           color="var(--aegis-info)"
         />
       </el-col>
       <el-col :span="6">
         <StatCard
-          title="Attack Chains"
+          title="攻击链数 / Attack Chains"
           :value="stats?.attack_chains || 0"
           color="var(--aegis-danger)"
         />
       </el-col>
       <el-col :span="6">
         <StatCard
-          title="Avg Duration"
+          title="平均耗时 / Avg Duration"
           :value="stats?.avg_duration_ms || 0"
           suffix="ms"
           color="var(--aegis-warning)"
@@ -55,7 +60,7 @@ onMounted(() => {
       <el-col :span="16">
         <el-card shadow="hover" class="mb-4">
           <template #header>
-            <span class="font-semibold">Attack Chains</span>
+            <span class="font-semibold">攻击链 / Attack Chains</span>
           </template>
           <div v-loading="loading" class="space-y-4">
             <AttackTimeline
@@ -65,7 +70,7 @@ onMounted(() => {
             />
             <el-empty
               v-if="!attackChains.length && !loading"
-              description="No attack chains detected"
+              description="暂未检测到攻击链"
             />
           </div>
         </el-card>
@@ -73,7 +78,7 @@ onMounted(() => {
       <el-col :span="8">
         <el-card shadow="hover" class="mb-4">
           <template #header>
-            <span class="font-semibold">Decision Distribution</span>
+            <span class="font-semibold">决策分布 / Decision Distribution</span>
           </template>
           <div v-if="stats?.decision_distribution" class="space-y-2">
             <div
@@ -102,7 +107,7 @@ onMounted(() => {
 
         <el-card shadow="hover">
           <template #header>
-            <span class="font-semibold">Top Agents</span>
+            <span class="font-semibold">高频 Agent / Top Agents</span>
           </template>
           <div v-if="stats?.top_agents" class="space-y-2">
             <div
@@ -120,15 +125,15 @@ onMounted(() => {
 
     <el-card shadow="hover" class="mt-4">
       <template #header>
-        <span class="font-semibold">Recent Audit Events</span>
+        <span class="font-semibold">最近审计事件 / Recent Audit Events</span>
       </template>
       <el-table :data="events" stripe size="small" v-loading="loading">
-        <el-table-column prop="timestamp" label="Time" width="180">
+        <el-table-column prop="timestamp" label="时间 / Time" width="180">
           <template #default="{ row }">
             {{ new Date(row.timestamp).toLocaleString() }}
           </template>
         </el-table-column>
-        <el-table-column prop="event_type" label="Type" width="120">
+        <el-table-column prop="event_type" label="类型 / Type" width="120">
           <template #default="{ row }">
             <el-tag
               size="small"
@@ -144,21 +149,21 @@ onMounted(() => {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="decision" label="Decision" width="120" />
-        <el-table-column prop="risk_score" label="Risk" width="80">
+        <el-table-column prop="decision" label="决策 / Decision" width="120" />
+        <el-table-column prop="risk_score" label="风险 / Risk" width="80">
           <template #default="{ row }">
             {{ Math.round(row.risk_score * 100) }}%
           </template>
         </el-table-column>
         <el-table-column prop="agent_id" label="Agent" width="120" />
-        <el-table-column prop="tool_name" label="Tool" width="120" />
+        <el-table-column prop="tool_name" label="工具 / Tool" width="120" />
         <el-table-column
           prop="description"
-          label="Description"
+          label="描述 / Description"
           min-width="250"
           show-overflow-tooltip
         />
-        <el-table-column prop="status" label="HTTP" width="80">
+        <el-table-column prop="status" label="状态 / HTTP" width="80">
           <template #default="{ row }">
             <el-tag
               :type="row.status < 400 ? 'success' : 'danger'"
