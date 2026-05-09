@@ -8,6 +8,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"time"
 
 	"aegisguard/internal/gates"
 	"aegisguard/internal/vkey"
@@ -21,10 +22,11 @@ type AegisProxy struct {
 	vkeyMgr     *vkey.Manager
 	messageGate MessageEvaluator
 	actionGate  ActionEvaluator
+	tokenIssuer TokenIssuer
 	logger      *zap.Logger
 }
 
-func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, logger *zap.Logger) (*AegisProxy, error) {
+func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIssuer, logger *zap.Logger) (*AegisProxy, error) {
 	target, err := url.Parse(targetURL)
 	if err != nil {
 		return nil, err
@@ -35,6 +37,7 @@ func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, logger *zap.Logger) 
 		vkeyMgr:     vkeyMgr,
 		messageGate: gates.NewMessageGate(),
 		actionGate:  gates.NewActionGate(logger),
+		tokenIssuer: tokenIssuer,
 		logger:      logger,
 	}
 
@@ -65,19 +68,6 @@ func (ap *AegisProxy) director(req *http.Request) {
 	req.Host = ap.target.Host
 	req.URL.Scheme = ap.target.Scheme
 	req.URL.Host = ap.target.Host
-
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		ap.logger.Error("读取请求体失败", zap.Error(err))
-		return
-	}
-	req.Body = io.NopCloser(bytes.NewBuffer(body))
-
-	if ap.isChatCompletion(req.URL.Path) {
-		ap.handleChatRequest(req, body)
-	} else if ap.isToolCall(req.URL.Path, body) {
-		ap.handleToolCall(req, body)
-	}
 }
 
 func (ap *AegisProxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) {
@@ -108,42 +98,68 @@ func (ap *AegisProxy) isToolCall(path string, body []byte) bool {
 	return strings.Contains(path, "/tools") || len(req.Messages) > 0
 }
 
-func (ap *AegisProxy) handleChatRequest(req *http.Request, body []byte) {
+func (ap *AegisProxy) handleChatRequest(req *http.Request, body []byte) (int, map[string]interface{}, bool) {
 	decision, reason := ap.messageGate.Evaluate(body)
 	switch decision {
 	case gates.Block:
-		ap.blockRequest(req, reason)
+		return ap.blockRequest(req, reason)
 	case gates.Degrade:
 		ap.degradeRequest(req, body)
 	case gates.Allow:
 		ap.logger.Debug("Message Gate 放行")
 	}
+	return 0, nil, false
 }
 
-func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) {
+func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) (int, map[string]interface{}, bool) {
 	toolName, params := ap.extractToolCall(body)
+	if toolName == "" {
+		return http.StatusBadRequest, map[string]interface{}{
+			"error": map[string]interface{}{
+				"message": "tool call detected but tool name is empty",
+				"type":    "invalid_tool_call",
+			},
+		}, true
+	}
+
+	if err := ap.injectToken(req, toolName, params); err != nil {
+		ap.logger.Error("签发或注入 RequireToken 失败", zap.String("tool", toolName), zap.Error(err))
+		return http.StatusInternalServerError, map[string]interface{}{
+			"error": map[string]interface{}{
+				"message": "failed to issue require token: " + err.Error(),
+				"type":    "token_issue_error",
+			},
+		}, true
+	}
 
 	decision, reason := ap.actionGate.Evaluate(toolName, params, req.Header)
 	switch decision {
 	case gates.Deny:
-		ap.denyToolCall(req, reason)
+		return ap.denyToolCall(req, reason)
 	case gates.HumanApproval:
-		ap.holdForApproval(req, toolName)
+		return ap.holdForApproval(req, toolName)
 	case gates.Allow:
-		ap.injectToken(req, toolName, params)
+		return 0, nil, false
 	default:
 		ap.logger.Warn("未知的 Action Gate 决策状态",
 			zap.Any("decision", decision),
 			zap.String("tool", toolName),
 		)
 	}
+	return 0, nil, false
 }
 
-func (ap *AegisProxy) blockRequest(req *http.Request, reason string) {
+func (ap *AegisProxy) blockRequest(req *http.Request, reason string) (int, map[string]interface{}, bool) {
 	ap.logger.Warn("请求被阻断",
 		zap.String("reason", reason),
 		zap.String("path", req.URL.Path),
 	)
+	return http.StatusForbidden, map[string]interface{}{
+		"error": map[string]interface{}{
+			"message": reason,
+			"type":    "message_gate_blocked",
+		},
+	}, true
 }
 
 func (ap *AegisProxy) degradeRequest(req *http.Request, body []byte) {
@@ -152,27 +168,63 @@ func (ap *AegisProxy) degradeRequest(req *http.Request, body []byte) {
 	)
 }
 
-func (ap *AegisProxy) denyToolCall(req *http.Request, reason string) {
+func (ap *AegisProxy) denyToolCall(req *http.Request, reason string) (int, map[string]interface{}, bool) {
 	ap.logger.Warn("工具调用被拒绝",
 		zap.String("reason", reason),
 		zap.String("path", req.URL.Path),
 	)
+	return http.StatusForbidden, map[string]interface{}{
+		"error": map[string]interface{}{
+			"message": reason,
+			"type":    "tool_call_denied",
+		},
+	}, true
 }
 
-func (ap *AegisProxy) holdForApproval(req *http.Request, toolName string) {
+func (ap *AegisProxy) holdForApproval(req *http.Request, toolName string) (int, map[string]interface{}, bool) {
 	ap.logger.Info("工具调用等待人工审批",
 		zap.String("tool", toolName),
 		zap.String("path", req.URL.Path),
 	)
+	return http.StatusForbidden, map[string]interface{}{
+		"error": map[string]interface{}{
+			"message": "tool call requires human approval",
+			"type":    "human_approval_required",
+		},
+	}, true
 }
 
-func (ap *AegisProxy) injectToken(req *http.Request, toolName string, params map[string]interface{}) {
-	token := "placeholder-token"
-	req.Header.Set("X-Aegis-Token", token)
+func (ap *AegisProxy) injectToken(req *http.Request, toolName string, params map[string]interface{}) error {
+	if ap.tokenIssuer == nil {
+		return nil
+	}
+
+	requestID, _ := req.Context().Value("request_id").(string)
+	gatewayKey, _ := req.Context().Value("gateway_key").(string)
+	if requestID == "" {
+		requestID = "request-anonymous"
+	}
+	if gatewayKey == "" {
+		gatewayKey = "agent-anonymous"
+	}
+
+	scope := toolName + ":invoke"
+	token, err := ap.tokenIssuer.Issue(toolName, scope, gatewayKey, requestID, requestID, 5*time.Minute, 1)
+	if err != nil {
+		return err
+	}
+
+	payload, err := json.Marshal(token)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Aegis-Token", string(payload))
 
 	ap.logger.Debug("注入 RequireToken",
 		zap.String("tool", toolName),
+		zap.String("token_id", token.Nonce),
 	)
+	return nil
 }
 
 func (ap *AegisProxy) extractToolCall(body []byte) (string, map[string]interface{}) {
@@ -196,6 +248,36 @@ func (ap *AegisProxy) extractToolCall(body []byte) (string, map[string]interface
 }
 
 func (ap *AegisProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		ap.logger.Error("读取请求体失败", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]interface{}{
+				"message": "failed to read request body",
+				"type":    "bad_request",
+			},
+		})
+		return
+	}
+
+	r.Body = io.NopCloser(bytes.NewBuffer(body))
+
+	if ap.isChatCompletion(r.URL.Path) {
+		if status, payload, blocked := ap.handleChatRequest(r, body); blocked {
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(payload)
+			return
+		}
+	} else if ap.isToolCall(r.URL.Path, body) {
+		if status, payload, blocked := ap.handleToolCall(r, body); blocked {
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(payload)
+			return
+		}
+	}
+
+	r.Body = io.NopCloser(bytes.NewBuffer(body))
 	ap.proxy.ServeHTTP(w, r)
 }
 

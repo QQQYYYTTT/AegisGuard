@@ -13,6 +13,7 @@ type Config struct {
 	AuditFile        string // 审计日志文件路径
 	Port             string // 服务端口
 	LangGraphChatURL string // LangGraph 聊天服务地址
+	SigningPrivateKey string // RequireToken SM2 签名私钥（十六进制）
 
 	// 网关凭据配置
 	GatewayConfigPath string // 网关凭据配置文件路径 (gateway.yaml)
@@ -77,6 +78,7 @@ func Load() Config {
 		AuditFile:        auditFile,
 		Port:             port,
 		LangGraphChatURL: langGraphChatURL,
+		SigningPrivateKey: getEnv("AEGIS_SIGNING_PRIVATE_KEY", ""),
 
 		// 网关核心配置
 		GatewayConfigPath: gatewayConfigPath,

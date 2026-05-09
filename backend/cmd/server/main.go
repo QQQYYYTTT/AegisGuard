@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 
+	"aegisguard/internal/auth"
 	"aegisguard/internal/config"
 	httpapi "aegisguard/internal/http"
 
@@ -36,6 +37,10 @@ func main() {
 		zap.String("port", cfg.Port),
 		zap.String("gateway_config", cfg.GatewayConfigPath),
 	)
+
+	if err := auth.InitSigningKey(cfg.SigningPrivateKey); err != nil {
+		logger.Fatal("【启动】初始化 RequireToken 签名密钥失败", zap.Error(err))
+	}
 
 	router, err := httpapi.NewRouter(cfg)
 	if err != nil {

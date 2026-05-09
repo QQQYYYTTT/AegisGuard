@@ -1,6 +1,16 @@
 package gateway
 
-import "net/http"
+import (
+	"net/http"
+	"time"
+
+	"aegisguard/internal/auth"
+)
+
+// TokenIssuer 提供最小可运行的 RequireToken 签发能力。
+type TokenIssuer interface {
+	Issue(toolName, scope, agentID, sessionID, taskID string, ttl time.Duration, maxCalls int) (*auth.RequireToken, error)
+}
 
 // TokenInjector [WRONG] [分工2] Token 注入器
 //

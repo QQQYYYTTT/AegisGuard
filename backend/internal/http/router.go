@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"aegisguard/internal/auth"
 	"aegisguard/internal/audit"
 	"aegisguard/internal/config"
 	"aegisguard/internal/gateway"
@@ -34,6 +35,8 @@ type Router struct {
 	vkeyMgr    *vkey.Manager
 	auditor    *audit.Logger
 	auditStore *audit.Store // 直接持有 Store 引用，用于 /audit/logs 读取
+	tokenStore *auth.TokenStore
+	verifier   *auth.Verifier
 	logger     *zap.Logger
 	targetURL  string
 	cfg        config.Config // 保存配置引用，用于判断运行模式
@@ -79,7 +82,10 @@ func NewRouter(cfg config.Config) (*Router, error) {
 	engine.Use(gin.Recovery())
 	engine.Use(requestLogger(logger))
 
-	proxy, err := gateway.NewAegisProxy(vkeyMgr.GetTargetURL(), vkeyMgr, logger)
+	tokenStore := auth.NewTokenStore()
+	verifier := auth.NewVerifier()
+
+	proxy, err := gateway.NewAegisProxy(vkeyMgr.GetTargetURL(), vkeyMgr, tokenStore, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -90,6 +96,8 @@ func NewRouter(cfg config.Config) (*Router, error) {
 		vkeyMgr:    vkeyMgr,
 		auditor:    auditor,
 		auditStore: auditStore,
+		tokenStore: tokenStore,
+		verifier:   verifier,
 		logger:     logger,
 		targetURL:  vkeyMgr.GetTargetURL(),
 		cfg:        cfg,
@@ -102,6 +110,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 
 func (r *Router) registerRoutes() {
 	r.engine.GET("/health", r.handleHealth)
+	r.registerAuthRoutes()
 
 	r.engine.Any("/v1/*path", r.handleProxy)
 
@@ -109,6 +118,16 @@ func (r *Router) registerRoutes() {
 
 	if r.cfg.DevMode {
 		r.registerDevRoutes()
+	}
+}
+
+func (r *Router) registerAuthRoutes() {
+	authGroup := r.engine.Group("/aegis/auth")
+	{
+		authGroup.GET("/token", r.handleGetToken)
+		authGroup.POST("/token", r.handleIssueToken)
+		authGroup.POST("/verify", r.handleVerifyToken)
+		authGroup.GET("/status", r.handleAuthStatus)
 	}
 }
 

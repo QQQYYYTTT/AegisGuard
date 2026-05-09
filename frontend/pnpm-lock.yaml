@@ -71,9 +71,15 @@ importers:
       sortablejs:
         specifier: ^1.15.6
         version: 1.15.6
+      tippy.js:
+        specifier: ^6.3.7
+        version: 6.3.7
       vue:
         specifier: ^3.5.22
         version: 3.5.22(typescript@5.9.3)
+      vue-demi:
+        specifier: ^0.14.10
+        version: 0.14.10(vue@3.5.22(typescript@5.9.3))
       vue-json-pretty:
         specifier: ^2.6.0
         version: 2.6.0(vue@3.5.22(typescript@5.9.3))

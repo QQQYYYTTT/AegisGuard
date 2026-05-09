@@ -16,6 +16,17 @@ var (
 	nonceMu    sync.Mutex
 )
 
+type VerificationChecks struct {
+	SignatureValid bool `json:"signature_valid"`
+	ExpiryValid    bool `json:"expiry_valid"`
+	NonceValid     bool `json:"nonce_valid"`
+	CallBudgetOK   bool `json:"call_budget_ok"`
+}
+
+func (c VerificationChecks) IsValid() bool {
+	return c.SignatureValid && c.ExpiryValid && c.NonceValid && c.CallBudgetOK
+}
+
 // Verifier 执行平面校验器
 // 负责验证 RequireToken 的合法性和有效性
 type Verifier struct {
@@ -47,38 +58,55 @@ func NewVerifier() *Verifier {
 // 7. Schema 指纹 - 使用 SM3 哈希对比，防止参数篡改
 // 8. 调用次数预算 - 检查是否超过 max_calls（SAGA 风格防 DoS）
 func (v *Verifier) Verify(token *RequireToken) error {
+	_, err := v.verifyChecks(token, true)
+	return err
+}
+
+// Inspect 返回不消费 Nonce 的基础校验结果，适合状态展示或页面轮询。
+func (v *Verifier) Inspect(token *RequireToken) VerificationChecks {
+	checks, _ := v.verifyChecks(token, false)
+	return checks
+}
+
+func (v *Verifier) verifyChecks(token *RequireToken, consumeNonce bool) (VerificationChecks, error) {
+	checks := VerificationChecks{}
+
 	// 检查公钥是否已初始化
 	if v.publicKey == nil {
-		return fmt.Errorf("verifier public key not initialized")
+		return checks, fmt.Errorf("verifier public key not initialized")
 	}
 
 	// 1. 验证签名有效性
 	if err := v.verifySignature(token); err != nil {
-		return fmt.Errorf("signature verification failed: %w", err)
+		return checks, fmt.Errorf("signature verification failed: %w", err)
 	}
+	checks.SignatureValid = true
 
 	// 2. 验证时效性
 	if err := v.verifyExpiry(token); err != nil {
-		return err
+		return checks, err
 	}
+	checks.ExpiryValid = true
 
 	// 3. 验证 Nonce 防重放
-	if err := v.verifyNonce(token); err != nil {
-		return err
+	if err := v.verifyNonce(token, consumeNonce); err != nil {
+		return checks, err
 	}
+	checks.NonceValid = true
 
 	// 8. 验证调用次数预算（SAGA 风格防 DoS）
 	if err := v.verifyCallBudget(token); err != nil {
-		return err
+		return checks, err
 	}
+	checks.CallBudgetOK = true
 
 	// 7. 验证 Schema 指纹（使用 SM3 哈希）
 	if err := v.verifySchemaHash(token); err != nil {
-		return err
+		return checks, err
 	}
 
 	// 注意：4-6 项在 ActionGate 中检查
-	return nil
+	return checks, nil
 }
 
 // verifySignature 验证令牌的 SM2 签名
@@ -110,13 +138,15 @@ func (v *Verifier) verifyExpiry(token *RequireToken) error {
 }
 
 // verifyNonce 验证 Nonce 防止重放攻击
-func (v *Verifier) verifyNonce(token *RequireToken) error {
+func (v *Verifier) verifyNonce(token *RequireToken, consume bool) error {
 	nonceMu.Lock()
 	defer nonceMu.Unlock()
 	if usedNonces[token.Nonce] {
 		return fmt.Errorf("nonce already used: %s", token.Nonce)
 	}
-	usedNonces[token.Nonce] = true
+	if consume {
+		usedNonces[token.Nonce] = true
+	}
 	return nil
 }
 
