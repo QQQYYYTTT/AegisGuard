@@ -170,7 +170,6 @@ func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) (gateResult
 		ap.logger.Error("failed to issue or inject RequireToken", zap.String("tool", toolName), zap.Error(err))
 		req.Header.Set("X-Aegis-Token-Status", "error")
 	}
-
 	decision, reason := ap.actionGate.Evaluate(toolName, params, req.Header)
 	result := ap.newGateResult("action", decision, reason, http.StatusOK)
 	result.TokenStatus = firstTokenStatus(req.Header)
@@ -381,7 +380,7 @@ func (ap *AegisProxy) extractToolCall(body []byte) (string, map[string]interface
 }
 
 func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
-	if resp.Body == nil {
+	if resp.Body == nil || ap.returnGate == nil {
 		return nil
 	}
 	if encoding := resp.Header.Get("Content-Encoding"); encoding != "" && encoding != "identity" {
