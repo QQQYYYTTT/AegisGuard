@@ -39,9 +39,9 @@ func TestHandleToolCallInjectsRealToken(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), "request_id", "req-001"))
 	req = req.WithContext(context.WithValue(req.Context(), "gateway_key", "agk-test-001"))
 
-	status, payload, blocked := proxy.handleToolCall(req, body)
-	if blocked {
-		t.Fatalf("tool call should be allowed, status=%d payload=%v", status, payload)
+	result, ok := proxy.handleToolCall(req, body)
+	if !ok {
+		t.Fatalf("tool call should be allowed, result=%+v", result)
 	}
 
 	tokenHeader := req.Header.Get("X-Aegis-Token")

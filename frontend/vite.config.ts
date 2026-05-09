@@ -25,6 +25,21 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
       host: "0.0.0.0",
       // 本地跨域代理 https://cn.vitejs.dev/config/server-options.html#server-proxy
       proxy: {
+        "/login": {
+          target: "http://127.0.0.1:8090",
+          changeOrigin: true,
+          secure: false
+        },
+        "/refresh-token": {
+          target: "http://127.0.0.1:8090",
+          changeOrigin: true,
+          secure: false
+        },
+        "/get-async-routes": {
+          target: "http://127.0.0.1:8090",
+          changeOrigin: true,
+          secure: false
+        },
         "/api": {
           target: "http://127.0.0.1:8090",
           changeOrigin: true,

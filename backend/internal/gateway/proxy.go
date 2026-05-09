@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"aegisguard/internal/contract"
 	"aegisguard/internal/gates"
 	"aegisguard/internal/interfaces"
 	"aegisguard/internal/vkey"
@@ -38,6 +39,9 @@ type AegisProxy struct {
 	returnGate    ReturnEvaluator
 	decisionStore *gates.DecisionStore
 	tokenIssuer   TokenIssuer
+	sandboxMgr    contract.SandboxManager
+	transferMgr   contract.TransferManager
+	contentFilter contract.ContentFilter
 	logger        *zap.Logger
 }
 
@@ -67,6 +71,12 @@ func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIss
 	ap.proxy.ErrorHandler = ap.errorHandler
 
 	return ap, nil
+}
+
+func (ap *AegisProxy) SetSandbox(sandboxMgr contract.SandboxManager, transferMgr contract.TransferManager, contentFilter contract.ContentFilter) {
+	ap.sandboxMgr = sandboxMgr
+	ap.transferMgr = transferMgr
+	ap.contentFilter = contentFilter
 }
 
 func (ap *AegisProxy) director(req *http.Request) {
@@ -400,12 +410,22 @@ func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
 	switch decision {
 	case gates.Block, gates.Deny:
 		ap.logger.Warn("response blocked by Return Gate", zap.String("reason", reason))
+		ap.captureSandboxResponse(resp, body, result, false)
 		resp.StatusCode = http.StatusForbidden
 		resp.Status = "403 Forbidden"
 		body = gateResponseBody(decision, reason)
 	case gates.Degrade:
 		ap.logger.Info("response filtered by Return Gate", zap.String("reason", reason))
-		body = ap.returnGate.Filter(body)
+		ap.captureSandboxResponse(resp, body, result, true)
+		if ap.contentFilter != nil {
+			filtered, removed := ap.contentFilter.FilterToolResponse(body)
+			body = filtered
+			if len(removed) > 0 {
+				resp.Header.Set("X-Aegis-Filtered-Fields", strings.Join(removed, ","))
+			}
+		} else {
+			body = ap.returnGate.Filter(body)
+		}
 		resp.Header.Set("X-Aegis-Filtered", "true")
 	default:
 		ap.logger.Debug("Return Gate allow", zap.String("reason", reason))
@@ -415,6 +435,70 @@ func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
 	resp.ContentLength = int64(len(body))
 	resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
 	return nil
+}
+
+func (ap *AegisProxy) captureSandboxResponse(resp *http.Response, body []byte, result gateResult, promoteSummary bool) {
+	if ap.sandboxMgr == nil || resp == nil {
+		return
+	}
+
+	requestID := requestIDFromContext(resp.Request)
+	trusted := interfaces.TrustedContent{
+		SystemPrompt: "AegisGuard trusted core context",
+		Memory:       "request_id=" + requestID,
+		TaskState:    "return_gate_decision=" + result.Decision.String(),
+	}
+	untrusted := interfaces.UntrustedContent{
+		ExternalData:    string(body),
+		InjectedContent: result.Reason,
+		Source:          "return_gate",
+		ContentType:     contentTypeFromHeader(resp.Header.Get("Content-Type")),
+	}
+
+	ctx, err := ap.sandboxMgr.CreateContext(trusted, untrusted)
+	if err != nil {
+		ap.logger.Warn("failed to create sandbox context", zap.Error(err))
+		return
+	}
+
+	resp.Header.Set("X-Aegis-Sandbox-Context-ID", ctx.ContextID)
+	resp.Header.Set("X-Aegis-Sandbox-Status", ctx.Status)
+	resp.Header.Set("X-Aegis-Sandbox-Fingerprint", ctx.SM3Fingerprint)
+
+	if !promoteSummary {
+		if ap.transferMgr != nil {
+			if quarantineRecorder, ok := ap.transferMgr.(interface {
+				RecordQuarantine(contextID string, data interfaces.UntrustedContent, reason string) (*interfaces.TransferRecord, error)
+			}); ok {
+				if record, err := quarantineRecorder.RecordQuarantine(ctx.ContextID, untrusted, result.Reason); err == nil {
+					resp.Header.Set("X-Aegis-Sandbox-Transfer-ID", record.ID)
+					resp.Header.Set("X-Aegis-Sandbox-Approved", strconv.FormatBool(record.Approved))
+				}
+			}
+		}
+		return
+	}
+	if ap.transferMgr == nil {
+		return
+	}
+
+	record, err := ap.transferMgr.UntrustedToTrusted(ctx.ContextID, untrusted)
+	if err != nil {
+		ap.logger.Warn("failed to record sandbox transfer",
+			zap.String("context_id", ctx.ContextID),
+			zap.Error(err),
+		)
+		return
+	}
+	resp.Header.Set("X-Aegis-Sandbox-Transfer-ID", record.ID)
+	resp.Header.Set("X-Aegis-Sandbox-Approved", strconv.FormatBool(record.Approved))
+}
+
+func contentTypeFromHeader(value string) string {
+	if value == "" {
+		return "application/octet-stream"
+	}
+	return strings.Split(value, ";")[0]
 }
 
 func (ap *AegisProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {

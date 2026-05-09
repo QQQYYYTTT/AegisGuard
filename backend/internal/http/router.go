@@ -16,6 +16,7 @@ import (
 	"aegisguard/internal/gates"
 	"aegisguard/internal/gateway"
 	"aegisguard/internal/interfaces"
+	memorysandbox "aegisguard/internal/sandbox"
 	"aegisguard/internal/vkey"
 
 	"github.com/gin-gonic/gin"
@@ -44,6 +45,9 @@ type Router struct {
 	verifier      *auth.Verifier
 	gateQuery     contract.GateQuery
 	gateEvaluator contract.GateEvaluator
+	sandboxMgr    contract.SandboxManager
+	transferMgr   contract.TransferManager
+	contentFilter contract.ContentFilter
 	logger        *zap.Logger
 	targetURL     string
 	cfg           config.Config // 保存配置引用，用于判断运行模式
@@ -91,11 +95,13 @@ func NewRouter(cfg config.Config) (*Router, error) {
 
 	tokenStore := auth.NewTokenStore()
 	verifier := auth.NewVerifier()
+	sandboxMgr := memorysandbox.NewManager(logger)
 
 	proxy, err := gateway.NewAegisProxy(vkeyMgr.GetTargetURL(), vkeyMgr, tokenStore, logger)
 	if err != nil {
 		return nil, err
 	}
+	proxy.SetSandbox(sandboxMgr, sandboxMgr, sandboxMgr)
 
 	// 创建门控查询和评估器
 	decisionStore := proxy.GetDecisionStore()
@@ -117,6 +123,9 @@ func NewRouter(cfg config.Config) (*Router, error) {
 		verifier:      verifier,
 		gateQuery:     gateQuery,
 		gateEvaluator: gateEvaluator,
+		sandboxMgr:    sandboxMgr,
+		transferMgr:   sandboxMgr,
+		contentFilter: sandboxMgr,
 		logger:        logger,
 		targetURL:     vkeyMgr.GetTargetURL(),
 		cfg:           cfg,
@@ -129,6 +138,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 
 func (r *Router) registerRoutes() {
 	r.engine.GET("/health", r.handleHealth)
+	r.registerUserRoutes()
 	r.registerAuthRoutes()
 
 	r.engine.Any("/v1/*path", r.handleProxy)
@@ -141,6 +151,7 @@ func (r *Router) registerRoutes() {
 	r.engine.GET("/aegis/gate/overview", r.handleGateOverview)
 	r.engine.GET("/aegis/gate/decisions", r.handleGateDecisions)
 	r.engine.POST("/aegis/gate/evaluate", r.handleGateEvaluate)
+	r.registerSandboxRoutes()
 
 	if r.cfg.DevMode {
 		r.registerDevRoutes()

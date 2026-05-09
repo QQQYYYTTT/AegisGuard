@@ -100,9 +100,9 @@
 | 审计日志 `GET /audit/logs` | [`http/router.go`](internal/http/router.go) | [`audit.ts`](../frontend/src/api/audit.ts) `getAuditLogs()` | 审计追踪 | 无（已直连 Store） | 已完成 |
 | 攻击链 `GET /aegis/audit/chains` | 新建 `http/handler_audit.go` | [`audit.ts`](../frontend/src/api/audit.ts) `getAttackChains()` | 审计追踪 | `contract.AuditReader` | 未实现 |
 | 审计统计 `GET /aegis/audit/stats` | 新建 `http/handler_audit.go` | [`audit.ts`](../frontend/src/api/audit.ts) `getAuditStats()` | 审计追踪 | `contract.AuditReader` | 未实现 |
-| 沙箱上下文 `GET /aegis/sandbox/context` | 新建 `http/handler_sandbox.go` | [`sandbox.ts`](../frontend/src/api/sandbox.ts) `getSandboxContext()` | 记忆沙箱 | `contract.SandboxManager` | 未实现 |
-| 转移记录 `GET /aegis/sandbox/transfers` | 新建 `http/handler_sandbox.go` | [`sandbox.ts`](../frontend/src/api/sandbox.ts) `getTransferRecords()` | 记忆沙箱 | `contract.TransferManager` | 未实现 |
-| 上下文隔离 `POST /aegis/sandbox/isolate` | 新建 `http/handler_sandbox.go` | [`sandbox.ts`](../frontend/src/api/sandbox.ts) `isolateContext()` | 记忆沙箱 | `contract.SandboxManager` | 未实现 |
+| 沙箱上下文 `GET /aegis/sandbox/context` | [`http/handler_sandbox.go`](internal/http/handler_sandbox.go) | [`sandbox.ts`](../frontend/src/api/sandbox.ts) `getSandboxContext()` | 记忆沙箱 | `contract.SandboxManager` | 已完成 |
+| 转移记录 `GET /aegis/sandbox/transfers` | [`http/handler_sandbox.go`](internal/http/handler_sandbox.go) | [`sandbox.ts`](../frontend/src/api/sandbox.ts) `getTransferRecords()` | 记忆沙箱 | `contract.TransferManager` | 已完成 |
+| 上下文隔离 `POST /aegis/sandbox/isolate` | [`http/handler_sandbox.go`](internal/http/handler_sandbox.go) | [`sandbox.ts`](../frontend/src/api/sandbox.ts) `isolateContext()` | 记忆沙箱 | `contract.SandboxManager` | 已完成 |
 | 策略配置 `GET /aegis/policy/config` | 新建 `http/handler_policy.go` | [`policy.ts`](../frontend/src/api/policy.ts) `getPolicyConfig()` | 策略中心 | `contract.PolicyEngine` | 未实现 |
 | 策略规则 `GET /aegis/policy/rules` | 新建 `http/handler_policy.go` | [`policy.ts`](../frontend/src/api/policy.ts) `getPolicyRules()` | 策略中心 | `contract.PolicyEngine` | 未实现 |
 | 更新策略 `PUT /aegis/policy/rules` | 新建 `http/handler_policy.go` | [`policy.ts`](../frontend/src/api/policy.ts) `updatePolicyRule()` | 策略中心 | `contract.PolicyEngine` | 未实现 |
@@ -111,9 +111,9 @@
 
 | 你的任务 | 在哪个包 | 当前状态 | 平面 |
 |---|---|---|---|
-| Memory Sandbox 上下文隔离 | [`sandbox/sandbox.go`](internal/sandbox/sandbox.go) | 未实现 | 执行平面 |
-| 可信/不可信数据转移 | 新建 `sandbox/transfer.go` | 未实现 | 执行平面 |
-| 安全摘要/工具返回过滤 | 新建 `sandbox/filter.go` | 未实现 | 执行平面 |
+| Memory Sandbox 上下文隔离 | [`sandbox/sandbox.go`](internal/sandbox/sandbox.go) | 已完成（内存版 MVP） | 执行平面 |
+| 可信/不可信数据转移 | [`sandbox/sandbox.go`](internal/sandbox/sandbox.go) | 已完成（摘要转移记录） | 执行平面 |
+| 安全摘要/工具返回过滤 | [`sandbox/sandbox.go`](internal/sandbox/sandbox.go) | 已完成（规则过滤） | 执行平面 |
 
 ---
 
