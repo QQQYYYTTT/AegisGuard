@@ -27,7 +27,7 @@ defineProps<{
     <template #header>
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <span class="font-semibold">Attack Chain</span>
+          <span class="font-semibold">攻击链 / Attack Chain</span>
           <el-tag
             :type="
               chain.severity === 'critical'

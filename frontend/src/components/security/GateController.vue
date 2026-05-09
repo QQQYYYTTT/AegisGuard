@@ -18,9 +18,9 @@ defineProps<{
 }>();
 
 function scoreColor(score: number) {
-  if (score >= 0.8) return "#ff4d4f";
-  if (score >= 0.6) return "#f56c6c";
-  if (score >= 0.4) return "#e6a23c";
+  if (score >= 80) return "#ff4d4f";
+  if (score >= 60) return "#f56c6c";
+  if (score >= 40) return "#e6a23c";
   return "#67c23a";
 }
 </script>
@@ -43,9 +43,9 @@ function scoreColor(score: number) {
       <div class="text-sm mb-2">{{ d.reason }}</div>
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-1">
-          <span class="text-xs text-gray-500">Risk Score:</span>
+          <span class="text-xs text-gray-500">风险分数 / Risk Score:</span>
           <el-progress
-            :percentage="Math.round(d.risk_score * 100)"
+            :percentage="d.risk_score"
             :stroke-width="6"
             :color="scoreColor(d.risk_score)"
             style="width: 100px"

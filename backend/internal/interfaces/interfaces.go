@@ -19,7 +19,6 @@ package interfaces
 
 import (
 	"aegisguard/internal/auth"
-	"aegisguard/internal/gates"
 
 	"time"
 )
@@ -28,8 +27,34 @@ import (
 // 公共类型别名
 // ============================================================================
 
-// Decision 借用 gates 包已有定义，此处用类型别名避免重复声明
-type Decision = gates.Decision
+// Decision 决策类型
+type Decision int
+
+const (
+	Allow Decision = iota
+	Block
+	Degrade
+	Deny
+	HumanApproval
+)
+
+// String 返回决策字符串表示
+func (d Decision) String() string {
+	switch d {
+	case Allow:
+		return "Allow"
+	case Block:
+		return "Block"
+	case Degrade:
+		return "Degrade"
+	case Deny:
+		return "Deny"
+	case HumanApproval:
+		return "HumanApproval"
+	default:
+		return "Unknown"
+	}
+}
 
 // RequireToken 借用 auth 包已有定义
 type RequireToken = auth.RequireToken

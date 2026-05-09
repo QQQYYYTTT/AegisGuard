@@ -6,20 +6,20 @@ defineProps<{
 }>();
 
 const checkLabels: Record<string, string> = {
-  signature_valid: "SM2 签名验证",
-  expiry_valid: "Token 有效期",
-  nonce_valid: "Nonce 防重放",
-  call_budget_ok: "调用预算",
-  schema_hash_match: "Schema 哈希匹配",
-  scope_match: "权限范围匹配",
-  risk_level_ok: "风险等级检查"
+  signature_valid: "SM2 签名校验 / Signature",
+  expiry_valid: "Token 有效期 / Expiry",
+  nonce_valid: "Nonce 防重放 / Nonce",
+  call_budget_ok: "调用预算 / Call Budget",
+  schema_hash_match: "Schema 哈希匹配 / Schema Hash",
+  scope_match: "权限范围匹配 / Scope",
+  risk_level_ok: "风险等级检查 / Risk Level"
 };
 </script>
 
 <template>
   <el-card shadow="hover">
     <template #header>
-      <span class="font-semibold">校验流程 (7项)</span>
+      <span class="font-semibold">校验流程 / Verification Flow</span>
     </template>
     <div class="space-y-2">
       <div

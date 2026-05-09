@@ -80,6 +80,10 @@ func (l *Logger) LogResponse(requestID string, input LogResponseInput) {
 	ev.DurationMs = input.Duration.Milliseconds()
 	ev.Decision = input.Decision
 	ev.Reason = input.Reason
+	ev.GateType = input.GateType
+	ev.RiskScore = input.RiskScore
+	ev.RiskLevel = input.RiskLevel
+	ev.MatchedRules = input.MatchedRules
 	ev.Error = input.Error
 	if requestID != "" {
 		ev.RequestID = requestID
