@@ -18,10 +18,12 @@ export type GateDecision = {
   unauthorized_allow?: boolean;
 };
 
+type RawGateSummary = Record<string, unknown>;
+
 type RawGateOverview = {
-  message_gate: Record<string, number>;
-  action_gate: Record<string, number>;
-  return_gate: Record<string, number>;
+  message_gate: RawGateSummary;
+  action_gate: RawGateSummary;
+  return_gate: RawGateSummary;
   recent_decisions: GateDecision[];
 };
 
@@ -68,13 +70,31 @@ export function normalizeGateDecision(decision: GateDecision): GateDecision {
 }
 
 export function normalizeGateOverview(raw: RawGateOverview): GateOverview {
-  const buildSummary = (counts: Record<string, number>): GateSummary => {
-    const total = Object.values(counts || {}).reduce((sum, value) => sum + value, 0);
+  const readNumber = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : undefined);
+
+  const buildSummary = (summary: RawGateSummary): GateSummary => {
+    const status = typeof summary?.status === "string" ? summary.status : "online";
+    const todayCount =
+      readNumber(summary?.today_count) !== undefined
+        ? (readNumber(summary?.today_count) as number)
+        : Object.values(summary || {}).reduce<number>((sum, value) => {
+            const numeric = readNumber(value);
+            return numeric !== undefined ? sum + numeric : sum;
+          }, 0);
+    const blockCount =
+      readNumber(summary?.block_count) !== undefined
+        ? (readNumber(summary?.block_count) as number)
+        : (readNumber(summary?.Block) || 0) + (readNumber(summary?.Deny) || 0);
+    const decisionCounts =
+      summary?.decision_counts && typeof summary.decision_counts === "object"
+        ? (summary.decision_counts as Record<string, number>)
+        : (summary as Record<string, number>);
+
     return {
-      status: "online",
-      today_count: total,
-      block_count: (counts?.Block || 0) + (counts?.Deny || 0),
-      decision_counts: counts || {}
+      status,
+      today_count: todayCount,
+      block_count: blockCount,
+      decision_counts: decisionCounts || {}
     };
   };
 
