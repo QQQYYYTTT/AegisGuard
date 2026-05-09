@@ -14,7 +14,6 @@ import (
 func main() {
 	cfg := config.Load()
 
-	// 初始化 zap 日志
 	var logger *zap.Logger
 	var err error
 	if cfg.LogEncoding == "production" {
@@ -29,30 +28,28 @@ func main() {
 	}
 	defer logger.Sync()
 
-	logger.Info("【启动】启动日志编码", zap.String("encoding", cfg.LogEncoding))
-
-	logger.Info("【启动】AegisGuard 网关正在启动...")
-
-	logger.Info("【启动】配置加载完成",
+	logger.Info("startup log configured", zap.String("encoding", cfg.LogEncoding))
+	logger.Info("starting AegisGuard gateway")
+	logger.Info("configuration loaded",
 		zap.String("port", cfg.Port),
 		zap.String("gateway_config", cfg.GatewayConfigPath),
+		zap.String("token_mode", cfg.TokenMode),
 	)
 
 	if err := auth.InitSigningKey(cfg.SigningPrivateKey); err != nil {
-		logger.Fatal("【启动】初始化 RequireToken 签名密钥失败", zap.Error(err))
+		logger.Fatal("failed to initialize RequireToken signing key", zap.Error(err))
 	}
 
 	router, err := httpapi.NewRouter(cfg)
 	if err != nil {
-		logger.Fatal("【启动】构建路由失败", zap.Error(err))
+		logger.Fatal("failed to build router", zap.Error(err))
 	}
 
-	logger.Info("【启动】AegisGuard 网关启动成功",
+	logger.Info("AegisGuard gateway started",
 		zap.String("url", "http://localhost:"+cfg.Port),
-		zap.String("docs", "https://github.com/your-org/aegisguard"),
 	)
 
 	if err := http.ListenAndServe(":"+cfg.Port, router); err != nil {
-		logger.Fatal("【启动】监听失败", zap.Error(err))
+		logger.Fatal("listen failed", zap.Error(err))
 	}
 }

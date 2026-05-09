@@ -84,6 +84,9 @@ func (l *Logger) LogResponse(requestID string, input LogResponseInput) {
 	ev.RiskScore = input.RiskScore
 	ev.RiskLevel = input.RiskLevel
 	ev.MatchedRules = input.MatchedRules
+	ev.TokenStatus = input.TokenStatus
+	ev.AuthMode = input.AuthMode
+	ev.UnauthorizedAllow = input.UnauthorizedAllow
 	ev.Error = input.Error
 	if requestID != "" {
 		ev.RequestID = requestID

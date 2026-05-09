@@ -6,10 +6,17 @@ export type AuditEvent = {
   timestamp: string;
   method: string;
   path: string;
+  status_code: number;
   status: number;
   duration_ms: number;
   decision: string;
   risk_score: number;
+  risk_level?: string;
+  gate_type?: string;
+  reason?: string;
+  token_status?: string;
+  auth_mode?: "strict" | "compat" | "warn";
+  unauthorized_allow?: boolean;
   agent_id: string;
   session_id: string;
   tool_name: string;

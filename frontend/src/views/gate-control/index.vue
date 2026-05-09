@@ -81,12 +81,30 @@ onUnmounted(() => {
                     <RiskBadge :level="row.risk_level" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="risk_score" label="分数 / Score" width="100">
+                <el-table-column prop="risk_score" label="分数 / Score" width="90">
                   <template #default="{ row }">
                     {{ row.risk_score }}%
                   </template>
                 </el-table-column>
-                <el-table-column prop="reason" label="原因 / Reason" min-width="200" show-overflow-tooltip />
+                <el-table-column prop="auth_mode" label="模式 / Mode" width="110">
+                  <template #default="{ row }">
+                    <el-tag v-if="row.auth_mode" size="small" type="info">{{ row.auth_mode }}</el-tag>
+                    <span v-else class="text-gray-400">-</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="token_status" label="Token" width="120">
+                  <template #default="{ row }">
+                    <el-tag v-if="row.token_status" size="small" type="warning">{{ row.token_status }}</el-tag>
+                    <span v-else class="text-gray-400">-</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="unauthorized_allow" label="未授权 / Unauthorized" width="150">
+                  <template #default="{ row }">
+                    <el-tag v-if="row.unauthorized_allow" size="small" type="danger">allowed</el-tag>
+                    <span v-else class="text-gray-400">-</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="reason" label="原因 / Reason" min-width="220" show-overflow-tooltip />
                 <el-table-column prop="agent_id" label="Agent" width="120" />
               </el-table>
             </el-card>
@@ -121,9 +139,7 @@ onUnmounted(() => {
 
       <el-tab-pane label="消息闸门 / Message Gate" name="message">
         <el-card shadow="hover">
-          <GateController
-            :decisions="decisions.filter(d => d.gate_type === 'message')"
-          />
+          <GateController :decisions="decisions.filter(d => d.gate_type === 'message')" />
           <el-empty
             v-if="!decisions.filter(d => d.gate_type === 'message').length"
             description="暂无消息闸门决策记录"
@@ -133,17 +149,13 @@ onUnmounted(() => {
 
       <el-tab-pane label="动作闸门 / Action Gate" name="action">
         <el-card shadow="hover">
-          <GateController
-            :decisions="decisions.filter(d => d.gate_type === 'action')"
-          />
+          <GateController :decisions="decisions.filter(d => d.gate_type === 'action')" />
         </el-card>
       </el-tab-pane>
 
       <el-tab-pane label="返回闸门 / Return Gate" name="return">
         <el-card shadow="hover">
-          <GateController
-            :decisions="decisions.filter(d => d.gate_type === 'return')"
-          />
+          <GateController :decisions="decisions.filter(d => d.gate_type === 'return')" />
           <el-empty
             v-if="!decisions.filter(d => d.gate_type === 'return').length"
             description="暂无返回闸门决策记录"

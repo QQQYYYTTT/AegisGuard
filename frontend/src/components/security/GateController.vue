@@ -14,6 +14,9 @@ defineProps<{
     reason: string;
     matched_rules: string[];
     timestamp: string;
+    token_status?: string;
+    auth_mode?: string;
+    unauthorized_allow?: boolean;
   }>;
 }>();
 
@@ -40,8 +43,10 @@ function scoreColor(score: number) {
         </div>
         <span class="text-xs text-gray-400">{{ d.timestamp }}</span>
       </div>
+
       <div class="text-sm mb-2">{{ d.reason }}</div>
-      <div class="flex items-center gap-4">
+
+      <div class="flex items-center gap-4 flex-wrap">
         <div class="flex items-center gap-1">
           <span class="text-xs text-gray-500">风险分数 / Risk Score:</span>
           <el-progress
@@ -51,6 +56,7 @@ function scoreColor(score: number) {
             style="width: 100px"
           />
         </div>
+
         <div v-if="d.matched_rules.length" class="flex flex-wrap gap-1">
           <el-tag
             v-for="r in d.matched_rules"
@@ -62,6 +68,14 @@ function scoreColor(score: number) {
             {{ r }}
           </el-tag>
         </div>
+      </div>
+
+      <div v-if="d.auth_mode || d.token_status || d.unauthorized_allow" class="mt-2 flex flex-wrap gap-2">
+        <el-tag v-if="d.auth_mode" size="small" type="info">模式 / Mode: {{ d.auth_mode }}</el-tag>
+        <el-tag v-if="d.token_status" size="small" type="warning">Token: {{ d.token_status }}</el-tag>
+        <el-tag v-if="d.unauthorized_allow" size="small" type="danger">
+          未授权放行 / Unauthorized Allow
+        </el-tag>
       </div>
     </div>
   </div>

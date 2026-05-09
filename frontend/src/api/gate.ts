@@ -13,6 +13,9 @@ export type GateDecision = {
   reason: string;
   tool_name?: string;
   agent_id?: string;
+  token_status?: string;
+  auth_mode?: "strict" | "compat" | "warn";
+  unauthorized_allow?: boolean;
 };
 
 type RawGateOverview = {

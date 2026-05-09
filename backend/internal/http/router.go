@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"aegisguard/internal/auth"
 	"aegisguard/internal/audit"
+	"aegisguard/internal/auth"
 	"aegisguard/internal/config"
 	"aegisguard/internal/contract"
 	"aegisguard/internal/gates"
@@ -35,29 +35,18 @@ func (w bodyLogWriter) Write(b []byte) (int, error) {
 }
 
 type Router struct {
-<<<<<<< HEAD
-	engine     *gin.Engine
-	proxy      *gateway.AegisProxy
-	vkeyMgr    *vkey.Manager
-	auditor    *audit.Logger
-	auditStore *audit.Store // 直接持有 Store 引用，用于 /audit/logs 读取
-	tokenStore *auth.TokenStore
-	verifier   *auth.Verifier
-	logger     *zap.Logger
-	targetURL  string
-	cfg        config.Config // 保存配置引用，用于判断运行模式
-=======
 	engine        *gin.Engine
 	proxy         *gateway.AegisProxy
 	vkeyMgr       *vkey.Manager
 	auditor       *audit.Logger
-	auditStore    *audit.Store // 直接持有 Store 引用，用于 /audit/logs 读取
+	auditStore    *audit.Store
+	tokenStore    *auth.TokenStore
+	verifier      *auth.Verifier
 	gateQuery     contract.GateQuery
 	gateEvaluator contract.GateEvaluator
 	logger        *zap.Logger
 	targetURL     string
-	cfg           config.Config // 保存配置引用，用于判断运行模式
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
+	cfg           config.Config
 }
 
 func NewRouter(cfg config.Config) (*Router, error) {
@@ -76,23 +65,18 @@ func NewRouter(cfg config.Config) (*Router, error) {
 		return nil, err
 	}
 
-	// 根据配置覆盖日志级别
 	logLevel := getZapLevel(cfg.LogLevel)
 	logger = logger.WithOptions(zap.IncreaseLevel(logLevel))
 
 	vkeyMgr, err := vkey.NewManager(logger, cfg.GatewayConfigPath)
 	if err != nil {
-		logger.Fatal("网关凭据配置加载失败", zap.Error(err))
+		logger.Fatal("gateway credential config load failed", zap.Error(err))
 		return nil, err
 	}
 
-	// 初始化审计存储
 	auditStore, err := audit.NewStore(cfg.AuditFile)
 	if err != nil {
-		logger.Warn("审计存储初始化失败，审计功能将不可用",
-			zap.String("file", cfg.AuditFile),
-			zap.Error(err),
-		)
+		logger.Warn("audit store init failed", zap.String("file", cfg.AuditFile), zap.Error(err))
 	}
 	auditor := audit.NewLogger(auditStore)
 
@@ -103,49 +87,36 @@ func NewRouter(cfg config.Config) (*Router, error) {
 	tokenStore := auth.NewTokenStore()
 	verifier := auth.NewVerifier()
 
-	proxy, err := gateway.NewAegisProxy(vkeyMgr.GetTargetURL(), vkeyMgr, tokenStore, logger)
+	proxy, err := gateway.NewAegisProxy(vkeyMgr.GetTargetURL(), vkeyMgr, tokenStore, cfg.TokenMode, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	// 创建门控查询和评估器
 	decisionStore := proxy.GetDecisionStore()
 	gateQuery := gates.NewGateQuery(decisionStore)
 	gateEvaluator := gates.NewGateEvaluator(
 		gates.NewMessageGate(),
-		gates.NewActionGate(logger),
+		gates.NewActionGateWithMode(logger, cfg.TokenMode),
 		gates.NewReturnGate(),
 		decisionStore,
 	)
 
 	router := &Router{
-<<<<<<< HEAD
-		engine:     engine,
-		proxy:      proxy,
-		vkeyMgr:    vkeyMgr,
-		auditor:    auditor,
-		auditStore: auditStore,
-		tokenStore: tokenStore,
-		verifier:   verifier,
-		logger:     logger,
-		targetURL:  vkeyMgr.GetTargetURL(),
-		cfg:        cfg,
-=======
 		engine:        engine,
 		proxy:         proxy,
 		vkeyMgr:       vkeyMgr,
 		auditor:       auditor,
 		auditStore:    auditStore,
+		tokenStore:    tokenStore,
+		verifier:      verifier,
 		gateQuery:     gateQuery,
 		gateEvaluator: gateEvaluator,
 		logger:        logger,
 		targetURL:     vkeyMgr.GetTargetURL(),
 		cfg:           cfg,
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 	}
 
 	router.registerRoutes()
-
 	return router, nil
 }
 
@@ -159,7 +130,6 @@ func (r *Router) registerRoutes() {
 	r.engine.GET("/aegis/audit/chains", r.handleAuditChains)
 	r.engine.GET("/aegis/audit/stats", r.handleAuditStats)
 
-	// 门控相关API
 	r.engine.GET("/aegis/gate/overview", r.handleGateOverview)
 	r.engine.GET("/aegis/gate/decisions", r.handleGateDecisions)
 	r.engine.POST("/aegis/gate/evaluate", r.handleGateEvaluate)
@@ -184,8 +154,6 @@ func (r *Router) handleProxy(c *gin.Context) {
 	path := c.Request.URL.Path
 	method := c.Request.Method
 	clientIP := c.ClientIP()
-
-	// 生成请求唯一 ID 用于审计事件关联
 	requestID := uuid.New().String()
 
 	bodyBytes, _ := c.GetRawData()
@@ -194,7 +162,7 @@ func (r *Router) handleProxy(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	gatewayKey := vkey.ExtractGatewayKey(authHeader)
 
-	r.logger.Info("收到 Agent 请求",
+	r.logger.Info("received agent request",
 		zap.String("request_id", requestID),
 		zap.String("method", method),
 		zap.String("path", path),
@@ -202,7 +170,6 @@ func (r *Router) handleProxy(c *gin.Context) {
 		zap.Int("body_size", len(bodyBytes)),
 	)
 
-	// 记录请求审计事件（还不会写入 Store，仅缓存）
 	r.auditor.LogRequest(audit.LogInput{
 		RequestID:  requestID,
 		GatewayKey: gatewayKey,
@@ -213,46 +180,26 @@ func (r *Router) handleProxy(c *gin.Context) {
 	})
 
 	if gatewayKey == "" {
-		r.logger.Error("请求缺少网关密钥",
-			zap.String("request_id", requestID),
-			zap.String("ip", clientIP),
-			zap.String("path", path),
-		)
 		r.auditor.LogResponse(requestID, audit.LogResponseInput{
 			StatusCode: http.StatusUnauthorized,
 			Duration:   time.Since(start),
 			Decision:   "block",
-			Reason:     "缺少网关密钥",
+			Reason:     "missing gateway key",
 		})
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "缺少网关密钥，请求头格式: Authorization: Bearer agk-xxx",
-		})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing gateway key, expected Authorization: Bearer agk-xxx"})
 		return
 	}
 
 	if !r.vkeyMgr.ValidateGatewayKey(gatewayKey) {
-		r.logger.Error("网关密钥验证失败",
-			zap.String("request_id", requestID),
-			zap.String("gateway_key", gatewayKey),
-			zap.String("ip", clientIP),
-		)
 		r.auditor.LogResponse(requestID, audit.LogResponseInput{
 			StatusCode: http.StatusUnauthorized,
 			Duration:   time.Since(start),
 			Decision:   "block",
-			Reason:     "网关密钥无效",
+			Reason:     "invalid gateway key",
 		})
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "网关密钥无效，请检查 agent 配置中的 OPENAI_API_KEY 是否与网关 gateway_key 一致",
-		})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid gateway key"})
 		return
 	}
-
-	r.logger.Debug("网关密钥验证通过",
-		zap.String("request_id", requestID),
-		zap.String("gateway_key", gatewayKey),
-		zap.String("ip", clientIP),
-	)
 
 	ctx := context.WithValue(c.Request.Context(), "gateway_key", r.vkeyMgr.GatewayKeyID())
 	ctx = context.WithValue(ctx, "request_id", requestID)
@@ -260,13 +207,12 @@ func (r *Router) handleProxy(c *gin.Context) {
 
 	blw := &bodyLogWriter{body: bytes.NewBufferString(""), ResponseWriter: c.Writer}
 	c.Writer = blw
-
 	r.proxy.ServeHTTP(c.Writer, c.Request)
 
 	duration := time.Since(start)
 	statusCode := c.Writer.Status()
 
-	r.logger.Info("请求处理完成",
+	r.logger.Info("request completed",
 		zap.String("request_id", requestID),
 		zap.String("method", method),
 		zap.String("path", path),
@@ -276,14 +222,17 @@ func (r *Router) handleProxy(c *gin.Context) {
 	)
 
 	r.auditor.LogResponse(requestID, audit.LogResponseInput{
-		StatusCode:   statusCode,
-		Duration:     duration,
-		Decision:     firstNonEmpty(c.Writer.Header().Get("X-Aegis-Decision"), "allow"),
-		Reason:       c.Writer.Header().Get("X-Aegis-Reason"),
-		GateType:     c.Writer.Header().Get("X-Aegis-Gate-Type"),
-		RiskScore:    parseOptionalInt(c.Writer.Header().Get("X-Aegis-Risk-Score")),
-		RiskLevel:    c.Writer.Header().Get("X-Aegis-Risk-Level"),
-		MatchedRules: splitCSV(c.Writer.Header().Get("X-Aegis-Matched-Rules")),
+		StatusCode:        statusCode,
+		Duration:          duration,
+		Decision:          firstNonEmpty(c.Writer.Header().Get("X-Aegis-Decision"), "allow"),
+		Reason:            c.Writer.Header().Get("X-Aegis-Reason"),
+		GateType:          c.Writer.Header().Get("X-Aegis-Gate-Type"),
+		RiskScore:         parseOptionalInt(c.Writer.Header().Get("X-Aegis-Risk-Score")),
+		RiskLevel:         c.Writer.Header().Get("X-Aegis-Risk-Level"),
+		MatchedRules:      splitCSV(c.Writer.Header().Get("X-Aegis-Matched-Rules")),
+		TokenStatus:       c.Writer.Header().Get("X-Aegis-Token-Status"),
+		AuthMode:          c.Writer.Header().Get("X-Aegis-Auth-Mode"),
+		UnauthorizedAllow: strings.EqualFold(c.Writer.Header().Get("X-Aegis-Unauthorized-Allow"), "true"),
 	})
 }
 
@@ -304,48 +253,33 @@ func (r *Router) handleAuditLogs(c *gin.Context) {
 	}
 
 	if r.auditStore == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"logs":  []audit.AuditEvent{},
-			"total": 0,
-			"note":  "审计存储未初始化",
-		})
+		c.JSON(http.StatusOK, gin.H{"logs": []audit.AuditEvent{}, "total": 0, "note": "audit store not initialized"})
 		return
 	}
 
 	allEvents, err := r.auditStore.ReadAll()
 	if err != nil {
-		r.logger.Error("读取审计日志失败", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "读取审计日志失败",
-		})
+		r.logger.Error("read audit logs failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "read audit logs failed"})
 		return
 	}
 
-	// 按时间降序取前 limit 条
 	display := allEvents
 	if len(display) > limit {
 		display = display[:limit]
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"logs":  display,
-		"total": len(allEvents),
-	})
+	c.JSON(http.StatusOK, gin.H{"logs": display, "total": len(allEvents)})
 }
 
 func (r *Router) handleGateOverview(c *gin.Context) {
 	overview, err := r.gateQuery.Overview()
 	if err != nil {
-		r.logger.Error("获取门控概览失败", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "获取门控概览失败",
-		})
+		r.logger.Error("get gate overview failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "get gate overview failed"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    overview,
-	})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": overview})
 }
 
 func (r *Router) handleGateDecisions(c *gin.Context) {
@@ -360,22 +294,16 @@ func (r *Router) handleGateDecisions(c *gin.Context) {
 
 	decisions, err := r.gateQuery.Decisions(limit, gateType, action)
 	if err != nil {
-		r.logger.Error("获取门控决策失败", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "获取门控决策失败",
-		})
+		r.logger.Error("get gate decisions failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "get gate decisions failed"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    decisions,
-		"total":   len(decisions),
-	})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": decisions, "total": len(decisions)})
 }
 
 func (r *Router) handleGateEvaluate(c *gin.Context) {
 	var req struct {
-		Type     string                 `json:"type"` // "message", "action", "return"
+		Type     string                 `json:"type"`
 		Body     json.RawMessage        `json:"body,omitempty"`
 		Content  string                 `json:"content,omitempty"`
 		ToolName string                 `json:"tool_name,omitempty"`
@@ -384,15 +312,12 @@ func (r *Router) handleGateEvaluate(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "无效的请求体",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
 	var decision interfaces.Decision
 	var reason string
-	var err error
 
 	switch req.Type {
 	case "message":
@@ -406,17 +331,7 @@ func (r *Router) handleGateEvaluate(c *gin.Context) {
 	case "return":
 		decision, reason = r.gateEvaluator.EvaluateReturn(buildEvaluationBody(req.Body, req.Content))
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "无效的门控类型",
-		})
-		return
-	}
-
-	if err != nil {
-		r.logger.Error("门控评估失败", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "门控评估失败",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gate type"})
 		return
 	}
 
@@ -441,14 +356,10 @@ func buildEvaluationBody(raw json.RawMessage, content string) []byte {
 	if len(raw) > 0 && string(raw) != "null" {
 		return raw
 	}
-
 	if strings.TrimSpace(content) == "" {
 		return []byte(`{}`)
 	}
-
-	body, err := json.Marshal(map[string]string{
-		"content": content,
-	})
+	body, err := json.Marshal(map[string]string{"content": content})
 	if err != nil {
 		return []byte(`{}`)
 	}
@@ -557,7 +468,6 @@ func parseOptionalInt(value string) int {
 	return n
 }
 
-// parseInt 简单整数解析，错误时返回默认值
 func parseInt(s string) (int, error) {
 	n := 0
 	for _, c := range s {
@@ -569,7 +479,6 @@ func parseInt(s string) (int, error) {
 	return n, nil
 }
 
-// requestLogger Gin 中间件：记录每个 HTTP 请求的耗时和状态（DEBUG 级别，避免终端刷屏）
 func requestLogger(logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -587,7 +496,7 @@ func requestLogger(logger *zap.Logger) gin.HandlerFunc {
 			path = path + "?" + raw
 		}
 
-		logger.Debug("HTTP请求",
+		logger.Debug("http request",
 			zap.String("client_ip", clientIP),
 			zap.String("method", method),
 			zap.String("path", path),
@@ -605,7 +514,6 @@ func (r *Router) Engine() *gin.Engine {
 	return r.engine
 }
 
-// getZapLevel 将字符串级别转换为 zapcore.Level
 func getZapLevel(level string) zapcore.Level {
 	switch level {
 	case "debug":

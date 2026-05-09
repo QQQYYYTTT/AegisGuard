@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import AttackTimeline from "@/components/audit/AttackTimeline.vue";
-import EvidenceCard from "@/components/audit/EvidenceCard.vue";
 import StatCard from "@/components/common/StatCard.vue";
 import { useAuditStream } from "@/hooks/useAuditStream";
 
@@ -26,25 +25,13 @@ onUnmounted(() => {
 
     <el-row :gutter="16" class="mb-4">
       <el-col :span="6">
-        <StatCard
-          title="总事件数 / Total Events"
-          :value="stats?.total_events || 0"
-          color="var(--aegis-primary)"
-        />
+        <StatCard title="总事件数 / Total Events" :value="stats?.total_events || 0" color="var(--aegis-primary)" />
       </el-col>
       <el-col :span="6">
-        <StatCard
-          title="今日事件 / Today Events"
-          :value="stats?.today_events || 0"
-          color="var(--aegis-info)"
-        />
+        <StatCard title="今日事件 / Today Events" :value="stats?.today_events || 0" color="var(--aegis-info)" />
       </el-col>
       <el-col :span="6">
-        <StatCard
-          title="攻击链数 / Attack Chains"
-          :value="stats?.attack_chains || 0"
-          color="var(--aegis-danger)"
-        />
+        <StatCard title="攻击链数 / Attack Chains" :value="stats?.attack_chains || 0" color="var(--aegis-danger)" />
       </el-col>
       <el-col :span="6">
         <StatCard
@@ -63,15 +50,8 @@ onUnmounted(() => {
             <span class="font-semibold">攻击链 / Attack Chains</span>
           </template>
           <div v-loading="loading" class="space-y-4">
-            <AttackTimeline
-              v-for="chain in attackChains"
-              :key="chain.chain_id"
-              :chain="chain"
-            />
-            <el-empty
-              v-if="!attackChains.length && !loading"
-              description="暂未检测到攻击链"
-            />
+            <AttackTimeline v-for="chain in attackChains" :key="chain.chain_id" :chain="chain" />
+            <el-empty v-if="!attackChains.length && !loading" description="暂未检测到攻击链" />
           </div>
         </el-card>
       </el-col>
@@ -89,17 +69,11 @@ onUnmounted(() => {
               <span class="text-sm">{{ decision }}</span>
               <div class="flex items-center gap-2">
                 <el-progress
-                  :percentage="
-                    Math.round(
-                      (count / (stats.today_events || 1)) * 100
-                    )
-                  "
+                  :percentage="Math.round((count / (stats.today_events || 1)) * 100)"
                   :stroke-width="6"
                   style="width: 100px"
                 />
-                <span class="text-xs text-gray-500 w-8 text-right">
-                  {{ count }}
-                </span>
+                <span class="text-xs text-gray-500 w-8 text-right">{{ count }}</span>
               </div>
             </div>
           </div>
@@ -133,43 +107,42 @@ onUnmounted(() => {
             {{ new Date(row.timestamp).toLocaleString() }}
           </template>
         </el-table-column>
-        <el-table-column prop="event_type" label="类型 / Type" width="120">
+        <el-table-column prop="gate_type" label="闸门 / Gate" width="110">
           <template #default="{ row }">
-            <el-tag
-              size="small"
-              :type="
-                row.event_type === 'block'
-                  ? 'danger'
-                  : row.event_type === 'allow'
-                    ? 'success'
-                    : 'info'
-              "
-            >
-              {{ row.event_type }}
-            </el-tag>
+            <el-tag size="small" type="info">{{ row.gate_type || "-" }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="decision" label="决策 / Decision" width="120" />
-        <el-table-column prop="risk_score" label="风险 / Risk" width="80">
+        <el-table-column prop="risk_level" label="级别 / Level" width="100">
           <template #default="{ row }">
-            {{ Math.round(row.risk_score * 100) }}%
+            {{ row.risk_level || "-" }}
           </template>
         </el-table-column>
-        <el-table-column prop="agent_id" label="Agent" width="120" />
-        <el-table-column prop="tool_name" label="工具 / Tool" width="120" />
-        <el-table-column
-          prop="description"
-          label="描述 / Description"
-          min-width="250"
-          show-overflow-tooltip
-        />
-        <el-table-column prop="status" label="状态 / HTTP" width="80">
+        <el-table-column prop="risk_score" label="分数 / Score" width="90" />
+        <el-table-column prop="auth_mode" label="模式 / Mode" width="110">
           <template #default="{ row }">
-            <el-tag
-              :type="row.status < 400 ? 'success' : 'danger'"
-              size="small"
-            >
-              {{ row.status }}
+            <el-tag v-if="row.auth_mode" size="small" type="info">{{ row.auth_mode }}</el-tag>
+            <span v-else class="text-gray-400">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="token_status" label="Token" width="120">
+          <template #default="{ row }">
+            <el-tag v-if="row.token_status" size="small" type="warning">{{ row.token_status }}</el-tag>
+            <span v-else class="text-gray-400">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="unauthorized_allow" label="未授权 / Unauthorized" width="150">
+          <template #default="{ row }">
+            <el-tag v-if="row.unauthorized_allow" size="small" type="danger">allowed</el-tag>
+            <span v-else class="text-gray-400">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="tool_name" label="工具 / Tool" width="120" />
+        <el-table-column prop="reason" label="原因 / Reason" min-width="260" show-overflow-tooltip />
+        <el-table-column prop="status_code" label="状态 / HTTP" width="90">
+          <template #default="{ row }">
+            <el-tag :type="(row.status_code || row.status) < 400 ? 'success' : 'danger'" size="small">
+              {{ row.status_code || row.status }}
             </el-tag>
           </template>
         </el-table-column>
