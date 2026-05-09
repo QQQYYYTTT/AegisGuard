@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"aegisguard/internal/auth"
 	"aegisguard/internal/audit"
+	"aegisguard/internal/auth"
 	"aegisguard/internal/config"
 	"aegisguard/internal/contract"
 	"aegisguard/internal/gates"
@@ -35,29 +35,18 @@ func (w bodyLogWriter) Write(b []byte) (int, error) {
 }
 
 type Router struct {
-<<<<<<< HEAD
-	engine     *gin.Engine
-	proxy      *gateway.AegisProxy
-	vkeyMgr    *vkey.Manager
-	auditor    *audit.Logger
-	auditStore *audit.Store // 直接持有 Store 引用，用于 /audit/logs 读取
-	tokenStore *auth.TokenStore
-	verifier   *auth.Verifier
-	logger     *zap.Logger
-	targetURL  string
-	cfg        config.Config // 保存配置引用，用于判断运行模式
-=======
 	engine        *gin.Engine
 	proxy         *gateway.AegisProxy
 	vkeyMgr       *vkey.Manager
 	auditor       *audit.Logger
 	auditStore    *audit.Store // 直接持有 Store 引用，用于 /audit/logs 读取
+	tokenStore    *auth.TokenStore
+	verifier      *auth.Verifier
 	gateQuery     contract.GateQuery
 	gateEvaluator contract.GateEvaluator
 	logger        *zap.Logger
 	targetURL     string
 	cfg           config.Config // 保存配置引用，用于判断运行模式
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 }
 
 func NewRouter(cfg config.Config) (*Router, error) {
@@ -119,29 +108,18 @@ func NewRouter(cfg config.Config) (*Router, error) {
 	)
 
 	router := &Router{
-<<<<<<< HEAD
-		engine:     engine,
-		proxy:      proxy,
-		vkeyMgr:    vkeyMgr,
-		auditor:    auditor,
-		auditStore: auditStore,
-		tokenStore: tokenStore,
-		verifier:   verifier,
-		logger:     logger,
-		targetURL:  vkeyMgr.GetTargetURL(),
-		cfg:        cfg,
-=======
 		engine:        engine,
 		proxy:         proxy,
 		vkeyMgr:       vkeyMgr,
 		auditor:       auditor,
 		auditStore:    auditStore,
+		tokenStore:    tokenStore,
+		verifier:      verifier,
 		gateQuery:     gateQuery,
 		gateEvaluator: gateEvaluator,
 		logger:        logger,
 		targetURL:     vkeyMgr.GetTargetURL(),
 		cfg:           cfg,
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 	}
 
 	router.registerRoutes()

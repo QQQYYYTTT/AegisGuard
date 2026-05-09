@@ -30,15 +30,6 @@ type gateResult struct {
 }
 
 type AegisProxy struct {
-<<<<<<< HEAD
-	target      *url.URL
-	proxy       *httputil.ReverseProxy
-	vkeyMgr     *vkey.Manager
-	messageGate MessageEvaluator
-	actionGate  ActionEvaluator
-	tokenIssuer TokenIssuer
-	logger      *zap.Logger
-=======
 	target        *url.URL
 	proxy         *httputil.ReverseProxy
 	vkeyMgr       *vkey.Manager
@@ -46,8 +37,8 @@ type AegisProxy struct {
 	actionGate    ActionEvaluator
 	returnGate    ReturnEvaluator
 	decisionStore *gates.DecisionStore
+	tokenIssuer   TokenIssuer
 	logger        *zap.Logger
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 }
 
 func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIssuer, logger *zap.Logger) (*AegisProxy, error) {
@@ -60,22 +51,14 @@ func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIss
 	}
 
 	ap := &AegisProxy{
-<<<<<<< HEAD
-		target:      target,
-		vkeyMgr:     vkeyMgr,
-		messageGate: gates.NewMessageGate(),
-		actionGate:  gates.NewActionGate(logger),
-		tokenIssuer: tokenIssuer,
-		logger:      logger,
-=======
 		target:        target,
 		vkeyMgr:       vkeyMgr,
 		messageGate:   gates.NewMessageGate(),
 		actionGate:    gates.NewActionGate(logger),
 		returnGate:    gates.NewReturnGate(),
 		decisionStore: gates.NewDecisionStore(1000),
+		tokenIssuer:   tokenIssuer,
 		logger:        logger,
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 	}
 
 	ap.proxy = httputil.NewSingleHostReverseProxy(target)
@@ -97,15 +80,12 @@ func (ap *AegisProxy) director(req *http.Request) {
 	req.Host = ap.target.Host
 	req.URL.Scheme = ap.target.Scheme
 	req.URL.Host = ap.target.Host
-<<<<<<< HEAD
-=======
 
 	ap.logger.Debug("gateway credential replaced",
 		zap.String("original_auth", maskedAuth),
 		zap.String("target_host", ap.target.Host),
 		zap.String("target_path", req.URL.Path),
 	)
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 }
 
 func (ap *AegisProxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) {
@@ -137,9 +117,6 @@ func (ap *AegisProxy) isToolCall(path string, body []byte) bool {
 	return strings.Contains(path, "/tools") || hasToolCalls(req.Messages)
 }
 
-<<<<<<< HEAD
-func (ap *AegisProxy) handleChatRequest(req *http.Request, body []byte) (int, map[string]interface{}, bool) {
-=======
 func hasToolCalls(messages []struct {
 	ToolCalls []interface{} `json:"tool_calls"`
 }) bool {
@@ -152,16 +129,11 @@ func hasToolCalls(messages []struct {
 }
 
 func (ap *AegisProxy) handleChatRequest(req *http.Request, body []byte) (gateResult, bool) {
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 	decision, reason := ap.messageGate.Evaluate(body)
 	result := ap.newGateResult("message", decision, reason, http.StatusOK)
 	ap.recordDecision(req, result, "", "")
 
 	switch decision {
-<<<<<<< HEAD
-	case gates.Block:
-		return ap.blockRequest(req, reason)
-=======
 	case gates.Block, gates.Deny:
 		ap.blockRequest(req, reason)
 		result.StatusCode = http.StatusForbidden
@@ -170,58 +142,28 @@ func (ap *AegisProxy) handleChatRequest(req *http.Request, body []byte) (gateRes
 		ap.blockRequest(req, reason)
 		result.StatusCode = http.StatusAccepted
 		return result, false
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 	case gates.Degrade:
 		ap.degradeRequest(req, body)
 		return result, true
 	case gates.Allow:
 		ap.logger.Debug("Message Gate allow", zap.String("reason", reason))
 	}
-<<<<<<< HEAD
-	return 0, nil, false
-}
-
-func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) (int, map[string]interface{}, bool) {
-	toolName, params := ap.extractToolCall(body)
-	if toolName == "" {
-		return http.StatusBadRequest, map[string]interface{}{
-			"error": map[string]interface{}{
-				"message": "tool call detected but tool name is empty",
-				"type":    "invalid_tool_call",
-			},
-		}, true
-	}
-
-	if err := ap.injectToken(req, toolName, params); err != nil {
-		ap.logger.Error("签发或注入 RequireToken 失败", zap.String("tool", toolName), zap.Error(err))
-		return http.StatusInternalServerError, map[string]interface{}{
-			"error": map[string]interface{}{
-				"message": "failed to issue require token: " + err.Error(),
-				"type":    "token_issue_error",
-			},
-		}, true
-	}
-
-=======
 	return result, true
 }
 
 func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) (gateResult, bool) {
 	toolName, params := ap.extractToolCall(body)
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
+	if toolName == "" {
+		result := ap.newGateResult("action", gates.Deny, "tool call detected but tool name is empty", http.StatusBadRequest)
+		ap.recordDecision(req, result, toolName, "")
+		return result, false
+	}
+
 	decision, reason := ap.actionGate.Evaluate(toolName, params, req.Header)
 	result := ap.newGateResult("action", decision, reason, http.StatusOK)
 	ap.recordDecision(req, result, toolName, "")
 
 	switch decision {
-<<<<<<< HEAD
-	case gates.Deny:
-		return ap.denyToolCall(req, reason)
-	case gates.HumanApproval:
-		return ap.holdForApproval(req, toolName)
-	case gates.Allow:
-		return 0, nil, false
-=======
 	case gates.Block, gates.Deny:
 		ap.denyToolCall(req, reason)
 		result.StatusCode = http.StatusForbidden
@@ -234,22 +176,19 @@ func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) (gateResult
 		ap.degradeRequest(req, body)
 		return result, true
 	case gates.Allow:
-		ap.injectToken(req, toolName, params)
+		if err := ap.injectToken(req, toolName, params); err != nil {
+			ap.logger.Error("failed to issue or inject RequireToken", zap.String("tool", toolName), zap.Error(err))
+			result := ap.newGateResult("action", gates.Deny, "failed to issue require token: "+err.Error(), http.StatusInternalServerError)
+			ap.recordDecision(req, result, toolName, "")
+			return result, false
+		}
 		return result, true
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 	default:
 		ap.logger.Warn("unknown Action Gate decision",
 			zap.Any("decision", decision),
 			zap.String("tool", toolName),
 		)
 	}
-<<<<<<< HEAD
-	return 0, nil, false
-}
-
-func (ap *AegisProxy) blockRequest(req *http.Request, reason string) (int, map[string]interface{}, bool) {
-	ap.logger.Warn("请求被阻断",
-=======
 	return result, true
 }
 
@@ -267,6 +206,9 @@ func (ap *AegisProxy) newGateResult(gateType string, decision gates.Decision, re
 }
 
 func (ap *AegisProxy) recordDecision(req *http.Request, result gateResult, toolName, agentID string) {
+	if ap.decisionStore == nil {
+		return
+	}
 	ap.decisionStore.Add(interfaces.GateDecision{
 		RequestID:    requestIDFromContext(req),
 		Timestamp:    time.Now(),
@@ -293,16 +235,9 @@ func requestIDFromContext(req *http.Request) string {
 
 func (ap *AegisProxy) blockRequest(req *http.Request, reason string) {
 	ap.logger.Warn("request blocked",
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 		zap.String("reason", reason),
 		zap.String("path", req.URL.Path),
 	)
-	return http.StatusForbidden, map[string]interface{}{
-		"error": map[string]interface{}{
-			"message": reason,
-			"type":    "message_gate_blocked",
-		},
-	}, true
 }
 
 func (ap *AegisProxy) degradeRequest(req *http.Request, body []byte) {
@@ -358,45 +293,23 @@ func regexpReplace(pattern, text, replacement string) string {
 	return re.ReplaceAllString(text, replacement)
 }
 
-<<<<<<< HEAD
-func (ap *AegisProxy) denyToolCall(req *http.Request, reason string) (int, map[string]interface{}, bool) {
-	ap.logger.Warn("工具调用被拒绝",
-=======
 func (ap *AegisProxy) denyToolCall(req *http.Request, reason string) {
 	ap.logger.Warn("tool call denied",
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 		zap.String("reason", reason),
 		zap.String("path", req.URL.Path),
 	)
-	return http.StatusForbidden, map[string]interface{}{
-		"error": map[string]interface{}{
-			"message": reason,
-			"type":    "tool_call_denied",
-		},
-	}, true
 }
 
-<<<<<<< HEAD
-func (ap *AegisProxy) holdForApproval(req *http.Request, toolName string) (int, map[string]interface{}, bool) {
-	ap.logger.Info("工具调用等待人工审批",
-=======
 func (ap *AegisProxy) holdForApproval(req *http.Request, toolName string) {
 	ap.logger.Info("tool call waiting for human approval",
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 		zap.String("tool", toolName),
 		zap.String("path", req.URL.Path),
 	)
-	return http.StatusForbidden, map[string]interface{}{
-		"error": map[string]interface{}{
-			"message": "tool call requires human approval",
-			"type":    "human_approval_required",
-		},
-	}, true
 }
 
-<<<<<<< HEAD
 func (ap *AegisProxy) injectToken(req *http.Request, toolName string, params map[string]interface{}) error {
 	if ap.tokenIssuer == nil {
+		req.Header.Set("X-Aegis-Token-Status", "skipped")
 		return nil
 	}
 
@@ -421,16 +334,11 @@ func (ap *AegisProxy) injectToken(req *http.Request, toolName string, params map
 	}
 	req.Header.Set("X-Aegis-Token", string(payload))
 
-	ap.logger.Debug("注入 RequireToken",
+	ap.logger.Debug("RequireToken injected",
 		zap.String("tool", toolName),
 		zap.String("token_id", token.Nonce),
 	)
 	return nil
-=======
-func (ap *AegisProxy) injectToken(req *http.Request, toolName string, params map[string]interface{}) {
-	req.Header.Set("X-Aegis-Token-Status", "skipped")
-	ap.logger.Debug("RequireToken skipped", zap.String("tool", toolName))
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 }
 
 func (ap *AegisProxy) extractToolCall(body []byte) (string, map[string]interface{}) {
@@ -470,7 +378,7 @@ func (ap *AegisProxy) extractToolCall(body []byte) (string, map[string]interface
 }
 
 func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
-	if resp.Body == nil {
+	if resp.Body == nil || ap.returnGate == nil {
 		return nil
 	}
 	if encoding := resp.Header.Get("Content-Encoding"); encoding != "" && encoding != "identity" {
@@ -512,31 +420,6 @@ func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
 func (ap *AegisProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-<<<<<<< HEAD
-		ap.logger.Error("读取请求体失败", zap.Error(err))
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": map[string]interface{}{
-				"message": "failed to read request body",
-				"type":    "bad_request",
-			},
-		})
-		return
-	}
-
-	r.Body = io.NopCloser(bytes.NewBuffer(body))
-
-	if ap.isChatCompletion(r.URL.Path) {
-		if status, payload, blocked := ap.handleChatRequest(r, body); blocked {
-			w.WriteHeader(status)
-			_ = json.NewEncoder(w).Encode(payload)
-			return
-		}
-	} else if ap.isToolCall(r.URL.Path, body) {
-		if status, payload, blocked := ap.handleToolCall(r, body); blocked {
-			w.WriteHeader(status)
-			_ = json.NewEncoder(w).Encode(payload)
-=======
 		result := ap.newGateResult("message", gates.Block, "failed to read request body", http.StatusBadRequest)
 		ap.writeGateResponse(w, result)
 		return
@@ -555,15 +438,10 @@ func (ap *AegisProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		setGateHeaders(w.Header(), result)
 		if !ok {
 			ap.writeGateResponse(w, result)
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 			return
 		}
 	}
 
-<<<<<<< HEAD
-	r.Body = io.NopCloser(bytes.NewBuffer(body))
-=======
->>>>>>> b0d8dea15d7ddcc5a9e330a5ac3b7137a370a58d
 	ap.proxy.ServeHTTP(w, r)
 }
 
