@@ -7,7 +7,7 @@ export default {
   redirect: "/auth-center/index",
   meta: {
     icon: "ep:lock",
-    title: "国密授权中心",
+    title: "自动处置中心",
     rank: 3
   },
   children: [
@@ -16,7 +16,7 @@ export default {
       name: "AuthCenterIndex",
       component: () => import("@/views/auth-center/index.vue"),
       meta: {
-        title: "国密授权中心"
+        title: "自动处置中心"
       }
     }
   ]

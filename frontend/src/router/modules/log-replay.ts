@@ -7,7 +7,7 @@ export default {
   redirect: "/log-replay/index",
   meta: {
     icon: "ep:timer",
-    title: "日志回放",
+    title: "攻击日志回放",
     rank: 7
   },
   children: [
@@ -16,7 +16,7 @@ export default {
       name: "LogReplayIndex",
       component: () => import("@/views/log-replay/index.vue"),
       meta: {
-        title: "日志回放"
+        title: "攻击日志回放"
       }
     }
   ]

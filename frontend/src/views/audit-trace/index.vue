@@ -1,13 +1,109 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import AttackTimeline from "@/components/audit/AttackTimeline.vue";
+import EvidenceCard from "@/components/audit/EvidenceCard.vue";
 import StatCard from "@/components/common/StatCard.vue";
 import { useAuditStream } from "@/hooks/useAuditStream";
+import type { AuditEvent, AttackChain } from "@/api/audit";
 
 defineOptions({ name: "AuditTraceIndex" });
 
 const { events, attackChains, stats, loadLogs, loadChains, loadStats, loading, startPolling, stopPolling } =
   useAuditStream();
+
+const selectedChain = ref<AttackChain | null>(null);
+const activeTab = ref("summary");
+
+const selectedEvent = ref<AuditEvent | null>(null);
+
+const chainSummary = computed(() => {
+  if (!selectedChain.value) return null;
+  const chain = selectedChain.value;
+  const totalEvents = chain.events.length;
+  const blockedEvents = chain.events.filter(e => e.decision === "Deny" || e.decision === "Block").length;
+  const authEvents = chain.events.filter(e => e.event_type === "authorization").length;
+  const sandboxEvents = chain.events.filter(e => e.event_type === "sandbox").length;
+  const gateEvents = chain.events.filter(e => e.event_type === "gate").length;
+  
+  const uniqueAgents = [...new Set(chain.events.map(e => e.agent_id).filter(Boolean))];
+  const uniqueIPs = [...new Set(chain.events.map(e => (e as any).client_ip).filter(Boolean))];
+  const uniqueHosts = [...new Set(chain.events.map(e => (e as any).host).filter(Boolean))];
+  
+  return {
+    chainId: chain.chain_id,
+    severity: chain.severity,
+    summary: chain.summary,
+    totalEvents,
+    blockedEvents,
+    authEvents,
+    sandboxEvents,
+    gateEvents,
+    uniqueAgents,
+    uniqueIPs,
+    uniqueHosts,
+    startTime: chain.start_time,
+    endTime: chain.end_time,
+    duration: new Date(chain.end_time).getTime() - new Date(chain.start_time).getTime()
+  };
+});
+
+const gateInterceptInfo = computed(() => {
+  if (!selectedChain.value) return [];
+  return selectedChain.value.events
+    .filter(e => e.event_type === "gate" && (e.decision === "Deny" || e.decision === "Block"))
+    .map(e => ({
+      eventId: e.id,
+      timestamp: e.timestamp,
+      gateType: (e as any).gate_type || "unknown",
+      riskScore: e.risk_score,
+      riskLevel: (e as any).risk_level || "unknown",
+      reason: (e as any).reason || "unknown",
+      decision: e.decision
+    }));
+});
+
+const authVerifyInfo = computed(() => {
+  if (!selectedChain.value) return [];
+  return selectedChain.value.events
+    .filter(e => e.event_type === "authorization")
+    .map(e => ({
+      eventId: e.id,
+      timestamp: e.timestamp,
+      authMode: (e as any).auth_mode || "unknown",
+      tokenStatus: (e as any).token_status || "unknown",
+      decision: e.decision,
+      description: e.description
+    }));
+});
+
+const sandboxIsolationInfo = computed(() => {
+  if (!selectedChain.value) return [];
+  return selectedChain.value.events
+    .filter(e => e.event_type === "sandbox")
+    .map(e => ({
+      eventId: e.id,
+      timestamp: e.timestamp,
+      decision: e.decision,
+      description: e.description,
+      riskScore: e.risk_score
+    }));
+});
+
+const keyEvidence = computed(() => {
+  if (!selectedChain.value) return [];
+  return selectedChain.value.events
+    .filter(e => e.risk_score >= 70 || e.decision === "Deny" || e.decision === "Block")
+    .slice(0, 5);
+});
+
+function selectChain(chain: AttackChain) {
+  selectedChain.value = chain;
+  activeTab.value = "summary";
+}
+
+function selectEvent(event: AuditEvent) {
+  selectedEvent.value = event;
+}
 
 onMounted(() => {
   Promise.all([loadLogs(), loadChains(), loadStats()]);
@@ -21,7 +117,7 @@ onUnmounted(() => {
 
 <template>
   <div class="audit-trace p-4">
-    <h1 class="text-2xl font-bold mb-4">审计追踪 / Audit Trail</h1>
+    <h1 class="text-2xl font-bold mb-4">攻击路径溯源 / Attack Path Trace</h1>
 
     <el-row :gutter="16" class="mb-4">
       <el-col :span="6">
@@ -44,109 +140,238 @@ onUnmounted(() => {
     </el-row>
 
     <el-row :gutter="16">
-      <el-col :span="16">
+      <el-col :span="8">
         <el-card shadow="hover" class="mb-4">
           <template #header>
-            <span class="font-semibold">攻击链 / Attack Chains</span>
+            <span class="font-semibold">攻击链列表 / Attack Chains</span>
           </template>
-          <div v-loading="loading" class="space-y-4">
-            <AttackTimeline v-for="chain in attackChains" :key="chain.chain_id" :chain="chain" />
+          <div v-loading="loading" class="space-y-2 max-h-96 overflow-y-auto">
+            <div
+              v-for="chain in attackChains"
+              :key="chain.chain_id"
+              class="p-3 border rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              :class="{ 'border-blue-500 bg-blue-50 dark:bg-blue-900': selectedChain?.chain_id === chain.chain_id }"
+              @click="selectChain(chain)"
+            >
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-medium text-sm">{{ chain.chain_id }}</span>
+                <el-tag
+                  :type="chain.severity === 'critical' ? 'danger' : chain.severity === 'high' ? 'danger' : chain.severity === 'medium' ? 'warning' : 'info'"
+                  size="small"
+                  effect="dark"
+                >
+                  {{ chain.severity.toUpperCase() }}
+                </el-tag>
+              </div>
+              <div class="text-xs text-gray-500 truncate">{{ chain.summary }}</div>
+              <div class="text-xs text-gray-400 mt-1">
+                {{ chain.events.length }} 事件 | {{ new Date(chain.start_time).toLocaleTimeString() }}
+              </div>
+            </div>
             <el-empty v-if="!attackChains.length && !loading" description="暂未检测到攻击链" />
           </div>
         </el-card>
       </el-col>
-      <el-col :span="8">
-        <el-card shadow="hover" class="mb-4">
+
+      <el-col :span="16">
+        <el-card shadow="hover" class="mb-4" v-if="selectedChain">
           <template #header>
-            <span class="font-semibold">决策分布 / Decision Distribution</span>
+            <div class="flex items-center justify-between">
+              <span class="font-semibold">事件详情 / Event Details</span>
+              <el-tag size="small" type="info">{{ selectedChain.chain_id }}</el-tag>
+            </div>
           </template>
-          <div v-if="stats?.decision_distribution" class="space-y-2">
-            <div
-              v-for="(count, decision) in stats.decision_distribution"
-              :key="decision"
-              class="flex items-center justify-between"
-            >
-              <span class="text-sm">{{ decision }}</span>
-              <div class="flex items-center gap-2">
-                <el-progress
-                  :percentage="Math.round((count / (stats.today_events || 1)) * 100)"
-                  :stroke-width="6"
-                  style="width: 100px"
-                />
-                <span class="text-xs text-gray-500 w-8 text-right">{{ count }}</span>
-              </div>
+
+          <el-tabs v-model="activeTab" class="mb-4">
+            <el-tab-pane label="事件摘要 / Summary" name="summary" />
+            <el-tab-pane label="攻击链路 / Attack Chain" name="chain" />
+            <el-tab-pane label="用户/IP/主机 / Entities" name="entities" />
+            <el-tab-pane label="关键证据 / Evidence" name="evidence" />
+          </el-tabs>
+
+          <div v-show="activeTab === 'summary'">
+            <el-descriptions :column="2" border>
+              <el-descriptions-item label="攻击链 ID / Chain ID">
+                <code class="text-xs">{{ chainSummary?.chainId }}</code>
+              </el-descriptions-item>
+              <el-descriptions-item label="严重程度 / Severity">
+                <el-tag
+                  :type="chainSummary?.severity === 'critical' ? 'danger' : chainSummary?.severity === 'high' ? 'danger' : chainSummary?.severity === 'medium' ? 'warning' : 'info'"
+                  size="small"
+                  effect="dark"
+                >
+                  {{ chainSummary?.severity?.toUpperCase() }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="事件总数 / Total Events" :span="2">
+                {{ chainSummary?.totalEvents }}
+              </el-descriptions-item>
+              <el-descriptions-item label="拦截事件 / Blocked Events">
+                <el-tag type="danger" size="small">{{ chainSummary?.blockedEvents }}</el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="持续时间 / Duration">
+                {{ chainSummary?.duration ? `${(chainSummary.duration / 1000).toFixed(2)}s` : '-' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="时间范围 / Time Range" :span="2">
+                {{ new Date(chainSummary?.startTime || '').toLocaleString() }} - {{ new Date(chainSummary?.endTime || '').toLocaleString() }}
+              </el-descriptions-item>
+              <el-descriptions-item label="摘要 / Summary" :span="2">
+                {{ chainSummary?.summary }}
+              </el-descriptions-item>
+            </el-descriptions>
+
+            <el-divider>闸门拦截统计 / Gate Interception</el-divider>
+            <el-row :gutter="16" class="mb-4">
+              <el-col :span="8">
+                <StatCard title="闸门事件 / Gate Events" :value="chainSummary?.gateEvents || 0" color="var(--aegis-warning)" />
+              </el-col>
+              <el-col :span="8">
+                <StatCard title="授权事件 / Auth Events" :value="chainSummary?.authEvents || 0" color="var(--aegis-primary)" />
+              </el-col>
+              <el-col :span="8">
+                <StatCard title="沙箱事件 / Sandbox Events" :value="chainSummary?.sandboxEvents || 0" color="var(--aegis-info)" />
+              </el-col>
+            </el-row>
+          </div>
+
+          <div v-show="activeTab === 'chain'">
+            <AttackTimeline :chain="selectedChain" />
+          </div>
+
+          <div v-show="activeTab === 'entities'">
+            <el-row :gutter="16">
+              <el-col :span="8">
+                <el-card shadow="never">
+                  <template #header>
+                    <span class="font-semibold">涉及用户 / Users</span>
+                  </template>
+                  <div v-if="chainSummary?.uniqueAgents.length" class="space-y-2">
+                    <el-tag v-for="agent in chainSummary.uniqueAgents" :key="agent" size="small" class="mr-2 mb-2">
+                      {{ agent }}
+                    </el-tag>
+                  </div>
+                  <el-empty v-else description="无" :image-size="60" />
+                </el-card>
+              </el-col>
+              <el-col :span="8">
+                <el-card shadow="never">
+                  <template #header>
+                    <span class="font-semibold">涉及 IP / IP Addresses</span>
+                  </template>
+                  <div v-if="chainSummary?.uniqueIPs.length" class="space-y-2">
+                    <el-tag v-for="ip in chainSummary.uniqueIPs" :key="ip" size="small" type="info" class="mr-2 mb-2">
+                      {{ ip }}
+                    </el-tag>
+                  </div>
+                  <el-empty v-else description="无" :image-size="60" />
+                </el-card>
+              </el-col>
+              <el-col :span="8">
+                <el-card shadow="never">
+                  <template #header>
+                    <span class="font-semibold">涉及主机 / Hosts</span>
+                  </template>
+                  <div v-if="chainSummary?.uniqueHosts.length" class="space-y-2">
+                    <el-tag v-for="host in chainSummary.uniqueHosts" :key="host" size="small" type="warning" class="mr-2 mb-2">
+                      {{ host }}
+                    </el-tag>
+                  </div>
+                  <el-empty v-else description="无" :image-size="60" />
+                </el-card>
+              </el-col>
+            </el-row>
+          </div>
+
+          <div v-show="activeTab === 'evidence'">
+            <div class="space-y-4">
+              <EvidenceCard v-for="evidence in keyEvidence" :key="evidence.id" :evidence="evidence as any" />
+              <el-empty v-if="!keyEvidence.length" description="无关键证据" :image-size="80" />
             </div>
           </div>
         </el-card>
 
-        <el-card shadow="hover">
+        <el-card shadow="hover" v-if="selectedChain">
           <template #header>
-            <span class="font-semibold">高频 Agent / Top Agents</span>
+            <span class="font-semibold">安全特性 / Security Features</span>
           </template>
-          <div v-if="stats?.top_agents" class="space-y-2">
-            <div
-              v-for="agent in stats.top_agents"
-              :key="agent.agent_id"
-              class="flex items-center justify-between p-1"
-            >
-              <span class="text-sm">{{ agent.agent_id }}</span>
-              <el-tag size="small">{{ agent.count }}</el-tag>
-            </div>
-          </div>
+
+          <el-tabs>
+            <el-tab-pane label="可信授权校验 / Auth Verification">
+              <el-table :data="authVerifyInfo" stripe size="small">
+                <el-table-column prop="timestamp" label="时间 / Time" width="180">
+                  <template #default="{ row }">
+                    {{ new Date(row.timestamp).toLocaleString() }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="authMode" label="授权模式 / Mode" width="120">
+                  <template #default="{ row }">
+                    <el-tag size="small" type="info">{{ row.authMode }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="tokenStatus" label="Token 状态 / Status" width="120">
+                  <template #default="{ row }">
+                    <el-tag size="small" :type="row.tokenStatus === 'valid' ? 'success' : 'danger'">{{ row.tokenStatus }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="decision" label="决策 / Decision" width="100">
+                  <template #default="{ row }">
+                    <el-tag size="small" :type="row.decision === 'Allow' ? 'success' : 'danger'">{{ row.decision }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="description" label="描述 / Description" min-width="200" show-overflow-tooltip />
+              </el-table>
+            </el-tab-pane>
+
+            <el-tab-pane label="闸门拦截位置 / Gate Interception">
+              <el-table :data="gateInterceptInfo" stripe size="small">
+                <el-table-column prop="timestamp" label="时间 / Time" width="180">
+                  <template #default="{ row }">
+                    {{ new Date(row.timestamp).toLocaleString() }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="gateType" label="闸门类型 / Gate Type" width="120">
+                  <template #default="{ row }">
+                    <el-tag size="small" type="warning">{{ row.gateType }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="riskScore" label="风险分数 / Risk Score" width="110" />
+                <el-table-column prop="riskLevel" label="风险等级 / Risk Level" width="110">
+                  <template #default="{ row }">
+                    <el-tag size="small" :type="row.riskLevel === 'high' || row.riskLevel === 'critical' ? 'danger' : row.riskLevel === 'medium' ? 'warning' : 'info'">
+                      {{ row.riskLevel }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="decision" label="决策 / Decision" width="100">
+                  <template #default="{ row }">
+                    <el-tag size="small" type="danger">{{ row.decision }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="reason" label="原因 / Reason" min-width="200" show-overflow-tooltip />
+              </el-table>
+            </el-tab-pane>
+
+            <el-tab-pane label="记忆沙箱隔离 / Sandbox Isolation">
+              <el-table :data="sandboxIsolationInfo" stripe size="small">
+                <el-table-column prop="timestamp" label="时间 / Time" width="180">
+                  <template #default="{ row }">
+                    {{ new Date(row.timestamp).toLocaleString() }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="riskScore" label="风险分数 / Risk Score" width="110" />
+                <el-table-column prop="decision" label="决策 / Decision" width="100">
+                  <template #default="{ row }">
+                    <el-tag size="small" :type="row.decision === 'Allow' ? 'success' : 'danger'">{{ row.decision }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="description" label="描述 / Description" min-width="300" show-overflow-tooltip />
+              </el-table>
+            </el-tab-pane>
+          </el-tabs>
         </el-card>
+
+        <el-empty v-if="!selectedChain" description="请选择一个攻击链查看详情" :image-size="120" />
       </el-col>
     </el-row>
-
-    <el-card shadow="hover" class="mt-4">
-      <template #header>
-        <span class="font-semibold">最近审计事件 / Recent Audit Events</span>
-      </template>
-      <el-table :data="events" stripe size="small" v-loading="loading">
-        <el-table-column prop="timestamp" label="时间 / Time" width="180">
-          <template #default="{ row }">
-            {{ new Date(row.timestamp).toLocaleString() }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="gate_type" label="闸门 / Gate" width="110">
-          <template #default="{ row }">
-            <el-tag size="small" type="info">{{ row.gate_type || "-" }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="decision" label="决策 / Decision" width="120" />
-        <el-table-column prop="risk_level" label="级别 / Level" width="100">
-          <template #default="{ row }">
-            {{ row.risk_level || "-" }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="risk_score" label="分数 / Score" width="90" />
-        <el-table-column prop="auth_mode" label="模式 / Mode" width="110">
-          <template #default="{ row }">
-            <el-tag v-if="row.auth_mode" size="small" type="info">{{ row.auth_mode }}</el-tag>
-            <span v-else class="text-gray-400">-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="token_status" label="Token" width="120">
-          <template #default="{ row }">
-            <el-tag v-if="row.token_status" size="small" type="warning">{{ row.token_status }}</el-tag>
-            <span v-else class="text-gray-400">-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="unauthorized_allow" label="未授权 / Unauthorized" width="150">
-          <template #default="{ row }">
-            <el-tag v-if="row.unauthorized_allow" size="small" type="danger">allowed</el-tag>
-            <span v-else class="text-gray-400">-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="tool_name" label="工具 / Tool" width="120" />
-        <el-table-column prop="reason" label="原因 / Reason" min-width="260" show-overflow-tooltip />
-        <el-table-column prop="status_code" label="状态 / HTTP" width="90">
-          <template #default="{ row }">
-            <el-tag :type="(row.status_code || row.status) < 400 ? 'success' : 'danger'" size="small">
-              {{ row.status_code || row.status }}
-            </el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
   </div>
 </template>
