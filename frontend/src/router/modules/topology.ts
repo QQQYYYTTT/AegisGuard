@@ -7,7 +7,7 @@ export default {
   redirect: "/topology/index",
   meta: {
     icon: "ep:share",
-    title: "拓扑与攻击路径",
+    title: "攻击路径溯源",
     rank: 6
   },
   children: [
@@ -16,7 +16,7 @@ export default {
       name: "TopologyIndex",
       component: () => import("@/views/topology/index.vue"),
       meta: {
-        title: "拓扑与攻击路径"
+        title: "攻击路径溯源"
       }
     }
   ]

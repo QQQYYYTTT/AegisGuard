@@ -8,7 +8,8 @@ export default {
   meta: {
     icon: "ep:video-play",
     title: "运行时模拟器",
-    rank: 2
+    rank: 2,
+    showLink: false
   },
   children: [
     {

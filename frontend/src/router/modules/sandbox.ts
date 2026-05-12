@@ -8,7 +8,8 @@ export default {
   meta: {
     icon: "ep:box",
     title: "记忆沙箱",
-    rank: 5
+    rank: 5,
+    showLink: false
   },
   children: [
     {

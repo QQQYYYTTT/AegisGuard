@@ -7,8 +7,14 @@ export default {
   redirect: "/audit-trace/index",
   meta: {
     icon: "ep:document-checked",
+<<<<<<< main
     title: "攻击路径溯源",
     rank: 8
+=======
+    title: "审计追踪",
+    rank: 8,
+    showLink: false
+>>>>>>> main
   },
   children: [
     {

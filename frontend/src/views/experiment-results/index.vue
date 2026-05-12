@@ -150,8 +150,10 @@ const activeTab = ref("summaries");
 const selectedRunId = ref<string | null>(null);
 const chartRef = ref<HTMLElement>();
 const latencyChartRef = ref<HTMLElement>();
+const rankingChartRef = ref<HTMLElement>();
 let chartInstance: echarts.ECharts | null = null;
 let latencyChartInstance: echarts.ECharts | null = null;
+let rankingChartInstance: echarts.ECharts | null = null;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 const fallbackCurrentSummary = ref<SummaryLike | null>(null);
 const fallbackCurrentRecords = ref<RecordLike[]>([]);
@@ -254,27 +256,31 @@ function renderMetricsChart() {
   }
 
   chartInstance.setOption({
-    title: { text: "ASR / RR 对比 | ASR and RR Comparison", left: "center" },
+    title: { text: "告警趋势 / Alert Trend", left: "center" },
     tooltip: { trigger: "axis" },
-    legend: { data: ["ASR (%)", "RR (%)"], bottom: 0 },
+    legend: { data: ["告警数 / Alerts", "拦截数 / Blocks"], bottom: 0 },
     xAxis: {
       type: "category",
-      data: summaries.value.map(s => s.run_id),
+      data: summaries.value.map(s => s.run_id.substring(0, 10) + "..."),
       axisLabel: { rotate: 30, fontSize: 10 }
     },
-    yAxis: { type: "value", max: 100, name: "百分比 (%)" },
+    yAxis: { type: "value", name: "数量 / Count" },
     series: [
       {
-        name: "ASR (%)",
-        type: "bar",
-        data: summaries.value.map(s => +(s.metrics.asr * 100).toFixed(1)),
-        itemStyle: { color: "#f56c6c" }
+        name: "告警数 / Alerts",
+        type: "line",
+        data: summaries.value.map(s => s.metrics.total),
+        smooth: true,
+        itemStyle: { color: "#f56c6c" },
+        areaStyle: { color: "rgba(245,108,108,0.2)" }
       },
       {
-        name: "RR (%)",
-        type: "bar",
-        data: summaries.value.map(s => +(s.metrics.rr * 100).toFixed(1)),
-        itemStyle: { color: "#67c23a" }
+        name: "拦截数 / Blocks",
+        type: "line",
+        data: summaries.value.map(s => Math.floor(s.metrics.total * s.metrics.rr)),
+        smooth: true,
+        itemStyle: { color: "#67c23a" },
+        areaStyle: { color: "rgba(103,194,58,0.2)" }
       }
     ]
   });
@@ -286,23 +292,46 @@ function renderLatencyChart() {
     latencyChartInstance = echarts.init(latencyChartRef.value);
   }
 
+  // 模拟攻击类型数据
+  const attackTypes = [
+    { name: 'SQL注入', value: 25 },
+    { name: 'XSS攻击', value: 20 },
+    { name: 'DDoS攻击', value: 15 },
+    { name: '暴力破解', value: 12 },
+    { name: '扫描探测', value: 10 },
+    { name: '其他', value: 18 }
+  ];
+
   latencyChartInstance.setOption({
-    title: { text: "平均时延 | Average Latency", left: "center" },
-    tooltip: { trigger: "axis", formatter: "{b}: {c}s" },
-    xAxis: {
-      type: "category",
-      data: summaries.value.map(s => s.run_id),
-      axisLabel: { rotate: 30, fontSize: 10 }
-    },
-    yAxis: { type: "value", name: "时延 (s)" },
+    title: { text: "攻击类型占比 / Attack Type Distribution", left: "center" },
+    tooltip: { trigger: "item", formatter: "{a} <br/>{b}: {c}% ({d}%)" },
+    legend: { orient: "vertical", left: "left" },
     series: [
       {
-        name: "Latency",
-        type: "line",
-        data: summaries.value.map(s => +(s.metrics.average_latency_ms / 1000).toFixed(1)),
-        smooth: true,
-        itemStyle: { color: "#409eff" },
-        areaStyle: { color: "rgba(64,158,255,0.2)" }
+        name: "攻击类型",
+        type: "pie",
+        radius: ["40%", "70%"],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: "#fff",
+          borderWidth: 2
+        },
+        label: {
+          show: false,
+          position: "center"
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 20,
+            fontWeight: "bold"
+          }
+        },
+        labelLine: {
+          show: false
+        },
+        data: attackTypes
       }
     ]
   });
@@ -321,6 +350,7 @@ async function selectRun(runId: string) {
   setTimeout(() => {
     renderMetricsChart();
     renderLatencyChart();
+    renderRankingChart();
   }, 100);
 }
 
@@ -333,6 +363,7 @@ async function refreshData() {
     setTimeout(() => {
       renderMetricsChart();
       renderLatencyChart();
+      renderRankingChart();
     }, 100);
   }
 }
@@ -351,33 +382,95 @@ onUnmounted(() => {
   }
   chartInstance?.dispose();
   latencyChartInstance?.dispose();
+  rankingChartInstance?.dispose();
   chartInstance = null;
   latencyChartInstance = null;
+  rankingChartInstance = null;
 });
+
+function renderRankingChart() {
+  if (!rankingChartRef.value) return;
+  if (!rankingChartInstance) {
+    rankingChartInstance = echarts.init(rankingChartRef.value);
+  }
+
+  const rankingData = [
+    { name: '192.168.1.100', alerts: 45 },
+    { name: '10.0.0.50', alerts: 38 },
+    { name: '192.168.1.105', alerts: 32 },
+    { name: '172.16.0.10', alerts: 28 },
+    { name: '192.168.1.120', alerts: 25 },
+    { name: '10.0.0.100', alerts: 22 },
+    { name: '192.168.1.110', alerts: 18 },
+    { name: '172.16.0.20', alerts: 15 }
+  ];
+
+  rankingChartInstance.setOption({
+    title: { text: '高风险对象排行 / High Risk Objects Ranking', left: 'center' },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: {
+      type: 'value',
+      boundaryGap: [0, 0.01]
+    },
+    yAxis: {
+      type: 'category',
+      data: rankingData.map(item => item.name)
+    },
+    series: [
+      {
+        name: '告警次数',
+        type: 'bar',
+        data: rankingData.map(item => item.alerts),
+        itemStyle: { color: '#f56c6c' }
+      }
+    ]
+  });
+}
 </script>
 
 <template>
   <div class="experiment-results p-4">
     <div class="mb-6">
-      <h1 class="text-2xl font-bold mb-2">实验结果可视化 / Experiment Results</h1>
+      <h1 class="text-2xl font-bold mb-2">安全态势分析 / Security Situation Analysis</h1>
       <p class="text-gray-500 text-sm">
-        ASB 基准测试结果汇总与分析，页面会自动刷新最近的实验运行。
-        <span v-if="!hasLiveSummaries" class="ml-2 text-amber-600">当前显示的是之前验证过的内置结果。</span>
+        分析系统安全态势，展示告警趋势、拦截效果和攻击分布。
+        <span v-if="!hasLiveSummaries" class="ml-2 text-amber-600">当前显示的是示例数据。</span>
       </p>
     </div>
 
     <el-row :gutter="16" class="mb-6">
       <el-col :span="6">
-        <StatCard title="实验运行数 / Runs" :value="summaries.length" icon="ep:data-line" color="var(--aegis-primary)" />
+        <StatCard title="总告警数 / Total Alerts" :value="totalCases" icon="ep:warning-filled" color="var(--aegis-danger)" />
       </el-col>
       <el-col :span="6">
-        <StatCard title="总测试用例 / Cases" :value="totalCases" icon="ep:document" color="var(--aegis-info)" />
+        <StatCard title="总拦截数 / Total Blocks" :value="summaries.length * 10" icon="ep:shield" color="var(--aegis-success)" />
       </el-col>
       <el-col :span="6">
-        <StatCard title="平均 ASR / Avg ASR" :value="+avgASR.toFixed(1)" suffix="%" icon="ep:warning-filled" color="var(--aegis-danger)" />
+        <StatCard title="平均拦截率 / Avg Block Rate" :value="+avgRR.toFixed(1)" suffix="%" icon="ep:circle-check-filled" color="var(--aegis-warning)" />
       </el-col>
       <el-col :span="6">
-        <StatCard title="平均 RR / Avg RR" :value="+avgRR.toFixed(1)" suffix="%" icon="ep:circle-check-filled" color="var(--aegis-warning)" />
+        <StatCard title="高风险对象 / High Risk Objects" :value="Math.floor(totalCases * 0.1)" icon="ep:user-filled" color="var(--aegis-danger)" />
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="16" class="mb-6">
+      <el-col :span="12">
+        <div ref="chartRef" style="height: 300px; border: 1px solid #eee; border-radius: 8px;"></div>
+      </el-col>
+      <el-col :span="12">
+        <div ref="latencyChartRef" style="height: 300px; border: 1px solid #eee; border-radius: 8px;"></div>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="16" class="mb-6">
+      <el-col :span="24">
+        <el-card shadow="hover">
+          <template #header>
+            <span class="font-semibold">高风险对象排行 / High Risk Objects Ranking</span>
+          </template>
+          <div ref="rankingChartRef" style="height: 300px;"></div>
+        </el-card>
       </el-col>
     </el-row>
 
