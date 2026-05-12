@@ -27,12 +27,13 @@ export function useSandbox() {
     const t = sandboxStore.context.trusted;
     return [
       { label: "System Prompt", value: t.system_prompt },
-      ...t.tool_definitions.map((d, i) => ({
+      ...(t.tool_definitions || []).map((d, i) => ({
         label: `Tool Definition ${i + 1}`,
         value: d
       })),
-      { label: "Memory", value: t.memory }
-    ];
+      { label: "Memory", value: t.memory },
+      { label: "Task State", value: t.task_state || "" }
+    ].filter(field => field.value !== "");
   });
 
   const untrustedFields = computed(() => {

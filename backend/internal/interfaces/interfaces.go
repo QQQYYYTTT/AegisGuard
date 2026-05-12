@@ -93,29 +93,45 @@ type TrustedContent struct {
 	SystemPrompt    string   `json:"system_prompt"`
 	ToolDefinitions []string `json:"tool_definitions"`
 	Memory          string   `json:"memory"`
+	TaskState       string   `json:"task_state,omitempty"`
 }
 
 type UntrustedContent struct {
 	UserInput       string `json:"user_input"`
 	ExternalData    string `json:"external_data"`
 	InjectedContent string `json:"injected_content"`
+	Source          string `json:"source,omitempty"`
+	ContentType     string `json:"content_type,omitempty"`
 }
 
 type SandboxContext struct {
 	ContextID      string           `json:"context_id"`
+	AgentID        string           `json:"agent_id,omitempty"`
+	SessionID      string           `json:"session_id,omitempty"`
+	Source         string           `json:"source,omitempty"`
 	Trusted        TrustedContent   `json:"trusted"`
 	Untrusted      UntrustedContent `json:"untrusted"`
 	SM3Fingerprint string           `json:"sm3_fingerprint"`
+	RiskScore      int              `json:"risk_score,omitempty"`
+	RiskLevel      string           `json:"risk_level,omitempty"`
+	Status         string           `json:"status,omitempty"`
 	IsolatedAt     time.Time        `json:"isolated_at"`
+	UpdatedAt      time.Time        `json:"updated_at,omitempty"`
+	ExpiresAt      time.Time        `json:"expires_at,omitempty"`
 }
 
 type TransferRecord struct {
 	ID        string    `json:"id"`
+	ContextID string    `json:"context_id,omitempty"`
 	From      string    `json:"from"`
 	To        string    `json:"to"`
 	Fields    []string  `json:"fields"`
 	Summary   string    `json:"summary"`
 	SM3Hash   string    `json:"sm3_hash"`
+	RiskScore int       `json:"risk_score,omitempty"`
+	RiskLevel string    `json:"risk_level,omitempty"`
+	Action    string    `json:"action,omitempty"`
 	Approved  bool      `json:"approved"`
+	Reason    string    `json:"reason,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
 }

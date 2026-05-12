@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"aegisguard/internal/gates"
 
@@ -28,7 +29,8 @@ func main() {
 		logger = zap.NewNop()
 	}
 
-	fmt.Println("=== AegisGuard 三级策略闸门演示 ===\n")
+	fmt.Println("=== AegisGuard 三级策略闸门演示 ===")
+	fmt.Println()
 
 	switch *action {
 	case "message":
@@ -39,9 +41,9 @@ func main() {
 		testReturnGate(logger)
 	case "all":
 		testMessageGate(logger)
-		fmt.Println("\n" + "="*50 + "\n")
+		fmt.Println("\n" + strings.Repeat("=", 50) + "\n")
 		testActionGate(logger)
-		fmt.Println("\n" + "="*50 + "\n")
+		fmt.Println("\n" + strings.Repeat("=", 50) + "\n")
 		testReturnGate(logger)
 	default:
 		fmt.Printf("未知的操作: %s\n", *action)
@@ -50,7 +52,7 @@ func main() {
 
 func testMessageGate(logger *zap.Logger) {
 	fmt.Println("测试一：消息门控 (MessageGate)")
-	fmt.Println("-" * 50)
+	fmt.Println(strings.Repeat("-", 50))
 
 	gate := gates.NewMessageGate()
 
@@ -97,7 +99,7 @@ func testMessageGate(logger *zap.Logger) {
 
 func testActionGate(logger *zap.Logger) {
 	fmt.Println("测试二：动作门控 (ActionGate)")
-	fmt.Println("-" * 50)
+	fmt.Println(strings.Repeat("-", 50))
 
 	gate := gates.NewActionGate(logger)
 
@@ -146,7 +148,7 @@ func testActionGate(logger *zap.Logger) {
 
 func testReturnGate(logger *zap.Logger) {
 	fmt.Println("测试三：返回门控 (ReturnGate)")
-	fmt.Println("-" * 50)
+	fmt.Println(strings.Repeat("-", 50))
 
 	gate := gates.NewReturnGate()
 
