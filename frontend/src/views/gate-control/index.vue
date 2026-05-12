@@ -1,167 +1,404 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
-import GateController from "@/components/security/GateController.vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import StatCard from "@/components/common/StatCard.vue";
 import DecisionBadge from "@/components/common/DecisionBadge.vue";
 import RiskBadge from "@/components/common/RiskBadge.vue";
-import StatCard from "@/components/common/StatCard.vue";
-import { useGateDecision } from "@/hooks/useGateDecision";
+import DisposalFlowGraph from "@/components/audit/DisposalFlowGraph.vue";
+import { useGateStoreHook } from "@/store/modules/gate";
+import { useAuditStoreHook } from "@/store/modules/audit";
+import type { GateDecision } from "@/api/gate";
+import type { AuditEvent } from "@/api/audit";
 
-defineOptions({ name: "GateControlIndex" });
+defineOptions({ name: "AutoDisposalCenter" });
 
-const { overview, decisions, loadOverview, loading, startPolling, stopPolling } = useGateDecision();
+const gateStore = useGateStoreHook();
+const auditStore = useAuditStoreHook();
+
 const activeTab = ref("overview");
+const timeRange = ref("24h");
+const selectedGateType = ref("all");
+
+const gateDecisions = computed(() => gateStore.decisions);
+const auditEvents = computed(() => auditStore.events);
+
+const disposalStats = computed(() => {
+  const decisions = gateDecisions.value;
+  const events = auditEvents.value;
+  
+  const totalIntercepts = decisions.filter(d => d.decision === "Block" || d.decision === "Deny").length;
+  const totalAllowed = decisions.filter(d => d.decision === "Allow").length;
+  const totalDecisions = decisions.length;
+  const successRate = totalDecisions > 0 ? Math.round((totalIntercepts / totalDecisions) * 100) : 0;
+  
+  const avgDuration = events.length > 0
+    ? Math.round(events.reduce((sum, e) => sum + ((e as any).duration_ms || 0), 0) / events.length)
+    : 0;
+  
+  const messageGateBlocks = decisions.filter(d => d.gate_type === "message" && (d.decision === "Block" || d.decision === "Deny")).length;
+  const actionGateBlocks = decisions.filter(d => d.gate_type === "action" && (d.decision === "Block" || d.decision === "Deny")).length;
+  const returnGateBlocks = decisions.filter(d => d.gate_type === "return" && (d.decision === "Block" || d.decision === "Deny")).length;
+  
+  const authDenials = events.filter(e => e.event_type === "authorization" && (e.decision === "Deny" || e.decision === "Block")).length;
+  const sandboxIsolations = events.filter(e => e.event_type === "sandbox").length;
+  
+  const policyHits: Record<string, number> = {};
+  decisions.forEach(d => {
+    d.matched_rules.forEach(rule => {
+      policyHits[rule] = (policyHits[rule] || 0) + 1;
+    });
+  });
+  
+  const topPolicies = Object.entries(policyHits)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([name, count]) => ({ name, count }));
+  
+  return {
+    totalIntercepts,
+    totalAllowed,
+    totalDecisions,
+    successRate,
+    avgDuration,
+    messageGateBlocks,
+    actionGateBlocks,
+    returnGateBlocks,
+    authDenials,
+    sandboxIsolations,
+    topPolicies
+  };
+});
+
+const interceptionTrend = computed(() => {
+  const decisions = gateDecisions.value;
+  const hourlyData: Record<string, { allow: number; block: number }> = {};
+  
+  decisions.forEach(d => {
+    const hour = new Date(d.timestamp).getHours();
+    const key = `${hour}:00`;
+    if (!hourlyData[key]) {
+      hourlyData[key] = { allow: 0, block: 0 };
+    }
+    if (d.decision === "Block" || d.decision === "Deny") {
+      hourlyData[key].block++;
+    } else {
+      hourlyData[key].allow++;
+    }
+  });
+  
+  return Object.entries(hourlyData)
+    .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+    .map(([hour, data]) => ({ hour, ...data }));
+});
+
+const filteredDecisions = computed(() => {
+  let decisions = gateDecisions.value;
+  if (selectedGateType.value !== "all") {
+    decisions = decisions.filter(d => d.gate_type === selectedGateType.value);
+  }
+  return decisions.slice(0, 50);
+});
+
+const authDenialRecords = computed(() => {
+  return auditEvents.value
+    .filter(e => e.event_type === "authorization" && (e.decision === "Deny" || e.decision === "Block"))
+    .slice(0, 20)
+    .map(e => ({
+      timestamp: e.timestamp,
+      agentId: e.agent_id,
+      sessionId: e.session_id,
+      decision: e.decision,
+      authMode: (e as any).auth_mode,
+      tokenStatus: (e as any).token_status,
+      reason: (e as any).reason || e.description
+    }));
+});
+
+const sandboxIsolationRecords = computed(() => {
+  return auditEvents.value
+    .filter(e => e.event_type === "sandbox")
+    .slice(0, 20)
+    .map(e => ({
+      timestamp: e.timestamp,
+      agentId: e.agent_id,
+      sessionId: e.session_id,
+      decision: e.decision,
+      riskScore: e.risk_score || 0,
+      riskLevel: (e as any).risk_level || "low",
+      description: e.description
+    }));
+});
+
+async function refreshData() {
+  await Promise.all([
+    gateStore.fetchDecisions(),
+    auditStore.fetchLogs()
+  ]);
+}
 
 onMounted(() => {
-  loadOverview();
-  startPolling(5000);
+  refreshData();
+  const timer = setInterval(refreshData, 10000);
+  onUnmounted(() => clearInterval(timer));
 });
 
-onUnmounted(() => {
-  stopPolling();
-});
+function viewAlertDetail(alert: any) {
+  // TODO: 实现告警详情查看
+  console.log('View alert detail:', alert);
+}
 </script>
 
 <template>
-  <div class="gate-control p-4">
-    <h1 class="text-2xl font-bold mb-4">三级策略闸门控制中心 / Gate Control Center</h1>
+  <div class="auto-disposal-center p-4">
+    <h1 class="text-2xl font-bold mb-4">自动处置中心 / Auto Disposal Center</h1>
 
     <el-row :gutter="16" class="mb-4">
-      <el-col :span="8">
-        <StatCard
-          title="消息闸门 / Message Gate"
-          :value="overview?.message_gate?.today_count || 0"
-          :suffix="`${overview?.message_gate?.block_count || 0} 次拦截`"
-          color="var(--aegis-primary)"
-        />
+      <el-col :span="6">
+        <StatCard title="自动拦截次数 / Total Intercepts" :value="disposalStats.totalIntercepts" color="var(--aegis-danger)" />
       </el-col>
-      <el-col :span="8">
-        <StatCard
-          title="动作闸门 / Action Gate"
-          :value="overview?.action_gate?.today_count || 0"
-          :suffix="`${overview?.action_gate?.block_count || 0} 次拦截`"
-          color="var(--aegis-danger)"
-        />
+      <el-col :span="6">
+        <StatCard title="处置成功率 / Success Rate" :value="disposalStats.successRate" suffix="%" color="var(--aegis-success)" />
       </el-col>
-      <el-col :span="8">
-        <StatCard
-          title="返回闸门 / Return Gate"
-          :value="overview?.return_gate?.today_count || 0"
-          :suffix="`${overview?.return_gate?.block_count || 0} 次拦截`"
-          color="var(--aegis-warning)"
-        />
+      <el-col :span="6">
+        <StatCard title="平均处置时延 / Avg Duration" :value="disposalStats.avgDuration" suffix="ms" color="var(--aegis-warning)" />
+      </el-col>
+      <el-col :span="6">
+        <StatCard title="总处置次数 / Total Decisions" :value="disposalStats.totalDecisions" color="var(--aegis-primary)" />
       </el-col>
     </el-row>
 
-    <el-tabs v-model="activeTab" class="mb-4">
-      <el-tab-pane label="总览 / Overview" name="overview">
-        <el-row :gutter="16">
-          <el-col :span="16">
-            <el-card shadow="hover">
+    <el-card shadow="hover" class="mb-4">
+      <template #header>
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">处置效果 / Disposal Effectiveness</span>
+          <el-radio-group v-model="activeTab" size="small">
+            <el-radio-button label="overview">总览</el-radio-button>
+            <el-radio-button label="gates">闸门拦截</el-radio-button>
+            <el-radio-button label="auth">授权拒绝</el-radio-button>
+            <el-radio-button label="sandbox">沙箱隔离</el-radio-button>
+          </el-radio-group>
+        </div>
+      </template>
+
+      <div v-show="activeTab === 'overview'">
+        <el-card shadow="never" class="mb-4">
+          <template #header>
+            <span class="font-semibold text-sm">处置流程拓扑 / Disposal Flow Topology</span>
+          </template>
+          <DisposalFlowGraph :stats="disposalStats" />
+        </el-card>
+
+        <el-row :gutter="16" class="mb-4">
+          <el-col :span="8">
+            <el-card shadow="never">
               <template #header>
-                <span class="font-semibold">决策历史 / Decision History</span>
+                <span class="font-semibold text-sm">三级闸门拦截效果 / Gate Interception</span>
               </template>
-              <el-table :data="decisions" stripe size="small" v-loading="loading">
-                <el-table-column prop="timestamp" label="时间 / Time" width="160">
-                  <template #default="{ row }">
-                    {{ new Date(row.timestamp).toLocaleTimeString() }}
-                  </template>
-                </el-table-column>
-                <el-table-column prop="gate_type" label="闸门 / Gate" width="100">
-                  <template #default="{ row }">
-                    <el-tag size="small" type="info">{{ row.gate_type }}</el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="decision" label="决策 / Decision" width="120">
-                  <template #default="{ row }">
-                    <DecisionBadge :decision="row.decision" />
-                  </template>
-                </el-table-column>
-                <el-table-column prop="risk_level" label="风险 / Risk" width="100">
-                  <template #default="{ row }">
-                    <RiskBadge :level="row.risk_level" />
-                  </template>
-                </el-table-column>
-                <el-table-column prop="risk_score" label="分数 / Score" width="90">
-                  <template #default="{ row }">
-                    {{ row.risk_score }}%
-                  </template>
-                </el-table-column>
-                <el-table-column prop="auth_mode" label="模式 / Mode" width="110">
-                  <template #default="{ row }">
-                    <el-tag v-if="row.auth_mode" size="small" type="info">{{ row.auth_mode }}</el-tag>
-                    <span v-else class="text-gray-400">-</span>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="token_status" label="Token" width="120">
-                  <template #default="{ row }">
-                    <el-tag v-if="row.token_status" size="small" type="warning">{{ row.token_status }}</el-tag>
-                    <span v-else class="text-gray-400">-</span>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="unauthorized_allow" label="未授权 / Unauthorized" width="150">
-                  <template #default="{ row }">
-                    <el-tag v-if="row.unauthorized_allow" size="small" type="danger">allowed</el-tag>
-                    <span v-else class="text-gray-400">-</span>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="reason" label="原因 / Reason" min-width="220" show-overflow-tooltip />
-                <el-table-column prop="agent_id" label="Agent" width="120" />
-              </el-table>
+              <el-descriptions :column="1" border size="small">
+                <el-descriptions-item label="Message Gate">
+                  <div class="flex items-center justify-between">
+                    <span>拦截数</span>
+                    <el-tag type="danger" size="small">{{ disposalStats.messageGateBlocks }}</el-tag>
+                  </div>
+                </el-descriptions-item>
+                <el-descriptions-item label="Action Gate">
+                  <div class="flex items-center justify-between">
+                    <span>拦截数</span>
+                    <el-tag type="danger" size="small">{{ disposalStats.actionGateBlocks }}</el-tag>
+                  </div>
+                </el-descriptions-item>
+                <el-descriptions-item label="Return Gate">
+                  <div class="flex items-center justify-between">
+                    <span>拦截数</span>
+                    <el-tag type="danger" size="small">{{ disposalStats.returnGateBlocks }}</el-tag>
+                  </div>
+                </el-descriptions-item>
+              </el-descriptions>
             </el-card>
           </el-col>
           <el-col :span="8">
-            <el-card shadow="hover">
+            <el-card shadow="never">
               <template #header>
-                <span class="font-semibold">风险分布 / Risk Score Distribution</span>
+                <span class="font-semibold text-sm">安全特性拦截 / Security Features</span>
               </template>
-              <div class="space-y-3">
-                <div v-for="d in decisions" :key="d.request_id" class="flex items-center gap-2">
-                  <span class="text-xs w-16">{{ d.gate_type }}</span>
-                  <el-progress
-                    :percentage="d.risk_score"
-                    :stroke-width="8"
-                    :color="
-                      d.risk_score >= 80
-                        ? '#ff4d4f'
-                        : d.risk_score >= 60
-                          ? '#f56c6c'
-                          : d.risk_score >= 40
-                            ? '#e6a23c'
-                            : '#67c23a'
-                    "
-                  />
+              <el-descriptions :column="1" border size="small">
+                <el-descriptions-item label="可信授权拒绝">
+                  <div class="flex items-center justify-between">
+                    <span>拒绝数</span>
+                    <el-tag type="danger" size="small">{{ disposalStats.authDenials }}</el-tag>
+                  </div>
+                </el-descriptions-item>
+                <el-descriptions-item label="记忆沙箱隔离">
+                  <div class="flex items-center justify-between">
+                    <span>隔离数</span>
+                    <el-tag type="info" size="small">{{ disposalStats.sandboxIsolations }}</el-tag>
+                  </div>
+                </el-descriptions-item>
+                <el-descriptions-item label="总拦截数">
+                  <div class="flex items-center justify-between">
+                    <span>拦截数</span>
+                    <el-tag type="danger" size="small">{{ disposalStats.totalIntercepts }}</el-tag>
+                  </div>
+                </el-descriptions-item>
+              </el-descriptions>
+            </el-card>
+          </el-col>
+          <el-col :span="8">
+            <el-card shadow="never">
+              <template #header>
+                <span class="font-semibold text-sm">策略命中 TOP10 / Top Policies</span>
+              </template>
+              <div class="space-y-2 max-h-64 overflow-y-auto">
+                <div
+                  v-for="(policy, index) in disposalStats.topPolicies"
+                  :key="policy.name"
+                  class="flex items-center justify-between p-2 border rounded"
+                >
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400 w-6">{{ index + 1 }}</span>
+                    <span class="text-sm">{{ policy.name }}</span>
+                  </div>
+                  <el-tag size="small" type="warning">{{ policy.count }}</el-tag>
                 </div>
+                <el-empty v-if="!disposalStats.topPolicies.length" description="暂无数据" :image-size="60" />
               </div>
             </el-card>
           </el-col>
         </el-row>
-      </el-tab-pane>
 
-      <el-tab-pane label="消息闸门 / Message Gate" name="message">
-        <el-card shadow="hover">
-          <GateController :decisions="decisions.filter(d => d.gate_type === 'message')" />
-          <el-empty
-            v-if="!decisions.filter(d => d.gate_type === 'message').length"
-            description="暂无消息闸门决策记录"
-          />
+        <el-card shadow="never">
+          <template #header>
+            <span class="font-semibold text-sm">拦截趋势 / Interception Trend</span>
+          </template>
+          <div v-if="interceptionTrend.length" class="space-y-2">
+            <div
+              v-for="item in interceptionTrend"
+              :key="item.hour"
+              class="flex items-center gap-2"
+            >
+              <span class="text-xs text-gray-500 w-12">{{ item.hour }}</span>
+              <div class="flex-1 flex gap-1">
+                <div
+                  class="h-4 bg-green-500 rounded"
+                  :style="{ width: `${(item.allow / Math.max(item.allow, item.block)) * 100}%` }"
+                />
+                <div
+                  class="h-4 bg-red-500 rounded"
+                  :style="{ width: `${(item.block / Math.max(item.allow, item.block)) * 100}%` }"
+                />
+              </div>
+              <span class="text-xs text-gray-500 w-20 text-right">
+                允许: {{ item.allow }} | 拦截: {{ item.block }}
+              </span>
+            </div>
+          </div>
+          <el-empty v-else description="暂无趋势数据" :image-size="80" />
         </el-card>
-      </el-tab-pane>
+      </div>
 
-      <el-tab-pane label="动作闸门 / Action Gate" name="action">
-        <el-card shadow="hover">
-          <GateController :decisions="decisions.filter(d => d.gate_type === 'action')" />
-        </el-card>
-      </el-tab-pane>
+      <div v-show="activeTab === 'gates'">
+        <div class="mb-3 flex items-center gap-2">
+          <span class="text-sm">闸门类型：</span>
+          <el-radio-group v-model="selectedGateType" size="small">
+            <el-radio-button label="all">全部</el-radio-button>
+            <el-radio-button label="message">Message Gate</el-radio-button>
+            <el-radio-button label="action">Action Gate</el-radio-button>
+            <el-radio-button label="return">Return Gate</el-radio-button>
+          </el-radio-group>
+        </div>
 
-      <el-tab-pane label="返回闸门 / Return Gate" name="return">
-        <el-card shadow="hover">
-          <GateController :decisions="decisions.filter(d => d.gate_type === 'return')" />
-          <el-empty
-            v-if="!decisions.filter(d => d.gate_type === 'return').length"
-            description="暂无返回闸门决策记录"
-          />
-        </el-card>
-      </el-tab-pane>
-    </el-tabs>
+        <el-table :data="filteredDecisions" stripe size="small" max-height="600">
+          <el-table-column prop="timestamp" label="时间 / Time" width="180">
+            <template #default="{ row }">
+              {{ new Date(row.timestamp).toLocaleString() }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="gate_type" label="闸门类型 / Gate" width="120">
+            <template #default="{ row }">
+              <el-tag size="small" type="warning">{{ row.gate_type }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="decision" label="决策 / Decision" width="100">
+            <template #default="{ row }">
+              <DecisionBadge :decision="row.decision" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="risk_score" label="风险分 / Risk" width="90" />
+          <el-table-column prop="risk_level" label="风险等级 / Level" width="100">
+            <template #default="{ row }">
+              <RiskBadge :level="row.risk_level" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="tool_name" label="工具 / Tool" width="120" />
+          <el-table-column prop="agent_id" label="Agent" width="120" />
+          <el-table-column prop="reason" label="原因 / Reason" min-width="200" show-overflow-tooltip />
+        </el-table>
+      </div>
+
+      <div v-show="activeTab === 'auth'">
+        <el-alert
+          title="可信授权拒绝记录"
+          description="展示所有因授权校验失败而被拒绝的请求记录"
+          type="warning"
+          :closable="false"
+          class="mb-4"
+        />
+        <el-table :data="authDenialRecords" stripe size="small" max-height="600">
+          <el-table-column prop="timestamp" label="时间 / Time" width="180">
+            <template #default="{ row }">
+              {{ new Date(row.timestamp).toLocaleString() }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="agentId" label="Agent" width="120" />
+          <el-table-column prop="sessionId" label="会话 ID" width="120" />
+          <el-table-column prop="authMode" label="授权模式 / Mode" width="100">
+            <template #default="{ row }">
+              <el-tag size="small" type="info">{{ row.authMode || '-' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="tokenStatus" label="Token 状态" width="100">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.tokenStatus === 'valid' ? 'success' : 'danger'">{{ row.tokenStatus || '-' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="decision" label="决策 / Decision" width="100">
+            <template #default="{ row }">
+              <el-tag size="small" type="danger">{{ row.decision }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="reason" label="拒绝原因 / Reason" min-width="200" show-overflow-tooltip />
+        </el-table>
+      </div>
+
+      <div v-show="activeTab === 'sandbox'">
+        <el-alert
+          title="记忆沙箱隔离记录"
+          description="展示所有被隔离到记忆沙箱的会话和事件"
+          type="info"
+          :closable="false"
+          class="mb-4"
+        />
+        <el-table :data="sandboxIsolationRecords" stripe size="small" max-height="600">
+          <el-table-column prop="timestamp" label="时间 / Time" width="180">
+            <template #default="{ row }">
+              {{ new Date(row.timestamp).toLocaleString() }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="agentId" label="Agent" width="120" />
+          <el-table-column prop="sessionId" label="会话 ID" width="120" />
+          <el-table-column prop="riskScore" label="风险分 / Risk" width="90" />
+          <el-table-column prop="riskLevel" label="风险等级 / Level" width="100">
+            <template #default="{ row }">
+              <RiskBadge :level="row.riskLevel" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="decision" label="决策 / Decision" width="100">
+            <template #default="{ row }">
+              <DecisionBadge :decision="row.decision" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="description" label="描述 / Description" min-width="200" show-overflow-tooltip />
+        </el-table>
+      </div>
+    </el-card>
   </div>
 </template>
