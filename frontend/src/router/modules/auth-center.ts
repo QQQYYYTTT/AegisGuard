@@ -7,7 +7,11 @@ export default {
   redirect: "/auth-center/index",
   meta: {
     icon: "ep:lock",
+<<<<<<< main
+    title: "自动处置中心",
+=======
     title: "风险告警中心",
+>>>>>>> main
     rank: 3
   },
   children: [
@@ -16,7 +20,11 @@ export default {
       name: "AuthCenterIndex",
       component: () => import("@/views/auth-center/index.vue"),
       meta: {
+<<<<<<< main
+        title: "自动处置中心"
+=======
         title: "风险告警中心"
+>>>>>>> main
       }
     }
   ]

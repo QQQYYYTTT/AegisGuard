@@ -97,9 +97,9 @@
 | 三门概览 `GET /aegis/gate/overview` | 新建 `http/handler_gate.go` | [`gate.ts`](../frontend/src/api/gate.ts) `getGateOverview()` | 阻断决策中心 | `contract.GateQuery` | 未实现 |
 | 决策历史 `GET /aegis/gate/decisions` | 新建 `http/handler_gate.go` | [`gate.ts`](../frontend/src/api/gate.ts) `getGateDecisions()` | 阻断决策中心 | `contract.GateQuery` | 未实现 |
 | 手动评估 `POST /aegis/gate/evaluate` | 新建 `http/handler_gate.go` | [`gate.ts`](../frontend/src/api/gate.ts) `evaluateGate()` | 阻断决策中心 | `contract.GateEvaluator` | 未实现 |
-| 审计日志 `GET /audit/logs` | [`http/router.go`](internal/http/router.go) | [`audit.ts`](../frontend/src/api/audit.ts) `getAuditLogs()` | 审计追踪 | 无（已直连 Store） | 已完成 |
-| 攻击链 `GET /aegis/audit/chains` | 新建 `http/handler_audit.go` | [`audit.ts`](../frontend/src/api/audit.ts) `getAttackChains()` | 审计追踪 | `contract.AuditReader` | 未实现 |
-| 审计统计 `GET /aegis/audit/stats` | 新建 `http/handler_audit.go` | [`audit.ts`](../frontend/src/api/audit.ts) `getAuditStats()` | 审计追踪 | `contract.AuditReader` | 未实现 |
+| 审计日志 `GET /audit/logs` | [`http/router.go`](internal/http/router.go) | [`audit.ts`](../frontend/src/api/audit.ts) `getAuditLogs()` | 攻击路径溯源 | 无（已直连 Store） | 已完成 |
+| 攻击链 `GET /aegis/audit/chains` | 新建 `http/handler_audit.go` | [`audit.ts`](../frontend/src/api/audit.ts) `getAttackChains()` | 攻击路径溯源 | `contract.AuditReader` | 未实现 |
+| 审计统计 `GET /aegis/audit/stats` | 新建 `http/handler_audit.go` | [`audit.ts`](../frontend/src/api/audit.ts) `getAuditStats()` | 攻击路径溯源 | `contract.AuditReader` | 未实现 |
 | 沙箱上下文 `GET /aegis/sandbox/context` | 新建 `http/handler_sandbox.go` | [`sandbox.ts`](../frontend/src/api/sandbox.ts) `getSandboxContext()` | 记忆沙箱 | `contract.SandboxManager` | 未实现 |
 | 转移记录 `GET /aegis/sandbox/transfers` | 新建 `http/handler_sandbox.go` | [`sandbox.ts`](../frontend/src/api/sandbox.ts) `getTransferRecords()` | 记忆沙箱 | `contract.TransferManager` | 未实现 |
 | 上下文隔离 `POST /aegis/sandbox/isolate` | 新建 `http/handler_sandbox.go` | [`sandbox.ts`](../frontend/src/api/sandbox.ts) `isolateContext()` | 记忆沙箱 | `contract.SandboxManager` | 未实现 |
