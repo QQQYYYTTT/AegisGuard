@@ -8,7 +8,8 @@ export default {
   meta: {
     icon: "ep:document-checked",
     title: "审计追踪",
-    rank: 8
+    rank: 8,
+    showLink: false
   },
   children: [
     {

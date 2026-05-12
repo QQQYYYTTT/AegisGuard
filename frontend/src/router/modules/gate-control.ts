@@ -7,7 +7,7 @@ export default {
   redirect: "/gate-control/index",
   meta: {
     icon: "ep:shield",
-    title: "阻断决策中心",
+    title: "自动处置中心",
     rank: 4
   },
   children: [
@@ -16,7 +16,7 @@ export default {
       name: "GateControlIndex",
       component: () => import("@/views/gate-control/index.vue"),
       meta: {
-        title: "决策总览"
+        title: "自动处置中心"
       }
     },
     {
