@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import LogStream from "@/components/audit/LogStream.vue";
 import EvidenceCard from "@/components/audit/EvidenceCard.vue";
+import AttackFlowGraph from "@/components/audit/AttackFlowGraph.vue";
 import StatCard from "@/components/common/StatCard.vue";
 import DecisionBadge from "@/components/common/DecisionBadge.vue";
 import RiskBadge from "@/components/common/RiskBadge.vue";
@@ -145,7 +146,9 @@ const sessionStats = computed(() => {
   const sandboxEvents = session.events.filter(e => e.event_type === "sandbox").length;
   const toolCalls = session.toolCalls.length;
   const maxRisk = Math.max(...session.events.map(e => e.risk_score || 0));
-  const duration = new Date(session.endTime).getTime() - new Date(session.startTime).getTime();
+  const startTime = new Date(session.startTime).getTime();
+  const endTime = new Date(session.endTime).getTime();
+  const duration = (!isNaN(startTime) && !isNaN(endTime)) ? endTime - startTime : 0;
 
   return {
     totalEvents,
@@ -339,50 +342,8 @@ onUnmounted(() => {
             </el-timeline>
           </div>
 
-          <div v-show="activeTab === 'steps'">
-            <div class="space-y-3">
-              <div
-                v-for="step in attackSteps"
-                :key="step.stepNumber"
-                class="p-4 border rounded-lg transition-colors"
-                :class="{
-                  'border-red-500 bg-red-50 dark:bg-red-900': step.isAnomaly,
-                  'border-green-500 bg-green-50 dark:bg-green-900': !step.isAnomaly
-                }"
-              >
-                <div class="flex items-center justify-between mb-2">
-                  <div class="flex items-center gap-2">
-                    <el-tag size="small" effect="dark" type="primary">步骤 {{ step.stepNumber }}</el-tag>
-                    <el-tag size="small" type="info">{{ step.eventType }}</el-tag>
-                    <DecisionBadge :decision="step.decision" />
-                    <RiskBadge :level="step.riskLevel as any" />
-                    <el-tag v-if="step.isAnomaly" size="small" type="danger" effect="dark">异常</el-tag>
-                  </div>
-                  <span class="text-xs text-gray-400">{{ new Date(step.timestamp).toLocaleTimeString() }}</span>
-                </div>
-
-                <div class="text-sm mb-2">{{ step.description }}</div>
-
-                <div class="flex flex-wrap gap-2 mt-2">
-                  <el-tag v-if="step.hasAuth" size="small" type="success" effect="plain">
-                    ✓ 可信授权校验
-                  </el-tag>
-                  <el-tag v-if="step.hasGate" size="small" type="warning" effect="plain">
-                    ⚡ 三级闸门触发 ({{ step.gateType }})
-                  </el-tag>
-                  <el-tag v-if="step.hasSandbox" size="small" type="info" effect="plain">
-                    🔒 记忆沙箱隔离
-                  </el-tag>
-                  <el-tag v-if="step.toolName" size="small" effect="plain">
-                    工具: {{ step.toolName }}
-                  </el-tag>
-                </div>
-
-                <div v-if="step.reason" class="mt-2 text-xs text-gray-600 dark:text-gray-300">
-                  原因: {{ step.reason }}
-                </div>
-              </div>
-            </div>
+          <div v-if="activeTab === 'steps'">
+            <AttackFlowGraph :steps="attackSteps" />
           </div>
 
           <div v-show="activeTab === 'tools'">

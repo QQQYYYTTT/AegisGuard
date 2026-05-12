@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed } from "vue";
 import { useAuditStoreHook } from "@/store/modules/audit";
 import type { AuditEvent } from "@/api/audit";
 
@@ -47,16 +47,6 @@ export function useAuditStream() {
       streamBuffer.value.pop();
     }
   }
-
-  onMounted(() => {
-    loadLogs();
-    loadChains();
-    loadStats();
-  });
-
-  onUnmounted(() => {
-    stopPolling();
-  });
 
   return {
     events: computed(() => auditStore.events),

@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import StatCard from "@/components/common/StatCard.vue";
 import DecisionBadge from "@/components/common/DecisionBadge.vue";
 import RiskBadge from "@/components/common/RiskBadge.vue";
+import DisposalFlowGraph from "@/components/audit/DisposalFlowGraph.vue";
 import { useGateStoreHook } from "@/store/modules/gate";
 import { useAuditStoreHook } from "@/store/modules/audit";
 import type { GateDecision } from "@/api/gate";
@@ -176,6 +177,13 @@ onMounted(() => {
       </template>
 
       <div v-show="activeTab === 'overview'">
+        <el-card shadow="never" class="mb-4">
+          <template #header>
+            <span class="font-semibold text-sm">处置流程拓扑 / Disposal Flow Topology</span>
+          </template>
+          <DisposalFlowGraph :stats="disposalStats" />
+        </el-card>
+
         <el-row :gutter="16" class="mb-4">
           <el-col :span="8">
             <el-card shadow="never">

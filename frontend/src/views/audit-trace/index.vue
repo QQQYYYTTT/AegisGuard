@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
-import AttackTimeline from "@/components/audit/AttackTimeline.vue";
+import AttackChainGraph from "@/components/audit/AttackChainGraph.vue";
 import EvidenceCard from "@/components/audit/EvidenceCard.vue";
 import StatCard from "@/components/common/StatCard.vue";
 import { useAuditStream } from "@/hooks/useAuditStream";
@@ -29,6 +29,10 @@ const chainSummary = computed(() => {
   const uniqueIPs = [...new Set(chain.events.map(e => (e as any).client_ip).filter(Boolean))];
   const uniqueHosts = [...new Set(chain.events.map(e => (e as any).host).filter(Boolean))];
   
+  const startTime = new Date(chain.start_time).getTime();
+  const endTime = new Date(chain.end_time).getTime();
+  const duration = (!isNaN(startTime) && !isNaN(endTime)) ? endTime - startTime : 0;
+
   return {
     chainId: chain.chain_id,
     severity: chain.severity,
@@ -43,7 +47,7 @@ const chainSummary = computed(() => {
     uniqueHosts,
     startTime: chain.start_time,
     endTime: chain.end_time,
-    duration: new Date(chain.end_time).getTime() - new Date(chain.start_time).getTime()
+    duration
   };
 });
 
@@ -234,8 +238,8 @@ onUnmounted(() => {
             </el-row>
           </div>
 
-          <div v-show="activeTab === 'chain'">
-            <AttackTimeline :chain="selectedChain" />
+          <div v-if="activeTab === 'chain'">
+            <AttackChainGraph :chain="selectedChain" />
           </div>
 
           <div v-show="activeTab === 'entities'">
