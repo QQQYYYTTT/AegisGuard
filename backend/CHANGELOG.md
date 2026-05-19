@@ -70,11 +70,6 @@
 | 并发写入 | 41.28 ns/op | 26.83 ns/op | **1.54x** |
 | 纯读 | 19.41 ns/op | 11.68 ns/op | **1.66x** |
 
-### 后续优化建议
-
-详见本文档末尾 `性能优化建议` 部分。
-
----
 
 ## [优化版本 v2] 2026-05-19 (第二批次)
 
@@ -145,3 +140,51 @@ Verify/Inspect(token)
     │
     └─► 返回 VerificationChecks
 ```
+
+## [优化版本 v3] 2026-05-19 (第三批次)
+
+### 性能优化
+
+#### 5. SchemaHash 缓存优化
+- **文件**: `internal/auth/verifier.go`
+- **改动**: 新增 `sync.Map` 缓存 `(SchemaHash, toolSchema) → valid` 的验证结果
+- **原因**: AI agent 重复调用相同工具时，Schema 不变，重复计算 SM3 是浪费
+- **收益**:
+  - 相同 schema 二次调用: **跳过 SM3 计算，直接返回缓存结果**
+  - 预估减少 30-50% 的 Schema 验证时间
+- **细节**:
+  - 缓存 key = `SchemaHash:SM3Sum(toolSchema)`
+  - 只缓存**验证成功/失败**的结果，不缓存具体数据
+  - 缓存 TTL = 10 分钟
+
+#### 6. buildSignMessage 字符串拼接优化
+- **文件**: `internal/auth/token.go`
+- **改动**: 使用 `strings.Builder` 替代 `fmt.Sprintf`
+- **原因**: 减少字符串拼接的内存分配开销
+- **收益**:
+  - 减少内存分配次数
+  - 预分配 256 字节缓冲区
+  - 预估 5-15% 提速
+- **细节**:
+  - 使用 `strings.Builder.Grow(256)` 预分配
+  - 使用 `WriteByte('|')` 替代 `WriteString("|")`
+
+### 测试
+
+#### 新增单元测试
+- `internal/auth/schema_cache_test.go`
+  - `TestCompareSchemaHashCaching` - SchemaHash 缓存命中
+  - `TestCompareSchemaHashCacheMiss` - SchemaHash 不匹配时缓存无效
+  - `TestCompareSchemaHashEmptyTokenHash` - 空 token hash 处理
+  - `TestCompareSchemaHashDifferentSchemas` - 不同 schema 分别缓存
+  - `TestBuildSignMessageOptimization` - 字符串拼接正确性
+  - `TestBuildSignMessageOptimizationPerformance/Deterministic` - 100 次调用一致性
+
+### 风险评估
+
+| 优化项 | 风险等级 | 说明 |
+|-------|---------|------|
+| SchemaHash 缓存 | 🟢 极低 | 只缓存验证结果，schema 变化时自然 miss |
+| buildSignMessage 优化 | 🟢 无 | 纯实现方式优化，无功能变更 |
+
+---

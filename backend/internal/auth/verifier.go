@@ -16,6 +16,9 @@ var (
 	nonceMu         sync.RWMutex
 	nonceExpiration = 24 * time.Hour
 	nonceGCDone     = make(chan struct{})
+
+	schemaCache    sync.Map
+	schemaCacheTTL = 10 * time.Minute
 )
 
 type cachedVerification struct {
@@ -200,6 +203,7 @@ func (v *Verifier) verifySchemaHash(token *RequireToken) error {
 }
 
 // CompareSchemaHash 对比工具 Schema 的 SM3 哈希是否与令牌一致
+// 使用缓存优化：如果相同的 SchemaHash + toolSchema 组合已验证过，直接返回缓存结果
 // 参数：
 //   - token: 含有预期 SchemaHash 的 RequireToken
 //   - toolSchema: 实际获取到的工具 Schema 原始字节
@@ -213,12 +217,23 @@ func CompareSchemaHash(token *RequireToken, toolSchema []byte) error {
 		return fmt.Errorf("token has no schema hash set")
 	}
 
+	schemaKey := fmt.Sprintf("%s:%x", token.SchemaHash, smcrypto.SM3Sum(toolSchema))
+
+	if cached, ok := schemaCache.Load(schemaKey); ok {
+		if !cached.(bool) {
+			return fmt.Errorf("schema hash mismatch")
+		}
+		return nil
+	}
+
 	actualHash := smcrypto.SM3Hex(toolSchema)
 	if actualHash != token.SchemaHash {
+		schemaCache.Store(schemaKey, false)
 		return fmt.Errorf("schema hash mismatch: expected %s, got %s",
 			token.SchemaHash, actualHash)
 	}
 
+	schemaCache.Store(schemaKey, true)
 	return nil
 }
 

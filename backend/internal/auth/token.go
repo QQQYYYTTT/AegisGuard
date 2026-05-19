@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -145,22 +146,30 @@ func (t *RequireToken) Sign() error {
 // buildSignMessage 构建用于签名的消息体
 // 将令牌的关键字段拼接成字符串，确保签名的完整性和可验证性
 // 返回：待签名的字节数组
+// 使用 strings.Builder 预分配缓冲区，减少内存分配和字符串拼接开销
 func (t *RequireToken) buildSignMessage() []byte {
-	// 使用 "|" 作为分隔符拼接字段
-	// 格式：ToolName|Scope|AgentID|SessionID|TaskID|Nonce|RiskLevel|SchemaHash|MaxCalls
-	// 注意：CallCount 不参与签名，因为它会在每次调用时递增
-	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%d|%s|%d",
-		t.ToolName,
-		t.Scope,
-		t.AgentID,
-		t.SessionID,
-		t.TaskID,
-		t.Nonce,
-		t.RiskLevel,
-		t.SchemaHash,
-		t.MaxCalls,
-	)
-	return []byte(data)
+	var sb strings.Builder
+	sb.Grow(256)
+
+	sb.WriteString(t.ToolName)
+	sb.WriteByte('|')
+	sb.WriteString(t.Scope)
+	sb.WriteByte('|')
+	sb.WriteString(t.AgentID)
+	sb.WriteByte('|')
+	sb.WriteString(t.SessionID)
+	sb.WriteByte('|')
+	sb.WriteString(t.TaskID)
+	sb.WriteByte('|')
+	sb.WriteString(t.Nonce)
+	sb.WriteByte('|')
+	sb.WriteString(fmt.Sprintf("%d", t.RiskLevel))
+	sb.WriteByte('|')
+	sb.WriteString(t.SchemaHash)
+	sb.WriteByte('|')
+	sb.WriteString(fmt.Sprintf("%d", t.MaxCalls))
+
+	return []byte(sb.String())
 }
 
 // buildCacheKey 构建用于验证缓存的 key
