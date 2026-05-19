@@ -17,7 +17,11 @@ import (
 	"aegisguard/internal/gates"
 	"aegisguard/internal/gateway"
 	"aegisguard/internal/interfaces"
+<<<<<<< HEAD
 	"aegisguard/internal/user"
+=======
+	memorysandbox "aegisguard/internal/sandbox"
+>>>>>>> 04e571098203046fe3378d7c828cb3349a325bd8
 	"aegisguard/internal/vkey"
 
 	"github.com/gin-gonic/gin"
@@ -47,6 +51,9 @@ type Router struct {
 	userService   *user.Service
 	gateQuery     contract.GateQuery
 	gateEvaluator contract.GateEvaluator
+	sandboxMgr    contract.SandboxManager
+	transferMgr   contract.TransferManager
+	contentFilter contract.ContentFilter
 	logger        *zap.Logger
 	targetURL     string
 	cfg           config.Config
@@ -89,17 +96,22 @@ func NewRouter(cfg config.Config) (*Router, error) {
 
 	tokenStore := auth.NewTokenStore()
 	verifier := auth.NewVerifier()
+<<<<<<< HEAD
 	userDB, err := db.OpenSQLite(cfg.UserDBPath)
 	if err != nil {
 		return nil, err
 	}
 	userRepo := user.NewRepository(userDB)
 	userService := user.NewService(userRepo, cfg.UserTokenSecret)
+=======
+	sandboxMgr := memorysandbox.NewManager(logger)
+>>>>>>> 04e571098203046fe3378d7c828cb3349a325bd8
 
 	proxy, err := gateway.NewAegisProxy(vkeyMgr.GetTargetURL(), vkeyMgr, tokenStore, cfg.TokenMode, logger)
 	if err != nil {
 		return nil, err
 	}
+	proxy.SetSandbox(sandboxMgr, sandboxMgr, sandboxMgr)
 
 	decisionStore := proxy.GetDecisionStore()
 	gateQuery := gates.NewGateQuery(decisionStore)
@@ -121,6 +133,9 @@ func NewRouter(cfg config.Config) (*Router, error) {
 		userService:   userService,
 		gateQuery:     gateQuery,
 		gateEvaluator: gateEvaluator,
+		sandboxMgr:    sandboxMgr,
+		transferMgr:   sandboxMgr,
+		contentFilter: sandboxMgr,
 		logger:        logger,
 		targetURL:     vkeyMgr.GetTargetURL(),
 		cfg:           cfg,
@@ -132,6 +147,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 
 func (r *Router) registerRoutes() {
 	r.engine.GET("/health", r.handleHealth)
+	r.registerUserRoutes()
 	r.registerAuthRoutes()
 	r.registerUserRoutes()
 
@@ -144,6 +160,7 @@ func (r *Router) registerRoutes() {
 	r.engine.GET("/aegis/gate/overview", r.handleGateOverview)
 	r.engine.GET("/aegis/gate/decisions", r.handleGateDecisions)
 	r.engine.POST("/aegis/gate/evaluate", r.handleGateEvaluate)
+	r.registerSandboxRoutes()
 
 	if r.cfg.DevMode {
 		r.registerDevRoutes()

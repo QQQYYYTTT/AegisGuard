@@ -18,6 +18,7 @@ export function getPluginsList(
   VITE_COMPRESSION: ViteCompression
 ): PluginOption[] {
   const lifecycle = process.env.npm_lifecycle_event;
+  const enableMock = process.env.VITE_ENABLE_MOCK !== "false";
   return [
     tailwindcss(),
     vue(),
@@ -41,12 +42,14 @@ export function getPluginsList(
      */
     removeNoMatch(),
     // mock支持
-    vitePluginFakeServer({
-      logger: false,
-      include: "mock",
-      infixName: false,
-      enableProd: true
-    }),
+    enableMock
+      ? vitePluginFakeServer({
+          logger: false,
+          include: "mock",
+          infixName: false,
+          enableProd: true
+        })
+      : null,
     // svg组件化支持
     svgLoader(),
     // 自动按需加载图标

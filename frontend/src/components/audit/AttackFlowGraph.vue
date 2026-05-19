@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted, computed, nextTick } from "vue";
 import * as echarts from "echarts";
+import type { GraphSeriesOption } from "echarts/charts";
 
 interface AttackStep {
   stepNumber: number;
@@ -60,7 +61,7 @@ const sortedSteps = computed(() => {
 });
 
 function buildFlowData(steps: AttackStep[]) {
-  const nodes = steps.map((step, index) => ({
+  const nodes: GraphSeriesOption["data"] = steps.map((step, index) => ({
     id: `step-${step.stepNumber}`,
     name: `步骤${step.stepNumber}`,
     value: step.riskScore,
@@ -76,7 +77,7 @@ function buildFlowData(steps: AttackStep[]) {
     label: {
       show: true,
       fontSize: 11,
-      position: index % 2 === 0 ? "top" : "bottom",
+      position: (index % 2 === 0 ? "top" : "bottom") as "top" | "bottom",
       distance: 10,
       formatter: `{name|步骤 ${step.stepNumber}}\n{type|${eventTypeLabels[step.eventType] || step.eventType}}`,
       rich: {
@@ -94,7 +95,7 @@ function buildFlowData(steps: AttackStep[]) {
     rawData: step
   }));
 
-  const links = [];
+  const links: GraphSeriesOption["links"] = [];
   for (let i = 0; i < steps.length - 1; i++) {
     const current = steps[i];
     const next = steps[i + 1];
@@ -130,7 +131,7 @@ function initChart() {
   if (!chartRef.value) return;
   
   if (!chart) {
-    chart = echarts.init(chartRef.value, undefined, { renderer: 'canvas' });
+    chart = echarts.init(chartRef.value, undefined, { renderer: "canvas" });
   }
   
   renderChart();
