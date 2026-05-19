@@ -19,6 +19,8 @@ package interfaces
 
 import (
 	"aegisguard/internal/auth"
+	"encoding/json"
+	"fmt"
 
 	"time"
 )
@@ -56,6 +58,34 @@ func (d Decision) String() string {
 	}
 }
 
+// MarshalJSON 实现 json.Marshaler，将 Decision 序列化为字符串
+func (d Decision) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.String())
+}
+
+// UnmarshalJSON 实现 json.Unmarshaler，从字符串反序列化 Decision
+func (d *Decision) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	switch s {
+	case "Allow":
+		*d = Allow
+	case "Block":
+		*d = Block
+	case "Degrade":
+		*d = Degrade
+	case "Deny":
+		*d = Deny
+	case "HumanApproval":
+		*d = HumanApproval
+	default:
+		return fmt.Errorf("unknown Decision value: %s", s)
+	}
+	return nil
+}
+
 // RequireToken 借用 auth 包已有定义
 type RequireToken = auth.RequireToken
 
@@ -68,13 +98,22 @@ type GateDecision struct {
 	RequestID    string    `json:"request_id"`
 	Timestamp    time.Time `json:"timestamp"`
 	GateType     string    `json:"gate_type"`
-	Decision     string    `json:"decision"`
+	Decision     Decision  `json:"decision"`
 	RiskScore    int       `json:"risk_score"`
 	RiskLevel    string    `json:"risk_level"`
 	MatchedRules []string  `json:"matched_rules"`
 	Reason       string    `json:"reason"`
 	ToolName     string    `json:"tool_name,omitempty"`
 	AgentID      string    `json:"agent_id,omitempty"`
+}
+
+// EvaluateResult 门控评估的结构化结果，替代 string 格式传递风险元数据
+type EvaluateResult struct {
+	Decision     Decision
+	Reason       string
+	RiskScore    int
+	RiskLevel    string
+	MatchedRules []string
 }
 
 // ResourceDescriptor 描述被访问的资源，用于精细化的 scope 校验

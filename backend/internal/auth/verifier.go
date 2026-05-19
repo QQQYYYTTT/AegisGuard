@@ -16,6 +16,7 @@ var (
 	nonceMu         sync.RWMutex
 	nonceExpiration = 24 * time.Hour
 	nonceGCDone     = make(chan struct{})
+	nonceGCOnce     sync.Once
 
 	schemaCache    sync.Map
 	schemaCacheTTL = 10 * time.Minute
@@ -293,6 +294,9 @@ func StartNonceGC(interval time.Duration) {
 }
 
 // StopNonceGC 停止后台 Nonce GC goroutine
+// 可安全多次调用，只有首次调用会关闭 channel
 func StopNonceGC() {
-	close(nonceGCDone)
+	nonceGCOnce.Do(func() {
+		close(nonceGCDone)
+	})
 }

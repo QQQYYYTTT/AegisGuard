@@ -144,32 +144,33 @@ func hasToolCalls(messages []struct {
 }
 
 func (ap *AegisProxy) handleChatRequest(req *http.Request, body []byte) (gateResult, bool) {
-	decision, reason := ap.messageGate.Evaluate(body)
-	result := ap.newGateResult("message", decision, reason, http.StatusOK)
-	ap.recordDecision(req, result, "", "")
+	result := ap.messageGate.Evaluate(body)
+	gr := ap.newGateResult("message", result, http.StatusOK)
+	ap.recordDecision(req, gr, "", "")
 
-	switch decision {
+	switch result.Decision {
 	case gates.Block, gates.Deny:
-		ap.blockRequest(req, reason)
-		result.StatusCode = http.StatusForbidden
-		return result, false
+		ap.blockRequest(req, result.Reason)
+		gr.StatusCode = http.StatusForbidden
+		return gr, false
 	case gates.HumanApproval:
-		ap.blockRequest(req, reason)
-		result.StatusCode = http.StatusAccepted
-		return result, false
+		ap.blockRequest(req, result.Reason)
+		gr.StatusCode = http.StatusAccepted
+		return gr, false
 	case gates.Degrade:
 		ap.degradeRequest(req, body)
-		return result, true
+		return gr, true
 	case gates.Allow:
-		ap.logger.Debug("message gate allow", zap.String("reason", reason))
+		ap.logger.Debug("message gate allow", zap.String("reason", result.Reason))
 	}
-	return result, true
+	return gr, true
 }
 
 func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) (gateResult, bool) {
 	toolName, params := ap.extractToolCall(body)
 	if toolName == "" {
-		result := ap.newGateResult("action", gates.Deny, "tool call detected but tool name is empty", http.StatusBadRequest)
+		er := interfaces.EvaluateResult{Decision: gates.Deny, Reason: "tool call detected but tool name is empty"}
+		result := ap.newGateResult("action", er, http.StatusBadRequest)
 		result.TokenStatus = firstTokenStatus(req.Header)
 		result.AuthMode = ap.tokenMode
 		ap.recordDecision(req, result, "", "")
@@ -180,46 +181,45 @@ func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) (gateResult
 		ap.logger.Error("failed to issue or inject RequireToken", zap.String("tool", toolName), zap.Error(err))
 		req.Header.Set("X-Aegis-Token-Status", "error")
 	}
-	decision, reason := ap.actionGate.Evaluate(toolName, params, req.Header)
-	result := ap.newGateResult("action", decision, reason, http.StatusOK)
-	result.TokenStatus = firstTokenStatus(req.Header)
-	result.AuthMode = ap.tokenMode
-	result.UnauthorizedAllow = decision == gates.Allow && req.Header.Get("X-Aegis-Token") == "" && ap.tokenMode != "strict"
-	ap.recordDecision(req, result, toolName, "")
+	result := ap.actionGate.Evaluate(toolName, params, req.Header)
+	gr := ap.newGateResult("action", result, http.StatusOK)
+	gr.TokenStatus = firstTokenStatus(req.Header)
+	gr.AuthMode = ap.tokenMode
+	gr.UnauthorizedAllow = result.Decision == gates.Allow && req.Header.Get("X-Aegis-Token") == "" && ap.tokenMode != "strict"
+	ap.recordDecision(req, gr, toolName, "")
 
-	switch decision {
+	switch result.Decision {
 	case gates.Block, gates.Deny:
-		ap.denyToolCall(req, reason)
-		result.StatusCode = http.StatusForbidden
-		return result, false
+		ap.denyToolCall(req, result.Reason)
+		gr.StatusCode = http.StatusForbidden
+		return gr, false
 	case gates.HumanApproval:
 		ap.holdForApproval(req, toolName)
-		result.StatusCode = http.StatusAccepted
-		return result, false
+		gr.StatusCode = http.StatusAccepted
+		return gr, false
 	case gates.Degrade:
 		ap.degradeRequest(req, body)
-		return result, true
+		return gr, true
 	case gates.Allow:
-		return result, true
+		return gr, true
 	default:
 		ap.logger.Warn("unknown action gate decision",
-			zap.Any("decision", decision),
+			zap.Any("decision", result.Decision),
 			zap.String("tool", toolName),
 		)
 	}
-	return result, true
+	return gr, true
 }
 
-func (ap *AegisProxy) newGateResult(gateType string, decision gates.Decision, reason string, statusCode int) gateResult {
-	score, level, rules := gates.ExtractReasonMetadata(reason)
+func (ap *AegisProxy) newGateResult(gateType string, er interfaces.EvaluateResult, statusCode int) gateResult {
 	return gateResult{
-		Decision:   decision,
-		Reason:     reason,
+		Decision:   er.Decision,
+		Reason:     er.Reason,
 		StatusCode: statusCode,
 		GateType:   gateType,
-		RiskScore:  score,
-		RiskLevel:  level,
-		Rules:      rules,
+		RiskScore:  er.RiskScore,
+		RiskLevel:  er.RiskLevel,
+		Rules:      er.MatchedRules,
 		AuthMode:   ap.tokenMode,
 	}
 }
@@ -232,7 +232,7 @@ func (ap *AegisProxy) recordDecision(req *http.Request, result gateResult, toolN
 		RequestID:    requestIDFromContext(req),
 		Timestamp:    time.Now(),
 		GateType:     result.GateType,
-		Decision:     result.Decision.String(),
+		Decision:     result.Decision,
 		RiskScore:    result.RiskScore,
 		RiskLevel:    result.RiskLevel,
 		MatchedRules: result.Rules,
@@ -404,21 +404,21 @@ func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
 	}
 	_ = resp.Body.Close()
 
-	decision, reason := ap.returnGate.Evaluate(body)
-	result := ap.newGateResult("return", decision, reason, resp.StatusCode)
-	ap.recordDecision(resp.Request, result, "", "")
-	setGateHeaders(resp.Header, result)
+	result := ap.returnGate.Evaluate(body)
+	gr := ap.newGateResult("return", result, resp.StatusCode)
+	ap.recordDecision(resp.Request, gr, "", "")
+	setGateHeaders(resp.Header, gr)
 
-	switch decision {
+	switch result.Decision {
 	case gates.Block, gates.Deny:
-		ap.logger.Warn("response blocked by return gate", zap.String("reason", reason))
-		ap.captureSandboxResponse(resp, body, result, false)
+		ap.logger.Warn("response blocked by return gate", zap.String("reason", result.Reason))
+		ap.captureSandboxResponse(resp, body, gr, false)
 		resp.StatusCode = http.StatusForbidden
 		resp.Status = "403 Forbidden"
-		body = gateResponseBody(decision, reason)
+		body = gateResponseBody(result.Decision, result.Reason)
 	case gates.Degrade:
-		ap.logger.Info("response filtered by return gate", zap.String("reason", reason))
-		ap.captureSandboxResponse(resp, body, result, true)
+		ap.logger.Info("response filtered by return gate", zap.String("reason", result.Reason))
+		ap.captureSandboxResponse(resp, body, gr, true)
 		if ap.contentFilter != nil {
 			filtered, removed := ap.contentFilter.FilterToolResponse(body)
 			body = filtered
@@ -430,7 +430,7 @@ func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
 		}
 		resp.Header.Set("X-Aegis-Filtered", "true")
 	default:
-		ap.logger.Debug("return gate allow", zap.String("reason", reason))
+		ap.logger.Debug("return gate allow", zap.String("reason", result.Reason))
 	}
 
 	resp.Body = io.NopCloser(bytes.NewBuffer(body))
@@ -506,7 +506,8 @@ func contentTypeFromHeader(value string) string {
 func (ap *AegisProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		result := ap.newGateResult("message", gates.Block, "failed to read request body", http.StatusBadRequest)
+		er := interfaces.EvaluateResult{Decision: gates.Block, Reason: "failed to read request body"}
+		result := ap.newGateResult("message", er, http.StatusBadRequest)
 		ap.writeGateResponse(w, result)
 		return
 	}

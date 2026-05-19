@@ -350,37 +350,36 @@ func (r *Router) handleGateEvaluate(c *gin.Context) {
 		return
 	}
 
-	var decision interfaces.Decision
-	var reason string
+	var result interfaces.EvaluateResult
+	evalRequestID := uuid.New().String()
 
 	switch req.Type {
 	case "message":
-		decision, reason = r.gateEvaluator.EvaluateMessage(buildEvaluationBody(req.Body, req.Content))
+		result = r.gateEvaluator.EvaluateMessage(evalRequestID, buildEvaluationBody(req.Body, req.Content))
 	case "action":
 		httpHeaders := make(http.Header)
 		for k, v := range req.Headers {
 			httpHeaders.Set(k, v)
 		}
-		decision, reason = r.gateEvaluator.EvaluateAction(req.ToolName, req.Params, httpHeaders)
+		result = r.gateEvaluator.EvaluateAction(evalRequestID, req.ToolName, req.Params, httpHeaders)
 	case "return":
-		decision, reason = r.gateEvaluator.EvaluateReturn(buildEvaluationBody(req.Body, req.Content))
+		result = r.gateEvaluator.EvaluateReturn(evalRequestID, buildEvaluationBody(req.Body, req.Content))
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gate type"})
 		return
 	}
 
-	score, level, rules := gates.ExtractReasonMetadata(reason)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": interfaces.GateDecision{
 			RequestID:    "manual",
 			Timestamp:    time.Now(),
 			GateType:     req.Type,
-			Decision:     decision.String(),
-			RiskScore:    score,
-			RiskLevel:    level,
-			MatchedRules: rules,
-			Reason:       reason,
+			Decision:     result.Decision,
+			RiskScore:    result.RiskScore,
+			RiskLevel:    result.RiskLevel,
+			MatchedRules: result.MatchedRules,
+			Reason:       result.Reason,
 			ToolName:     req.ToolName,
 		},
 	})

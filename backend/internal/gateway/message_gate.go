@@ -1,6 +1,6 @@
 package gateway
 
-import "aegisguard/internal/gates"
+import "aegisguard/internal/interfaces"
 
 // MessageEvaluator [PARTIAL] [分工1] 消息门控评估器
 //
@@ -8,5 +8,5 @@ import "aegisguard/internal/gates"
 // 当前实现由 gates.MessageGate 提供，状态：
 //   - Evaluate: [PARTIAL] gates/message.go 的 Evaluate 仅返回 Allow，需实现真实检测
 type MessageEvaluator interface {
-	Evaluate(body []byte) (gates.Decision, string)
+	Evaluate(body []byte) interfaces.EvaluateResult
 }

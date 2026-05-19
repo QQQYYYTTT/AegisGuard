@@ -58,11 +58,11 @@ func TestMessageGatePromptInjection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			decision, reason := gate.Evaluate([]byte(tt.message))
-			t.Logf("Decision: %s, Reason: %s", decision, reason)
+			result := gate.Evaluate([]byte(tt.message))
+			t.Logf("Decision: %s, Reason: %s", result.Decision, result.Reason)
 
-			if decision != tt.expected {
-				t.Errorf("Expected %s, got %s", tt.expected, decision)
+			if result.Decision != tt.expected {
+				t.Errorf("Expected %s, got %s", tt.expected, result.Decision)
 			}
 		})
 	}
@@ -109,11 +109,11 @@ func TestActionGateToolValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			headers := make(http.Header)
-			decision, reason := gate.Evaluate(tt.toolName, tt.params, headers)
-			t.Logf("Decision: %s, Reason: %s", decision, reason)
+			result := gate.Evaluate(tt.toolName, tt.params, headers)
+			t.Logf("Decision: %s, Reason: %s", result.Decision, result.Reason)
 
-			if decision != tt.expected {
-				t.Errorf("Expected %s, got %s", tt.expected, decision)
+			if result.Decision != tt.expected {
+				t.Errorf("Expected %s, got %s", tt.expected, result.Decision)
 			}
 		})
 	}
@@ -164,11 +164,11 @@ func TestReturnGatePIIFiltering(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			decision, reason := gate.Evaluate([]byte(tt.response))
-			t.Logf("Decision: %s, Reason: %s", decision, reason)
+			result := gate.Evaluate([]byte(tt.response))
+			t.Logf("Decision: %s, Reason: %s", result.Decision, result.Reason)
 
-			if decision != tt.expected {
-				t.Errorf("Expected %s, got %s", tt.expected, decision)
+			if result.Decision != tt.expected {
+				t.Errorf("Expected %s, got %s", tt.expected, result.Decision)
 			}
 		})
 	}
@@ -183,9 +183,9 @@ func TestReturnGateFiltering(t *testing.T) {
 		"password": "admin123"
 	}`)
 
-	decision, _ := gate.Evaluate(sensitiveResponse)
-	if decision != Degrade {
-		t.Errorf("Expected Degrade for sensitive content, got %s", decision)
+	result := gate.Evaluate(sensitiveResponse)
+	if result.Decision != Degrade {
+		t.Errorf("Expected Degrade for sensitive content, got %s", result.Decision)
 	}
 
 	// 过滤内容
@@ -270,7 +270,7 @@ func TestDecisionStore(t *testing.T) {
 			RequestID: "req-" + string(rune(48+i)),
 			Timestamp: time.Now(),
 			GateType:  "message",
-			Decision:  Allow.String(),
+			Decision:  Allow,
 		})
 	}
 
@@ -300,17 +300,17 @@ func TestGatesIntegrationFlow(t *testing.T) {
 	msgBody, _ := json.Marshal(chatMessage)
 
 	messageGate := NewMessageGate()
-	decision, reason := messageGate.Evaluate(msgBody)
+	result := messageGate.Evaluate(msgBody)
 
 	store.Add(interfaces.GateDecision{
 		RequestID: "chat-001",
 		Timestamp: time.Now(),
 		GateType:  "message",
-		Decision:  decision.String(),
-		Reason:    reason,
+		Decision:  result.Decision,
+		Reason:    result.Reason,
 	})
 
-	t.Logf("Chat Message Decision: %s (%s)", decision, reason)
+	t.Logf("Chat Message Decision: %s (%s)", result.Decision, result.Reason)
 
 	// 模拟工具调用
 	toolParams := map[string]interface{}{
@@ -318,18 +318,18 @@ func TestGatesIntegrationFlow(t *testing.T) {
 	}
 	actionGate := NewActionGate(logger)
 	headers := make(http.Header)
-	decision2, reason2 := actionGate.Evaluate("read_file", toolParams, headers)
+	result2 := actionGate.Evaluate("read_file", toolParams, headers)
 
 	store.Add(interfaces.GateDecision{
 		RequestID: "action-001",
 		Timestamp: time.Now(),
 		GateType:  "action",
-		Decision:  decision2.String(),
-		Reason:    reason2,
+		Decision:  result2.Decision,
+		Reason:    result2.Reason,
 		ToolName:  "read_file",
 	})
 
-	t.Logf("Action Decision: %s (%s)", decision2, reason2)
+	t.Logf("Action Decision: %s (%s)", result2.Decision, result2.Reason)
 
 	// 模拟返回内容
 	response := map[string]interface{}{
@@ -338,17 +338,17 @@ func TestGatesIntegrationFlow(t *testing.T) {
 	respBody, _ := json.Marshal(response)
 
 	returnGate := NewReturnGate()
-	decision3, reason3 := returnGate.Evaluate(respBody)
+	result3 := returnGate.Evaluate(respBody)
 
 	store.Add(interfaces.GateDecision{
 		RequestID: "return-001",
 		Timestamp: time.Now(),
 		GateType:  "return",
-		Decision:  decision3.String(),
-		Reason:    reason3,
+		Decision:  result3.Decision,
+		Reason:    result3.Reason,
 	})
 
-	t.Logf("Return Decision: %s (%s)", decision3, reason3)
+	t.Logf("Return Decision: %s (%s)", result3.Decision, result3.Reason)
 
 	// 验证决策记录
 	overview := store.GetOverview()

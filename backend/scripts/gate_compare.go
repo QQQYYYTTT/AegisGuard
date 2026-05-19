@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"aegisguard/internal/gates"
+	"aegisguard/internal/interfaces"
 
 	"go.uber.org/zap"
 )
@@ -81,42 +82,41 @@ func main() {
 	fmt.Println(strings.Repeat("-", 110))
 
 	for _, item := range samples {
-		decision, reason, filtered := evaluate(item, messageGate, actionGate, returnGate)
-		score, _, rules := gates.ExtractReasonMetadata(reason)
+		result, filtered := evaluate(item, messageGate, actionGate, returnGate)
 		withoutGate := "pass unchanged"
-		ruleText := strings.Join(rules, ",")
-		if ruleText == "" {
-			ruleText = "none"
+		rules := strings.Join(result.MatchedRules, ",")
+		if rules == "" {
+			rules = "none"
 		}
 
 		fmt.Printf("%-24s %-10s %-18s %-18s %-10d %-34s\n",
-			item.Name, item.GateType, withoutGate, decision.String(), score, ruleText)
-		fmt.Printf("  reason: %s\n", reason)
+			item.Name, item.GateType, withoutGate, result.Decision.String(), result.RiskScore, rules)
+		fmt.Printf("  reason: %s\n", result.Reason)
 		if filtered != "" {
 			fmt.Printf("  filtered: %s\n", filtered)
 		}
 	}
 }
 
-func evaluate(item sample, messageGate *gates.MessageGate, actionGate *gates.ActionGate, returnGate *gates.ReturnGate) (gates.Decision, string, string) {
+func evaluate(item sample, messageGate *gates.MessageGate, actionGate *gates.ActionGate, returnGate *gates.ReturnGate) (interfaces.EvaluateResult, string) {
 	switch item.GateType {
 	case "message":
-		decision, reason := messageGate.Evaluate([]byte(item.Body))
-		return decision, reason, ""
+		result := messageGate.Evaluate([]byte(item.Body))
+		return result, ""
 	case "action":
-		decision, reason := actionGate.Evaluate(item.ToolName, item.Params, http.Header{})
-		return decision, reason, ""
+		result := actionGate.Evaluate(item.ToolName, item.Params, http.Header{})
+		return result, ""
 	case "return":
 		body := []byte(item.Body)
-		decision, reason := returnGate.Evaluate(body)
-		if decision == gates.Degrade {
+		result := returnGate.Evaluate(body)
+		if result.Decision == gates.Degrade {
 			filtered := returnGate.Filter(body)
 			if json.Valid(filtered) {
-				return decision, reason, string(filtered)
+				return result, string(filtered)
 			}
 		}
-		return decision, reason, ""
+		return result, ""
 	default:
-		return gates.Allow, "unknown gate type", ""
+		return interfaces.EvaluateResult{Decision: gates.Allow, Reason: "unknown gate type"}, ""
 	}
 }

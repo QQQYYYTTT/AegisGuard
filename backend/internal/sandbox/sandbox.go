@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"aegisguard/internal/interfaces"
+	"aegisguard/internal/sanitize"
 	"aegisguard/pkg/smcrypto"
 
 	"github.com/google/uuid"
@@ -298,7 +299,7 @@ func (m *Manager) GetRecords(contextID string, limit int) ([]interfaces.Transfer
 }
 
 func (m *Manager) ExtractSafeSummary(content string) string {
-	sanitized, _ := sanitizeText(content)
+	sanitized, _ := sanitize.Text(content)
 	sanitized = strings.Join(strings.Fields(sanitized), " ")
 	if sanitized == "" {
 		return ""
@@ -313,14 +314,14 @@ func (m *Manager) ExtractSafeSummary(content string) string {
 func (m *Manager) FilterToolResponse(rawResponse []byte) ([]byte, []string) {
 	var payload any
 	if err := json.Unmarshal(rawResponse, &payload); err != nil {
-		filtered, removed := sanitizeText(string(rawResponse))
+		filtered, removed := sanitize.Text(string(rawResponse))
 		return []byte(filtered), removed
 	}
 
-	removed := sanitizeJSON(&payload, "")
+	removed := sanitize.JSON(&payload, "")
 	filtered, err := json.Marshal(payload)
 	if err != nil {
-		text, textRemoved := sanitizeText(string(rawResponse))
+		text, textRemoved := sanitize.Text(string(rawResponse))
 		removed = append(removed, textRemoved...)
 		return []byte(text), uniqueStrings(removed)
 	}
@@ -408,83 +409,6 @@ func statusForRisk(score int) string {
 	return "isolated"
 }
 
-func sanitizeJSON(value *any, path string) []string {
-	if value == nil {
-		return nil
-	}
-
-	switch typed := (*value).(type) {
-	case map[string]any:
-		removed := []string{}
-		for key, child := range typed {
-			childPath := joinPath(path, key)
-			if isSensitiveKey(key) {
-				typed[key] = "[REDACTED]"
-				removed = append(removed, childPath)
-				continue
-			}
-			removed = append(removed, sanitizeJSON(&child, childPath)...)
-			typed[key] = child
-		}
-		return removed
-	case []any:
-		removed := []string{}
-		for idx, child := range typed {
-			childPath := fmt.Sprintf("%s[%d]", path, idx)
-			removed = append(removed, sanitizeJSON(&child, childPath)...)
-			typed[idx] = child
-		}
-		return removed
-	case string:
-		safe, removed := sanitizeText(typed)
-		*value = safe
-		for i := range removed {
-			if path != "" {
-				removed[i] = path + ":" + removed[i]
-			}
-		}
-		return removed
-	default:
-		return nil
-	}
-}
-
-func sanitizeText(text string) (string, []string) {
-	if text == "" {
-		return text, nil
-	}
-
-	removed := []string{}
-	safe := text
-	for name, pattern := range map[string]string{
-		"api_key":     `(?i)\bsk-[A-Za-z0-9_-]{8,}\b`,
-		"bearer":      `(?i)\bBearer\s+[A-Za-z0-9._-]{12,}\b`,
-		"aws_key":     `(?i)\bAKIA[0-9A-Z]{12,}\b`,
-		"assignment":  `(?i)\b(password|passwd|api[_-]?key|secret|token|private[_-]?key)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;}]+)`,
-		"instruction": `(?i)\b(ignore|bypass|override)\b.{0,80}\b(system|developer|previous|prior|policy|instruction)s?\b`,
-		"memory":      `(?i)\b(add|save|write|store|update|remember)\b.{0,80}\b(memory|forever|instruction|rule|policy)\b`,
-		"workflow":    `(?i)\b(saved\s+(workflow\s+)?note\s+says|workflow objective|for this request, complete the following step)\b`,
-		"jailbreak":   `(?i)\b(system prompt|developer message|hidden instruction|jailbreak|prompt injection|from now on)\b`,
-	} {
-		re := regexp.MustCompile(pattern)
-		if re.MatchString(safe) {
-			removed = append(removed, name)
-			safe = re.ReplaceAllString(safe, "[FILTERED]")
-		}
-	}
-	return strings.TrimSpace(safe), uniqueStrings(removed)
-}
-
-func isSensitiveKey(key string) bool {
-	normalized := strings.ToLower(key)
-	for _, marker := range []string{"password", "passwd", "api_key", "apikey", "secret", "token", "private_key"} {
-		if strings.Contains(normalized, marker) {
-			return true
-		}
-	}
-	return false
-}
-
 func trustedFieldValues(trusted interfaces.TrustedContent, fields []string) map[string]any {
 	if len(fields) == 0 {
 		fields = []string{"system_prompt", "tool_definitions", "memory", "task_state"}
@@ -552,12 +476,6 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func joinPath(base, key string) string {
-	if base == "" {
-		return key
-	}
-	return base + "." + key
-}
 
 func uniqueStrings(values []string) []string {
 	if len(values) == 0 {

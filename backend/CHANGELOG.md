@@ -1,5 +1,34 @@
 # Changelog
 
+## [代码质量修复] 2026-05-19
+
+### 类型安全重构
+
+#### L1: GateDecision.Decision string → Decision 枚举
+- **文件**: `internal/interfaces/interfaces.go`, `internal/gates/decision_store.go`, `internal/gates/gate_query.go`, `internal/gateway/proxy.go`
+- **改动**: `GateDecision.Decision` 字段从 `string` 改为强类型 `Decision` 枚举
+- **原因**: string 类型无法约束有效值，调用方可能传任意字符串，导致下游逻辑异常
+- **收益**:
+  - 编译期类型检查，杜绝非法决策值
+  - 新增 `MarshalJSON`/`UnmarshalJSON` 方法，保持 JSON 序列化兼容性
+  - 消除所有 `decision.String()` → `string` 的类型误用
+- **细节**:
+  - `Decision` 定义为 `int` 枚举：`Allow(0)`、`Block(1)`、`Degrade(2)`、`Deny(3)`、`HumanApproval(4)`
+  - 修改连锁影响 4 个文件中类型不匹配的代码
+
+#### L2: string 元数据解析 → 结构化 EvaluateResult
+- **文件**: `internal/interfaces/interfaces.go`, `internal/gates/policy.go`, `internal/gates/message.go`, `internal/gates/action.go`, `internal/gates/return.go`, `internal/gates/gate_evaluator.go`, `internal/gateway/proxy.go`, `internal/http/router.go`, `internal/contract/gate.go`, 及 gateway 接口文件、测试和 demo
+- **改动**: 新增 `EvaluateResult` 结构体，替代 `(Decision, string)` 返回值和正则解析
+- **原因**: 风险元数据（RiskScore、RiskLevel、MatchedRules）通过分隔符嵌入字符串，依赖 `ExtractReasonMetadata` 正则解析，可读性差且容易出错
+- **收益**:
+  - 消除 `ExtractReasonMetadata` 正则解析函数及全部 15 个调用点
+  - 所有风险元数据通过类型安全的结构体字段传递
+  - 减少 3 个依赖包（`regexp`、`strconv`、`strings`）
+- **细节**:
+  - `EvaluateResult` 包含 `Decision`、`Reason`、`RiskScore`、`RiskLevel`、`MatchedRules` 字段
+  - 新增 `makeEvaluateResult()` 工厂函数统一创建结构化结果
+  - 修改 16 个文件，覆盖所有 gate、evaluator、proxy、router、测试和 demo
+
 ## [优化版本] 2026-05-19
 
 ### 性能优化

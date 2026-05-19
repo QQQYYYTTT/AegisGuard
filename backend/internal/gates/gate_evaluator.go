@@ -24,51 +24,48 @@ func NewGateEvaluator(messageGate *MessageGate, actionGate *ActionGate, returnGa
 	}
 }
 
-func (ge *GateEvaluatorImpl) EvaluateMessage(body []byte) (interfaces.Decision, string) {
-	decision, reason := ge.messageGate.Evaluate(body)
-	score, level, rules := ExtractReasonMetadata(reason)
+func (ge *GateEvaluatorImpl) EvaluateMessage(requestID string, body []byte) interfaces.EvaluateResult {
+	result := ge.messageGate.Evaluate(body)
 	ge.store.Add(interfaces.GateDecision{
-		RequestID:    "manual",
+		RequestID:    requestID,
 		Timestamp:    time.Now(),
 		GateType:     "message",
-		Decision:     decision.String(),
-		RiskScore:    score,
-		RiskLevel:    level,
-		MatchedRules: rules,
-		Reason:       reason,
+		Decision:     result.Decision,
+		RiskScore:    result.RiskScore,
+		RiskLevel:    result.RiskLevel,
+		MatchedRules: result.MatchedRules,
+		Reason:       result.Reason,
 	})
-	return interfaces.Decision(decision), reason
+	return result
 }
 
-func (ge *GateEvaluatorImpl) EvaluateAction(toolName string, params map[string]interface{}, headers http.Header) (interfaces.Decision, string) {
-	decision, reason := ge.actionGate.Evaluate(toolName, params, headers)
-	score, level, rules := ExtractReasonMetadata(reason)
+func (ge *GateEvaluatorImpl) EvaluateAction(requestID string, toolName string, params map[string]interface{}, headers http.Header) interfaces.EvaluateResult {
+	result := ge.actionGate.Evaluate(toolName, params, headers)
 	ge.store.Add(interfaces.GateDecision{
-		RequestID:    "manual",
+		RequestID:    requestID,
 		Timestamp:    time.Now(),
 		GateType:     "action",
-		Decision:     decision.String(),
-		RiskScore:    score,
-		RiskLevel:    level,
-		MatchedRules: rules,
-		Reason:       reason,
+		Decision:     result.Decision,
+		RiskScore:    result.RiskScore,
+		RiskLevel:    result.RiskLevel,
+		MatchedRules: result.MatchedRules,
+		Reason:       result.Reason,
 		ToolName:     toolName,
 	})
-	return interfaces.Decision(decision), reason
+	return result
 }
 
-func (ge *GateEvaluatorImpl) EvaluateReturn(body []byte) (interfaces.Decision, string) {
-	decision, reason := ge.returnGate.Evaluate(body)
-	score, level, rules := ExtractReasonMetadata(reason)
+func (ge *GateEvaluatorImpl) EvaluateReturn(requestID string, body []byte) interfaces.EvaluateResult {
+	result := ge.returnGate.Evaluate(body)
 	ge.store.Add(interfaces.GateDecision{
-		RequestID:    "manual",
+		RequestID:    requestID,
 		Timestamp:    time.Now(),
 		GateType:     "return",
-		Decision:     decision.String(),
-		RiskScore:    score,
-		RiskLevel:    level,
-		MatchedRules: rules,
-		Reason:       reason,
+		Decision:     result.Decision,
+		RiskScore:    result.RiskScore,
+		RiskLevel:    result.RiskLevel,
+		MatchedRules: result.MatchedRules,
+		Reason:       result.Reason,
 	})
-	return interfaces.Decision(decision), reason
+	return result
 }
