@@ -17,11 +17,8 @@ import (
 	"aegisguard/internal/gates"
 	"aegisguard/internal/gateway"
 	"aegisguard/internal/interfaces"
-<<<<<<< HEAD
-	"aegisguard/internal/user"
-=======
 	memorysandbox "aegisguard/internal/sandbox"
->>>>>>> 04e571098203046fe3378d7c828cb3349a325bd8
+	"aegisguard/internal/user"
 	"aegisguard/internal/vkey"
 
 	"github.com/gin-gonic/gin"
@@ -96,16 +93,15 @@ func NewRouter(cfg config.Config) (*Router, error) {
 
 	tokenStore := auth.NewTokenStore()
 	verifier := auth.NewVerifier()
-<<<<<<< HEAD
+
 	userDB, err := db.OpenSQLite(cfg.UserDBPath)
 	if err != nil {
 		return nil, err
 	}
 	userRepo := user.NewRepository(userDB)
 	userService := user.NewService(userRepo, cfg.UserTokenSecret)
-=======
+
 	sandboxMgr := memorysandbox.NewManager(logger)
->>>>>>> 04e571098203046fe3378d7c828cb3349a325bd8
 
 	proxy, err := gateway.NewAegisProxy(vkeyMgr.GetTargetURL(), vkeyMgr, tokenStore, cfg.TokenMode, logger)
 	if err != nil {
@@ -149,7 +145,6 @@ func (r *Router) registerRoutes() {
 	r.engine.GET("/health", r.handleHealth)
 	r.registerUserRoutes()
 	r.registerAuthRoutes()
-	r.registerUserRoutes()
 
 	r.engine.Any("/v1/*path", r.handleProxy)
 
