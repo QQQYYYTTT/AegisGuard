@@ -56,3 +56,101 @@ func TestLoggerPersistsTokenModeFields(t *testing.T) {
 		t.Fatalf("expected unauthorized_allow to be true")
 	}
 }
+
+func TestMetaFingerprintDeterministic(t *testing.T) {
+	input1 := LogInput{
+		RequestID:  "req-001",
+		GatewayKey: "agk-001",
+		Method:     "POST",
+		Path:       "/v1/chat",
+		Body:       []byte(`{"messages":[{"role":"user","content":"hello"}]}`),
+		ClientIP:   "192.168.1.1",
+	}
+
+	input2 := LogInput{
+		RequestID:  "req-001",
+		GatewayKey: "agk-001",
+		Method:     "POST",
+		Path:       "/v1/chat",
+		Body:       []byte(`{"messages":[{"role":"user","content":"hello"}]}`),
+		ClientIP:   "192.168.1.1",
+	}
+
+	hash1 := computeMetaFingerprint(input1)
+	hash2 := computeMetaFingerprint(input2)
+
+	if hash1 != hash2 {
+		t.Fatalf("same inputs should produce same hash: %s != %s", hash1, hash2)
+	}
+}
+
+func TestMetaFingerprintDifferentInputs(t *testing.T) {
+	input1 := LogInput{
+		RequestID:  "req-001",
+		GatewayKey: "agk-001",
+		Method:     "POST",
+		Path:       "/v1/chat",
+		Body:       []byte(`{"test":true}`),
+		ClientIP:   "192.168.1.1",
+	}
+
+	input2 := LogInput{
+		RequestID:  "req-002",
+		GatewayKey: "agk-001",
+		Method:     "POST",
+		Path:       "/v1/chat",
+		Body:       []byte(`{"test":true}`),
+		ClientIP:   "192.168.1.1",
+	}
+
+	hash1 := computeMetaFingerprint(input1)
+	hash2 := computeMetaFingerprint(input2)
+
+	if hash1 == hash2 {
+		t.Fatalf("different inputs should produce different hash: %s == %s", hash1, hash2)
+	}
+}
+
+func TestMetaFingerprintUsesBodyLength(t *testing.T) {
+	input1 := LogInput{
+		RequestID:  "req-001",
+		GatewayKey: "agk-001",
+		Method:     "POST",
+		Path:       "/v1/chat",
+		Body:       []byte(`{"short":true}`),
+		ClientIP:   "192.168.1.1",
+	}
+
+	input2 := LogInput{
+		RequestID:  "req-001",
+		GatewayKey: "agk-001",
+		Method:     "POST",
+		Path:       "/v1/chat",
+		Body:       []byte(`{"much_longer_content":true,"extra":"data"}`),
+		ClientIP:   "192.168.1.1",
+	}
+
+	hash1 := computeMetaFingerprint(input1)
+	hash2 := computeMetaFingerprint(input2)
+
+	if hash1 == hash2 {
+		t.Fatalf("different body lengths should produce different hash")
+	}
+}
+
+func TestMetaFingerprintVsBodyHash(t *testing.T) {
+	input := LogInput{
+		RequestID:  "req-001",
+		GatewayKey: "agk-001",
+		Method:     "POST",
+		Path:       "/v1/chat",
+		Body:       []byte(`{"test":true}`),
+		ClientIP:   "192.168.1.1",
+	}
+
+	hash := computeMetaFingerprint(input)
+
+	if len(hash) != 64 {
+		t.Fatalf("SM3 hex should be 64 chars, got %d", len(hash))
+	}
+}

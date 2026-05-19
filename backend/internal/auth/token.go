@@ -162,3 +162,19 @@ func (t *RequireToken) buildSignMessage() []byte {
 	)
 	return []byte(data)
 }
+
+// buildCacheKey 构建用于验证缓存的 key
+// 使用相对稳定的字段组合，确保相同 token 在有效期内可以复用缓存
+// 注意：不包含 CallCount（会变化）、Nonce（每次调用都变化）、Expiry（时间变化）
+func (t *RequireToken) buildCacheKey() string {
+	return fmt.Sprintf("%s|%s|%s|%s|%s|%s|%d|%d",
+		t.ToolName,
+		t.Scope,
+		t.AgentID,
+		t.SessionID,
+		t.TaskID,
+		t.SchemaHash,
+		t.RiskLevel,
+		t.MaxCalls,
+	)
+}

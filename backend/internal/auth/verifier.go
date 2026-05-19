@@ -12,9 +12,16 @@ import (
 )
 
 var (
-	usedNonces = make(map[string]bool)
-	nonceMu    sync.Mutex
+	usedNonces      = make(map[string]int64)
+	nonceMu         sync.RWMutex
+	nonceExpiration = 24 * time.Hour
+	nonceGCDone     = make(chan struct{})
 )
+
+type cachedVerification struct {
+	valid   bool
+	expires time.Time
+}
 
 type VerificationChecks struct {
 	SignatureValid bool `json:"signature_valid"`
@@ -31,15 +38,18 @@ func (c VerificationChecks) IsValid() bool {
 // 负责验证 RequireToken 的合法性和有效性
 type Verifier struct {
 	publicKey *ecdsa.PublicKey // SM2 公钥，用于验证签名
+	cache     sync.Map         // 缓存已验证的 token 结果，key 为签名消息哈希
+	cacheTTL  time.Duration    // 缓存 TTL
 }
 
 // NewVerifier 创建新的验证器实例
 // 返回：Verifier 对象
 func NewVerifier() *Verifier {
-	return &Verifier{
-		// 获取全局签名公钥
+	v := &Verifier{
 		publicKey: GetSigningPublicKey(),
+		cacheTTL:  5 * time.Minute,
 	}
+	return v
 }
 
 // Verify 执行令牌的全量校验（七项检查）
@@ -71,41 +81,58 @@ func (v *Verifier) Inspect(token *RequireToken) VerificationChecks {
 func (v *Verifier) verifyChecks(token *RequireToken, consumeNonce bool) (VerificationChecks, error) {
 	checks := VerificationChecks{}
 
-	// 检查公钥是否已初始化
 	if v.publicKey == nil {
 		return checks, fmt.Errorf("verifier public key not initialized")
 	}
 
-	// 1. 验证签名有效性
+	cacheKey := token.buildCacheKey()
+	if cached, ok := v.cache.Load(cacheKey); ok {
+		cv := cached.(*cachedVerification)
+		if time.Now().Before(cv.expires) {
+			if !cv.valid {
+				return checks, fmt.Errorf("cached invalid signature")
+			}
+			checks.SignatureValid = true
+			checks.ExpiryValid = true
+			if err := v.verifyNonce(token, consumeNonce); err != nil {
+				return checks, err
+			}
+			checks.NonceValid = true
+			if err := v.verifyCallBudget(token); err != nil {
+				return checks, err
+			}
+			checks.CallBudgetOK = true
+			return checks, nil
+		}
+		v.cache.Delete(cacheKey)
+	}
+
 	if err := v.verifySignature(token); err != nil {
+		v.cache.Store(cacheKey, &cachedVerification{valid: false, expires: time.Now().Add(v.cacheTTL)})
 		return checks, fmt.Errorf("signature verification failed: %w", err)
 	}
 	checks.SignatureValid = true
 
-	// 2. 验证时效性
 	if err := v.verifyExpiry(token); err != nil {
 		return checks, err
 	}
 	checks.ExpiryValid = true
 
-	// 3. 验证 Nonce 防重放
 	if err := v.verifyNonce(token, consumeNonce); err != nil {
 		return checks, err
 	}
 	checks.NonceValid = true
 
-	// 8. 验证调用次数预算（SAGA 风格防 DoS）
 	if err := v.verifyCallBudget(token); err != nil {
 		return checks, err
 	}
 	checks.CallBudgetOK = true
 
-	// 7. 验证 Schema 指纹（使用 SM3 哈希）
 	if err := v.verifySchemaHash(token); err != nil {
 		return checks, err
 	}
 
-	// 注意：4-6 项在 ActionGate 中检查
+	v.cache.Store(cacheKey, &cachedVerification{valid: true, expires: time.Now().Add(v.cacheTTL)})
 	return checks, nil
 }
 
@@ -138,14 +165,23 @@ func (v *Verifier) verifyExpiry(token *RequireToken) error {
 }
 
 // verifyNonce 验证 Nonce 防止重放攻击
+// 使用 RWMutex 优化读多写少场景：读操作获取 RLock，写操作获取 Lock
+// 同时支持 Nonce 过期自动清理，避免内存泄漏
 func (v *Verifier) verifyNonce(token *RequireToken, consume bool) error {
-	nonceMu.Lock()
-	defer nonceMu.Unlock()
-	if usedNonces[token.Nonce] {
-		return fmt.Errorf("nonce already used: %s", token.Nonce)
+	nonceMu.RLock()
+	expiresAt, exists := usedNonces[token.Nonce]
+	nonceMu.RUnlock()
+
+	if exists {
+		if time.Now().Unix() < expiresAt {
+			return fmt.Errorf("nonce already used: %s", token.Nonce)
+		}
 	}
+
 	if consume {
-		usedNonces[token.Nonce] = true
+		nonceMu.Lock()
+		usedNonces[token.Nonce] = time.Now().Add(nonceExpiration).Unix()
+		nonceMu.Unlock()
 	}
 	return nil
 }
@@ -204,5 +240,44 @@ func (v *Verifier) verifyCallBudget(token *RequireToken) error {
 func ResetNonces() {
 	nonceMu.Lock()
 	defer nonceMu.Unlock()
-	usedNonces = make(map[string]bool)
+	usedNonces = make(map[string]int64)
+}
+
+// StartNonceGC 启动后台 goroutine 定期清理过期的 Nonce
+// 防止长时间运行后内存泄漏
+// 参数：
+//   - interval: 清理间隔时间，默认 1 小时
+func StartNonceGC(interval time.Duration) {
+	if interval <= 0 {
+		interval = time.Hour
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				nonceMu.Lock()
+				now := time.Now().Unix()
+				deleted := 0
+				for nonce, expiresAt := range usedNonces {
+					if now >= expiresAt {
+						delete(usedNonces, nonce)
+						deleted++
+					}
+				}
+				nonceMu.Unlock()
+				if deleted > 0 {
+					fmt.Printf("[NonceGC] cleaned up %d expired nonces\n", deleted)
+				}
+			case <-nonceGCDone:
+				return
+			}
+		}
+	}()
+}
+
+// StopNonceGC 停止后台 Nonce GC goroutine
+func StopNonceGC() {
+	close(nonceGCDone)
 }
