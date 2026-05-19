@@ -3,7 +3,7 @@ package gateway
 import (
 	"net/http"
 
-	"aegisguard/internal/gates"
+	"aegisguard/internal/interfaces"
 )
 
 // ActionEvaluator [PARTIAL] [分工1] 工具调用评估器
@@ -14,5 +14,5 @@ import (
 //     缺真实注入检测、工具参数语义分析
 //   - BatchWindowJudge: [DONE] gates/batch_window.go 已实现滑动窗口判定
 type ActionEvaluator interface {
-	Evaluate(toolName string, params map[string]interface{}, headers http.Header) (gates.Decision, string)
+	Evaluate(toolName string, params map[string]interface{}, headers http.Header) interfaces.EvaluateResult
 }

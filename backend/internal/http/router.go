@@ -42,7 +42,7 @@ type Router struct {
 	proxy         *gateway.AegisProxy
 	vkeyMgr       *vkey.Manager
 	auditor       *audit.Logger
-	auditStore    *audit.Store
+	auditStore    audit.Storer
 	tokenStore    *auth.TokenStore
 	verifier      *auth.Verifier
 	userService   *user.Service
@@ -81,9 +81,27 @@ func NewRouter(cfg config.Config) (*Router, error) {
 		return nil, err
 	}
 
-	auditStore, err := audit.NewStore(cfg.AuditFile)
-	if err != nil {
-		logger.Warn("audit store init failed", zap.String("file", cfg.AuditFile), zap.Error(err))
+	var auditStore audit.Storer
+	if cfg.AuditStorageMode == "sqlite" {
+		sqliteCfg := audit.SQLiteConfig{
+			Path:        cfg.AuditDBPath,
+			WALMode:     cfg.SQLiteWALMode,
+			CacheSize:   64000,
+			BusyTimeout: 5 * time.Second,
+		}
+		auditStore, err = audit.NewSQLiteStore(sqliteCfg)
+		if err != nil {
+			logger.Warn("sqlite audit store init failed, falling back to jsonl", zap.Error(err))
+			auditStore, err = audit.NewStore(cfg.AuditFile)
+			if err != nil {
+				logger.Warn("jsonl audit store init failed", zap.Error(err))
+			}
+		}
+	} else {
+		auditStore, err = audit.NewStore(cfg.AuditFile)
+		if err != nil {
+			logger.Warn("jsonl audit store init failed", zap.Error(err))
+		}
 	}
 	auditor := audit.NewLogger(auditStore)
 
@@ -350,37 +368,36 @@ func (r *Router) handleGateEvaluate(c *gin.Context) {
 		return
 	}
 
-	var decision interfaces.Decision
-	var reason string
+	var result interfaces.EvaluateResult
+	evalRequestID := uuid.New().String()
 
 	switch req.Type {
 	case "message":
-		decision, reason = r.gateEvaluator.EvaluateMessage(buildEvaluationBody(req.Body, req.Content))
+		result = r.gateEvaluator.EvaluateMessage(evalRequestID, buildEvaluationBody(req.Body, req.Content))
 	case "action":
 		httpHeaders := make(http.Header)
 		for k, v := range req.Headers {
 			httpHeaders.Set(k, v)
 		}
-		decision, reason = r.gateEvaluator.EvaluateAction(req.ToolName, req.Params, httpHeaders)
+		result = r.gateEvaluator.EvaluateAction(evalRequestID, req.ToolName, req.Params, httpHeaders)
 	case "return":
-		decision, reason = r.gateEvaluator.EvaluateReturn(buildEvaluationBody(req.Body, req.Content))
+		result = r.gateEvaluator.EvaluateReturn(evalRequestID, buildEvaluationBody(req.Body, req.Content))
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gate type"})
 		return
 	}
 
-	score, level, rules := gates.ExtractReasonMetadata(reason)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": interfaces.GateDecision{
 			RequestID:    "manual",
 			Timestamp:    time.Now(),
 			GateType:     req.Type,
-			Decision:     decision.String(),
-			RiskScore:    score,
-			RiskLevel:    level,
-			MatchedRules: rules,
-			Reason:       reason,
+			Decision:     result.Decision,
+			RiskScore:    result.RiskScore,
+			RiskLevel:    result.RiskLevel,
+			MatchedRules: result.MatchedRules,
+			Reason:       result.Reason,
 			ToolName:     req.ToolName,
 		},
 	})

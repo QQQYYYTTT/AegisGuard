@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"time"
 
 	"aegisguard/internal/auth"
 	"aegisguard/internal/config"
@@ -39,6 +40,10 @@ func main() {
 	if err := auth.InitSigningKey(cfg.SigningPrivateKey); err != nil {
 		logger.Fatal("failed to initialize RequireToken signing key", zap.Error(err))
 	}
+
+	auth.StartNonceGC(time.Hour)
+	defer auth.StopNonceGC()
+	logger.Info("nonce GC started", zap.Duration("interval", time.Hour))
 
 	router, err := httpapi.NewRouter(cfg)
 	if err != nil {

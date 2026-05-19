@@ -32,7 +32,7 @@ func (gq *GateQueryImpl) Decisions(limit int, gateType, action string) ([]interf
 		if gateType != "" && d.GateType != gateType {
 			continue
 		}
-		if action != "" && d.Decision != action {
+		if action != "" && d.Decision.String() != action {
 			continue
 		}
 		filtered = append(filtered, d)

@@ -8,40 +8,25 @@ import (
 	"aegisguard/pkg/smcrypto"
 )
 
-// maxBodyHashBytes 审计 body 哈希截取的最大字节数
-// 存前 1KB 的 SM3 哈希，既保留了注入检测的语义，又避免存储大型 payload
-const maxBodyHashBytes = 1024
-
-// Logger 审计日志记录器
-// 负责组装 AuditEvent 并通过 Store 持久化
 type Logger struct {
-	store  *Store
-	pended map[string]AuditEvent // request_id → 未完成的审计事件
+	store  Storer
+	pended map[string]AuditEvent
 	mu     sync.Mutex
 }
 
-// NewLogger 创建审计日志记录器
-func NewLogger(store *Store) *Logger {
+func NewLogger(store Storer) *Logger {
 	return &Logger{
 		store:  store,
 		pended: make(map[string]AuditEvent),
 	}
 }
 
-// LogRequest 记录请求进入
-// 参数：
-//   - input: 请求阶段信息
-//
-// 返回：requestID，调用方需在请求结束时传入 LogResponse
-//
-// 此方法不写入 Store，仅缓存 pending 事件。
-// 完整的 AuditEvent 在 LogResponse 调用时一次性写入。
 func (l *Logger) LogRequest(input LogInput) string {
 	if input.RequestID == "" {
 		input.RequestID = fmt.Sprintf("fallback-%d", time.Now().UnixNano())
 	}
 
-	bodyHash := smcrypto.SM3HexTruncated(input.Body, maxBodyHashBytes)
+	bodyHash := computeMetaFingerprint(input)
 
 	ev := AuditEvent{
 		RequestID:  input.RequestID,
@@ -58,6 +43,18 @@ func (l *Logger) LogRequest(input LogInput) string {
 	l.mu.Unlock()
 
 	return input.RequestID
+}
+
+func computeMetaFingerprint(input LogInput) string {
+	meta := fmt.Sprintf("%s|%s|%s|%s|%s|%d",
+		input.RequestID,
+		input.Method,
+		input.Path,
+		input.ClientIP,
+		input.GatewayKey,
+		len(input.Body),
+	)
+	return smcrypto.SM3Hex([]byte(meta))
 }
 
 // LogResponse 记录请求完成并写入持久化存储

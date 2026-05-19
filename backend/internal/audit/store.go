@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -147,11 +148,7 @@ func splitLines(data []byte) [][]byte {
 
 // sortEventsByTimestampDesc 按时间戳降序排序
 func sortEventsByTimestampDesc(events []AuditEvent) {
-	for i := 1; i < len(events); i++ {
-		for j := i; j > 0 && events[j].Timestamp.After(events[j-1].Timestamp); j-- {
-			events[j], events[j-1] = events[j-1], events[j]
-		}
-	}
+	sort.Slice(events, func(i, j int) bool {
+		return events[j].Timestamp.Before(events[i].Timestamp)
+	})
 }
-
-

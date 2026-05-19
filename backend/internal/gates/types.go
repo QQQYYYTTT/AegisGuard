@@ -1,31 +1,15 @@
 package gates
 
-// Decision 决策类型
-type Decision int
+import "aegisguard/internal/interfaces"
 
+// Decision 决策类型（类型别名，主定义在 interfaces 包）
+type Decision = interfaces.Decision
+
+// 重新导出门控决策常量
 const (
-	Allow Decision = iota
-	Block
-	Degrade
-	Deny
-	HumanApproval
+	Allow         = interfaces.Allow
+	Block         = interfaces.Block
+	Degrade       = interfaces.Degrade
+	Deny          = interfaces.Deny
+	HumanApproval = interfaces.HumanApproval
 )
-
-// String 返回决策字符串表示
-func (d Decision) String() string {
-	switch d {
-	case Allow:
-		return "Allow"
-	case Block:
-		return "Block"
-	case Degrade:
-		return "Degrade"
-	case Deny:
-		return "Deny"
-	case HumanApproval:
-		return "HumanApproval"
-	default:
-		return "Unknown"
-	}
-}
-

@@ -1,6 +1,6 @@
 package gateway
 
-import "aegisguard/internal/gates"
+import "aegisguard/internal/interfaces"
 
 // ReturnEvaluator [UNDEFINED] [分工1] 返回门控评估器
 //
@@ -9,6 +9,6 @@ import "aegisguard/internal/gates"
 //   - Evaluate: [UNDEFINED] gates/return.go 的 Evaluate 返回 nil，完全未实现
 //   - Filter:   [UNDEFINED] 未实现
 type ReturnEvaluator interface {
-	Evaluate(body []byte) (gates.Decision, string)
+	Evaluate(body []byte) interfaces.EvaluateResult
 	Filter(body []byte) []byte
 }

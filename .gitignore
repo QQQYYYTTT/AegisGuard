@@ -12,3 +12,6 @@ backend/config/gateway.yaml
 node_modules/
 experiments/native/langchain/.env
 *.exe
+*.db
+*.db-wal
+*.db-shm

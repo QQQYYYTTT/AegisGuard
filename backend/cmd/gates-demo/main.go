@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"aegisguard/internal/gates"
+	"aegisguard/internal/interfaces"
 
 	"go.uber.org/zap"
 )
@@ -92,8 +93,8 @@ func testMessageGate(logger *zap.Logger) {
 
 	for _, tc := range testCases {
 		body, _ := json.Marshal(tc.message)
-		decision, reason := gate.Evaluate(body)
-		printResult(tc.name, decision, reason)
+		result := gate.Evaluate(body)
+		printResult(tc.name, result)
 	}
 }
 
@@ -141,8 +142,8 @@ func testActionGate(logger *zap.Logger) {
 
 	for _, tc := range testCases {
 		headers := make(http.Header)
-		decision, reason := gate.Evaluate(tc.toolName, tc.params, headers)
-		printResult(tc.name, decision, reason)
+		result := gate.Evaluate(tc.toolName, tc.params, headers)
+		printResult(tc.name, result)
 	}
 }
 
@@ -188,21 +189,21 @@ func testReturnGate(logger *zap.Logger) {
 
 	for _, tc := range testCases {
 		body, _ := json.Marshal(tc.response)
-		decision, reason := gate.Evaluate(body)
-		printResult(tc.name, decision, reason)
+		result := gate.Evaluate(body)
+		printResult(tc.name, result)
 
 		// 如果是Degrade决策，显示过滤后的内容
-		if decision == gates.Degrade {
+		if result.Decision == gates.Degrade {
 			filtered := gate.Filter(body)
 			fmt.Printf("  过滤后内容: %s\n", string(filtered))
 		}
 	}
 }
 
-func printResult(testName string, decision gates.Decision, reason string) {
-	decisionColor := getDecisionColor(decision)
-	fmt.Printf("  %-30s: %s%s\033[0m\n", testName, decisionColor, decision.String())
-	fmt.Printf("    原因: %s\n", reason)
+func printResult(testName string, result interfaces.EvaluateResult) {
+	decisionColor := getDecisionColor(result.Decision)
+	fmt.Printf("  %-30s: %s%s\033[0m\n", testName, decisionColor, result.Decision.String())
+	fmt.Printf("    原因: %s\n", result.Reason)
 }
 
 func getDecisionColor(decision gates.Decision) string {

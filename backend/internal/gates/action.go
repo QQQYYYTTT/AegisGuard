@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"aegisguard/internal/auth"
+	"aegisguard/internal/interfaces"
 
 	"go.uber.org/zap"
 )
@@ -52,20 +53,40 @@ func NewActionGateWithBatch(windowSize, maxEvents int, judgeInterval time.Durati
 	}
 }
 
-func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, headers http.Header) (Decision, string) {
+func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, headers http.Header) interfaces.EvaluateResult {
 	contentSummary := ag.extractContentSummary(params)
 	score, rules := ag.policyEngine.Score(toolName + "\n" + contentSummary)
 	if hasRuleFromList(rules, "memory_poisoning") {
-		return Block, makeReasonFromScore("action attempts to modify trusted memory/instructions", score, rules)
+		ag.logger.Warn("action blocked: memory poisoning detected",
+			zap.String("tool", toolName),
+			zap.Int("score", score),
+			zap.Strings("rules", rules),
+		)
+		return makeEvaluateResult(Block, "action attempts to modify trusted memory/instructions", score, rules)
 	}
 	if hasRuleFromList(rules, "illegal_finance") {
-		return Deny, makeReasonFromScore("action indicates prohibited financial misconduct", score, rules)
+		ag.logger.Warn("action denied: illegal finance detected",
+			zap.String("tool", toolName),
+			zap.Int("score", score),
+			zap.Strings("rules", rules),
+		)
+		return makeEvaluateResult(Deny, "action indicates prohibited financial misconduct", score, rules)
 	}
 	if hasRuleFromList(rules, "prompt_injection") && (hasRuleFromList(rules, "privileged_scope") || hasRuleFromList(rules, "sensitive_access")) {
-		return Deny, makeReasonFromScore("action combines prompt-injection markers with privileged or sensitive operation", score, rules)
+		ag.logger.Warn("action denied: prompt injection with privileged scope",
+			zap.String("tool", toolName),
+			zap.Int("score", score),
+			zap.Strings("rules", rules),
+		)
+		return makeEvaluateResult(Deny, "action combines prompt-injection markers with privileged or sensitive operation", score, rules)
 	}
 	if hasRuleFromList(rules, "high_impact_action") || ag.policyEngine.ShouldHumanReview(score) {
-		return HumanApproval, makeReasonFromScore("action requires human approval due to semantic risk", score, rules)
+		ag.logger.Info("action requires human approval",
+			zap.String("tool", toolName),
+			zap.Int("score", score),
+			zap.Strings("rules", rules),
+		)
+		return makeEvaluateResult(HumanApproval, "action requires human approval due to semantic risk", score, rules)
 	}
 
 	tokenStr := headers.Get("X-Aegis-Token")
@@ -75,19 +96,36 @@ func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, h
 
 	var token auth.RequireToken
 	if err := json.Unmarshal([]byte(tokenStr), &token); err != nil {
-		return Deny, fmt.Sprintf("invalid token format: %v", err)
+		ag.logger.Warn("action denied: invalid token format",
+			zap.String("tool", toolName),
+			zap.Error(err),
+		)
+		return makeEvaluateResult(Deny, fmt.Sprintf("invalid token format: %v", err), score, rules)
 	}
 
 	if err := ag.verifier.Verify(&token); err != nil {
-		return Deny, fmt.Sprintf("token verification failed: %v", err)
+		ag.logger.Warn("action denied: token verification failed",
+			zap.String("tool", toolName),
+			zap.String("agent_id", token.AgentID),
+			zap.Error(err),
+		)
+		return makeEvaluateResult(Deny, fmt.Sprintf("token verification failed: %v", err), score, rules)
 	}
 
 	if token.ToolName != toolName {
-		return Deny, fmt.Sprintf("tool name mismatch: token=%s, actual=%s", token.ToolName, toolName)
+		ag.logger.Warn("action denied: tool name mismatch",
+			zap.String("expected", token.ToolName),
+			zap.String("actual", toolName),
+		)
+		return makeEvaluateResult(Deny, fmt.Sprintf("tool name mismatch: token=%s, actual=%s", token.ToolName, toolName), score, rules)
 	}
 
 	if !ag.checkScope(token.Scope, toolName, params) {
-		return Deny, fmt.Sprintf("scope violation: %s not allowed for %s", token.Scope, toolName)
+		ag.logger.Warn("action denied: scope violation",
+			zap.String("scope", token.Scope),
+			zap.String("tool", toolName),
+		)
+		return makeEvaluateResult(Deny, fmt.Sprintf("scope violation: %s not allowed for %s", token.Scope, toolName), score, rules)
 	}
 
 	if token.MaxCalls > 0 {
@@ -106,22 +144,43 @@ func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, h
 		}
 		batchDecision := ag.batchJudge.AddEvent(event)
 		if batchDecision == Block {
-			return Block, "blocked by batch window judge: suspicious pattern detected"
+			ag.logger.Warn("action blocked by batch judge",
+				zap.String("agent_id", token.AgentID),
+				zap.String("tool", toolName),
+			)
+			return makeEvaluateResult(Block, "blocked by batch window judge: suspicious pattern detected", score, rules)
 		} else if batchDecision == HumanApproval {
-			return HumanApproval, "batch judge requires human review"
+			ag.logger.Info("action requires batch judge review",
+				zap.String("agent_id", token.AgentID),
+				zap.String("tool", toolName),
+			)
+			return makeEvaluateResult(HumanApproval, "batch judge requires human review", score, rules)
 		}
 	}
 
 	if token.RiskLevel >= 70 {
-		return Block, "high risk level"
+		ag.logger.Warn("action blocked: high risk level",
+			zap.String("agent_id", token.AgentID),
+			zap.Int("risk_level", token.RiskLevel),
+		)
+		return makeEvaluateResult(Block, "high risk level", score, rules)
 	} else if token.RiskLevel >= 40 {
-		return HumanApproval, "medium risk, approval required"
+		ag.logger.Info("action requires human approval: medium risk",
+			zap.String("agent_id", token.AgentID),
+			zap.Int("risk_level", token.RiskLevel),
+		)
+		return makeEvaluateResult(HumanApproval, "medium risk, approval required", score, rules)
 	}
 
-	return Allow, makeReasonFromScore("authorized by RequireToken and semantic policy checks", score, rules)
+	ag.logger.Debug("action allowed",
+		zap.String("tool", toolName),
+		zap.Int("score", score),
+		zap.Int("risk_level", token.RiskLevel),
+	)
+	return makeEvaluateResult(Allow, "authorized by RequireToken and semantic policy checks", score, rules)
 }
 
-func (ag *ActionGate) handleMissingToken(score int, rules []string, headers http.Header) (Decision, string) {
+func (ag *ActionGate) handleMissingToken(score int, rules []string, headers http.Header) interfaces.EvaluateResult {
 	status := strings.TrimSpace(headers.Get("X-Aegis-Token-Status"))
 	if status == "" {
 		status = "missing"
@@ -129,12 +188,12 @@ func (ag *ActionGate) handleMissingToken(score int, rules []string, headers http
 
 	switch ag.tokenMode {
 	case "strict":
-		return Deny, makeReasonFromScore("RequireToken is mandatory in strict mode; token_status="+status, score, rules)
+		return makeEvaluateResult(Deny, "RequireToken is mandatory in strict mode; token_status="+status, score, rules)
 	case "warn":
 		ag.logger.Warn("allowing unauthorized action in warn mode", zap.String("token_status", status))
-		return Allow, makeReasonFromScore("action passed semantic policy checks; missing RequireToken allowed in warn mode; token_status="+status, score, rules)
+		return makeEvaluateResult(Allow, "action passed semantic policy checks; missing RequireToken allowed in warn mode; token_status="+status, score, rules)
 	default:
-		return Allow, makeReasonFromScore("action passed semantic policy checks; missing RequireToken allowed in compat mode; token_status="+status, score, rules)
+		return makeEvaluateResult(Allow, "action passed semantic policy checks; missing RequireToken allowed in compat mode; token_status="+status, score, rules)
 	}
 }
 

@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
+
+	"aegisguard/internal/interfaces"
 )
 
 type policyRule struct {
@@ -133,39 +134,14 @@ func makeReasonFromScore(message string, score int, rules []string) string {
 	return fmt.Sprintf("%s; risk_score=%d; risk_level=%s; matched_rules=%s", message, score, RiskLevel(score), strings.Join(rules, ","))
 }
 
-func ExtractReasonMetadata(reason string) (int, string, []string) {
-	score := 0
-	level := "none"
-	var rules []string
-
-	scoreRe := regexp.MustCompile(`risk_score=(\d+)`)
-	if match := scoreRe.FindStringSubmatch(reason); len(match) == 2 {
-		if parsed, err := strconv.Atoi(match[1]); err == nil {
-			score = parsed
-		}
+func makeEvaluateResult(decision Decision, message string, score int, rules []string) interfaces.EvaluateResult {
+	return interfaces.EvaluateResult{
+		Decision:     decision,
+		Reason:       makeReasonFromScore(message, score, rules),
+		RiskScore:    score,
+		RiskLevel:    RiskLevel(score),
+		MatchedRules: rules,
 	}
-
-	levelRe := regexp.MustCompile(`risk_level=([^;]+)`)
-	if match := levelRe.FindStringSubmatch(reason); len(match) == 2 {
-		level = strings.TrimSpace(match[1])
-	} else {
-		level = RiskLevel(score)
-	}
-
-	rulesRe := regexp.MustCompile(`matched_rules=([^;]+)`)
-	if match := rulesRe.FindStringSubmatch(reason); len(match) == 2 {
-		raw := strings.TrimSpace(match[1])
-		if raw != "" && raw != "none" {
-			for _, item := range strings.Split(raw, ",") {
-				ruleID := strings.TrimSpace(item)
-				if ruleID != "" {
-					rules = append(rules, ruleID)
-				}
-			}
-		}
-	}
-
-	return score, level, rules
 }
 
 func extractJSONText(body []byte, keys ...string) string {
