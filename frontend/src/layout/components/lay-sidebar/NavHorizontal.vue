@@ -9,8 +9,8 @@ import { storageLocal, isAllEmpty } from "@pureadmin/utils";
 import { usePermissionStoreHook } from "@/store/modules/permission";
 import LaySidebarItem from "./components/SidebarItem.vue";
 import LaySidebarFullScreen from "./components/SidebarFullScreen.vue";
+import UserDropdown from "../UserDropdown.vue";
 
-import LogoutCircleRLine from "~icons/ri/logout-circle-r-line";
 import Setting from "~icons/ri/settings-3-line";
 
 const menuRef = ref();
@@ -23,13 +23,9 @@ const showLogo = ref(
 const {
   route,
   title,
-  logout,
   onPanel,
   getLogo,
-  username,
-  userAvatar,
   backTopMenu,
-  avatarsStyle
 } = useNav();
 
 const defaultActive = computed(() =>
@@ -77,24 +73,7 @@ onMounted(() => {
       <LaySidebarFullScreen id="full-screen" />
       <!-- 消息通知 -->
       <LayNotice id="header-notice" />
-      <!-- 退出登录 -->
-      <el-dropdown trigger="click">
-        <span class="el-dropdown-link navbar-bg-hover">
-          <img :src="userAvatar" :style="avatarsStyle" />
-          <p v-if="username" class="dark:text-white">{{ username }}</p>
-        </span>
-        <template #dropdown>
-          <el-dropdown-menu class="logout">
-            <el-dropdown-item @click="logout">
-              <IconifyIconOffline
-                :icon="LogoutCircleRLine"
-                style="margin: 5px"
-              />
-              退出系统
-            </el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
+      <UserDropdown />
       <span
         class="set-icon navbar-bg-hover"
         title="打开系统配置"
@@ -109,15 +88,5 @@ onMounted(() => {
 <style lang="scss" scoped>
 :deep(.el-loading-mask) {
   opacity: 0.45;
-}
-
-.logout {
-  width: 120px;
-
-  ::v-deep(.el-dropdown-menu__item) {
-    display: inline-flex;
-    flex-wrap: wrap;
-    min-width: 100%;
-  }
 }
 </style>

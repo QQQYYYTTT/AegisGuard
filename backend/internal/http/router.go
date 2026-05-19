@@ -13,9 +13,11 @@ import (
 	"aegisguard/internal/auth"
 	"aegisguard/internal/config"
 	"aegisguard/internal/contract"
+	"aegisguard/internal/db"
 	"aegisguard/internal/gates"
 	"aegisguard/internal/gateway"
 	"aegisguard/internal/interfaces"
+	"aegisguard/internal/user"
 	"aegisguard/internal/vkey"
 
 	"github.com/gin-gonic/gin"
@@ -42,6 +44,7 @@ type Router struct {
 	auditStore    *audit.Store
 	tokenStore    *auth.TokenStore
 	verifier      *auth.Verifier
+	userService   *user.Service
 	gateQuery     contract.GateQuery
 	gateEvaluator contract.GateEvaluator
 	logger        *zap.Logger
@@ -86,6 +89,12 @@ func NewRouter(cfg config.Config) (*Router, error) {
 
 	tokenStore := auth.NewTokenStore()
 	verifier := auth.NewVerifier()
+	userDB, err := db.OpenSQLite(cfg.UserDBPath)
+	if err != nil {
+		return nil, err
+	}
+	userRepo := user.NewRepository(userDB)
+	userService := user.NewService(userRepo, cfg.UserTokenSecret)
 
 	proxy, err := gateway.NewAegisProxy(vkeyMgr.GetTargetURL(), vkeyMgr, tokenStore, cfg.TokenMode, logger)
 	if err != nil {
@@ -109,6 +118,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 		auditStore:    auditStore,
 		tokenStore:    tokenStore,
 		verifier:      verifier,
+		userService:   userService,
 		gateQuery:     gateQuery,
 		gateEvaluator: gateEvaluator,
 		logger:        logger,
@@ -123,6 +133,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 func (r *Router) registerRoutes() {
 	r.engine.GET("/health", r.handleHealth)
 	r.registerAuthRoutes()
+	r.registerUserRoutes()
 
 	r.engine.Any("/v1/*path", r.handleProxy)
 
@@ -146,6 +157,17 @@ func (r *Router) registerAuthRoutes() {
 		authGroup.POST("/token", r.handleIssueToken)
 		authGroup.POST("/verify", r.handleVerifyToken)
 		authGroup.GET("/status", r.handleAuthStatus)
+	}
+}
+
+func (r *Router) registerUserRoutes() {
+	userGroup := r.engine.Group("/api/user")
+	{
+		userGroup.POST("/register", r.handleUserRegister)
+		userGroup.POST("/login", r.handleUserLogin)
+		userGroup.POST("/refresh", r.handleUserRefresh)
+		userGroup.POST("/logout", r.handleUserLogout)
+		userGroup.GET("/profile", r.handleUserProfile)
 	}
 }
 

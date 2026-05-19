@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed, nextTick } from "vue";
 import { useExperimentStoreHook } from "@/store/modules/experiment";
 import StatCard from "@/components/common/StatCard.vue";
 import * as echarts from "echarts";
@@ -155,6 +155,7 @@ let chartInstance: echarts.ECharts | null = null;
 let latencyChartInstance: echarts.ECharts | null = null;
 let rankingChartInstance: echarts.ECharts | null = null;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
+let handleResize: (() => void) | null = null;
 const fallbackCurrentSummary = ref<SummaryLike | null>(null);
 const fallbackCurrentRecords = ref<RecordLike[]>([]);
 
@@ -357,6 +358,10 @@ async function selectRun(runId: string) {
 async function refreshData() {
   await experimentStore.fetchSummaries();
   await experimentStore.fetchAttackFamilyStats();
+  await nextTick();
+  renderMetricsChart();
+  renderLatencyChart();
+  renderRankingChart();
   if (selectedRunId.value) {
     await experimentStore.fetchSummary(selectedRunId.value);
     await experimentStore.fetchRecords(selectedRunId.value);
@@ -370,6 +375,12 @@ async function refreshData() {
 
 onMounted(async () => {
   await refreshData();
+  handleResize = () => {
+    chartInstance?.resize();
+    latencyChartInstance?.resize();
+    rankingChartInstance?.resize();
+  };
+  window.addEventListener("resize", handleResize);
   refreshTimer = setInterval(() => {
     refreshData();
   }, 8000);
@@ -386,6 +397,10 @@ onUnmounted(() => {
   chartInstance = null;
   latencyChartInstance = null;
   rankingChartInstance = null;
+  if (handleResize) {
+    window.removeEventListener("resize", handleResize);
+    handleResize = null;
+  }
 });
 
 function renderRankingChart() {
@@ -607,15 +622,6 @@ function renderRankingChart() {
             <el-descriptions-item label="RR">{{ (currentSummary?.metrics?.rr * 100).toFixed(1) }}%</el-descriptions-item>
             <el-descriptions-item label="平均时延 / Latency">{{ latencyText(currentSummary?.metrics?.average_latency_ms || 0) }}</el-descriptions-item>
           </el-descriptions>
-
-          <el-row :gutter="16" class="mb-4">
-            <el-col :span="12">
-              <div ref="chartRef" style="height: 300px; border: 1px solid #eee; border-radius: 8px;"></div>
-            </el-col>
-            <el-col :span="12">
-              <div ref="latencyChartRef" style="height: 300px; border: 1px solid #eee; border-radius: 8px;"></div>
-            </el-col>
-          </el-row>
 
           <el-table :data="records" stripe size="small" max-height="400">
             <el-table-column prop="case_id" label="Case ID" width="120" show-overflow-tooltip />

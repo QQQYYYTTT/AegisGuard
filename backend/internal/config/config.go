@@ -11,9 +11,11 @@ type Config struct {
 	BackendDir        string
 	FrontendDir       string
 	AuditFile         string
+	UserDBPath        string
 	Port              string
 	LangGraphChatURL  string
 	SigningPrivateKey string
+	UserTokenSecret   string
 	TokenMode         string
 
 	GatewayConfigPath string
@@ -51,6 +53,7 @@ func Load() Config {
 	port := getEnv("PORT", "8090")
 	langGraphChatURL := getEnv("LANGGRAPH_CHAT_URL", "http://127.0.0.1:8765")
 	auditFile := getEnv("AEGIS_AUDIT_FILE", filepath.Join(backendDir, "data", "audit-store.jsonl"))
+	userDBPath := getEnv("AEGIS_USER_DB_PATH", filepath.Join(backendDir, "data", "aegisguard-users.db"))
 	gatewayConfigPath := getEnv("AEGIS_GATEWAY_CONFIG", filepath.Join(backendDir, "config", "gateway.yaml"))
 	logLevel := getEnv("AEGIS_LOG_LEVEL", "debug")
 	logEncoding := getEnv("AEGIS_LOG_ENCODING", "console")
@@ -63,9 +66,11 @@ func Load() Config {
 		BackendDir:        backendDir,
 		FrontendDir:       filepath.Join(rootDir, "frontend"),
 		AuditFile:         auditFile,
+		UserDBPath:        userDBPath,
 		Port:              port,
 		LangGraphChatURL:  langGraphChatURL,
 		SigningPrivateKey: getEnv("AEGIS_SIGNING_PRIVATE_KEY", ""),
+		UserTokenSecret:   getEnv("AEGIS_USER_TOKEN_SECRET", "aegisguard-dev-user-secret"),
 		TokenMode:         tokenMode,
 		GatewayConfigPath: gatewayConfigPath,
 		LogLevel:          logLevel,

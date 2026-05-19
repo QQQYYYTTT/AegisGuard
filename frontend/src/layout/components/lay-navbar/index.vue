@@ -6,19 +6,15 @@ import LayNavMix from "../lay-sidebar/NavMix.vue";
 import LaySidebarFullScreen from "../lay-sidebar/components/SidebarFullScreen.vue";
 import LaySidebarBreadCrumb from "../lay-sidebar/components/SidebarBreadCrumb.vue";
 import LaySidebarTopCollapse from "../lay-sidebar/components/SidebarTopCollapse.vue";
+import UserDropdown from "../UserDropdown.vue";
 
-import LogoutCircleRLine from "~icons/ri/logout-circle-r-line";
 import Setting from "~icons/ri/settings-3-line";
 
 const {
   layout,
   device,
-  logout,
   onPanel,
   pureApp,
-  username,
-  userAvatar,
-  avatarsStyle,
   toggleSideBar
 } = useNav();
 </script>
@@ -46,24 +42,7 @@ const {
       <LaySidebarFullScreen id="full-screen" />
       <!-- 消息通知 -->
       <LayNotice id="header-notice" />
-      <!-- 退出登录 -->
-      <el-dropdown trigger="click">
-        <span class="el-dropdown-link navbar-bg-hover select-none">
-          <img :src="userAvatar" :style="avatarsStyle" />
-          <p v-if="username" class="dark:text-white">{{ username }}</p>
-        </span>
-        <template #dropdown>
-          <el-dropdown-menu class="logout">
-            <el-dropdown-item @click="logout">
-              <IconifyIconOffline
-                :icon="LogoutCircleRLine"
-                style="margin: 5px"
-              />
-              退出系统
-            </el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
+      <UserDropdown />
       <span
         class="set-icon navbar-bg-hover"
         title="打开系统配置"
@@ -120,16 +99,6 @@ const {
   .breadcrumb-container {
     float: left;
     margin-left: 16px;
-  }
-}
-
-.logout {
-  width: 120px;
-
-  ::v-deep(.el-dropdown-menu__item) {
-    display: inline-flex;
-    flex-wrap: wrap;
-    min-width: 100%;
   }
 }
 </style>

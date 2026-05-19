@@ -1,45 +1,72 @@
 import { http } from "@/utils/http";
 
+export type UserSession = {
+  avatar: string;
+  username: string;
+  nickname: string;
+  roles: Array<string>;
+  permissions: Array<string>;
+  accessToken: string;
+  refreshToken: string;
+  expires: Date;
+};
+
 export type UserResult = {
   success: boolean;
-  data: {
-    /** 头像 */
-    avatar: string;
-    /** 用户名 */
-    username: string;
-    /** 昵称 */
-    nickname: string;
-    /** 当前登录用户的角色 */
-    roles: Array<string>;
-    /** 按钮级别权限 */
-    permissions: Array<string>;
-    /** `token` */
-    accessToken: string;
-    /** 用于调用刷新`accessToken`的接口时所需的`token` */
-    refreshToken: string;
-    /** `accessToken`的过期时间（格式'xxxx/xx/xx xx:xx:xx'） */
-    expires: Date;
-  };
+  message?: string;
+  data: UserSession;
 };
 
 export type RefreshTokenResult = {
   success: boolean;
+  message?: string;
   data: {
-    /** `token` */
     accessToken: string;
-    /** 用于调用刷新`accessToken`的接口时所需的`token` */
     refreshToken: string;
-    /** `accessToken`的过期时间（格式'xxxx/xx/xx xx:xx:xx'） */
     expires: Date;
   };
 };
 
-/** 登录 */
-export const getLogin = (data?: object) => {
-  return http.request<UserResult>("post", "/login", { data });
+export type RegisterPayload = {
+  username: string;
+  password: string;
+  nickname?: string;
 };
 
-/** 刷新`token` */
+export type UserProfileResult = {
+  success: boolean;
+  message?: string;
+  data: {
+    id: number;
+    username: string;
+    nickname: string;
+    created_at: string;
+  };
+};
+
+export type LogoutResult = {
+  success: boolean;
+  message?: string;
+};
+
+export const getLogin = (data?: object) => {
+  return http.request<UserResult>("post", "/api/user/login", { data });
+};
+
+export const registerApi = (data?: RegisterPayload) => {
+  return http.request<UserResult>("post", "/api/user/register", { data });
+};
+
 export const refreshTokenApi = (data?: object) => {
-  return http.request<RefreshTokenResult>("post", "/refresh-token", { data });
+  return http.request<RefreshTokenResult>("post", "/api/user/refresh", {
+    data
+  });
+};
+
+export const getProfileApi = () => {
+  return http.request<UserProfileResult>("get", "/api/user/profile");
+};
+
+export const logoutApi = () => {
+  return http.request<LogoutResult>("post", "/api/user/logout");
 };

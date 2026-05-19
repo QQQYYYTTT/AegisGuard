@@ -28,6 +28,7 @@ const router = useRouter();
 const loading = ref(false);
 const disabled = ref(false);
 const ruleFormRef = ref<FormInstance>();
+const formMode = ref<"login" | "register">("login");
 
 const { initStorage } = useLayout();
 initStorage();
@@ -38,42 +39,64 @@ const { title } = useNav();
 
 const ruleForm = reactive({
   username: "admin",
-  password: "admin123"
+  password: "admin123",
+  nickname: ""
 });
 
-const onLogin = async (formEl: FormInstance | undefined) => {
+const onSubmit = async (formEl: FormInstance | undefined) => {
   if (!formEl) return;
   await formEl.validate(valid => {
-    if (valid) {
-      loading.value = true;
-      useUserStoreHook()
-        .loginByUsername({
-          username: ruleForm.username,
-          password: ruleForm.password
-        })
-        .then(res => {
-          if (res.success) {
-            // 获取后端路由
-            return initRouter().then(() => {
-              disabled.value = true;
-              router
-                .push(getTopMenu(true).path)
-                .then(() => {
-                  message("登录成功", { type: "success" });
-                })
-                .finally(() => (disabled.value = false));
-            });
-          } else {
-            message("登录失败", { type: "error" });
-          }
-        })
-        .finally(() => (loading.value = false));
-    }
+    if (!valid) return;
+
+    loading.value = true;
+    const userStore = useUserStoreHook();
+    const action =
+      formMode.value === "login"
+        ? userStore.loginByUsername({
+            username: ruleForm.username,
+            password: ruleForm.password
+          })
+        : userStore.registerByUsername({
+            username: ruleForm.username,
+            password: ruleForm.password,
+            nickname: ruleForm.nickname
+          });
+
+    action
+      .then(res => {
+        if (!res.success) {
+          message(
+            res.message ||
+              (formMode.value === "login" ? "登录失败" : "注册失败"),
+            { type: "error" }
+          );
+          return;
+        }
+
+        return initRouter().then(() => {
+          disabled.value = true;
+          router
+            .push(getTopMenu(true).path)
+            .then(() => {
+              message(
+                formMode.value === "login" ? "登录成功" : "注册并登录成功",
+                { type: "success" }
+              );
+            })
+            .finally(() => (disabled.value = false));
+        });
+      })
+      .catch(error => {
+        message(error?.response?.data?.message || "请求失败", {
+          type: "error"
+        });
+      })
+      .finally(() => (loading.value = false));
   });
 };
 
 const immediateDebounce: any = debounce(
-  formRef => onLogin(formRef),
+  formRef => onSubmit(formRef),
   1000,
   true
 );
@@ -83,8 +106,9 @@ useEventListener(document, "keydown", ({ code }) => {
     ["Enter", "NumpadEnter"].includes(code) &&
     !disabled.value &&
     !loading.value
-  )
+  ) {
     immediateDebounce(ruleFormRef.value);
+  }
 });
 </script>
 
@@ -92,7 +116,6 @@ useEventListener(document, "keydown", ({ code }) => {
   <div class="select-none">
     <img :src="bg" class="wave" />
     <div class="flex-c absolute right-5 top-3">
-      <!-- 主题 -->
       <el-switch
         v-model="dataTheme"
         inline-prompt
@@ -110,6 +133,25 @@ useEventListener(document, "keydown", ({ code }) => {
           <avatar class="avatar" />
           <Motion>
             <h2 class="outline-hidden">{{ title }}</h2>
+          </Motion>
+
+          <Motion :delay="50">
+            <div class="mb-4 flex gap-2">
+              <el-button
+                class="flex-1"
+                :type="formMode === 'login' ? 'primary' : 'default'"
+                @click="formMode = 'login'"
+              >
+                登录
+              </el-button>
+              <el-button
+                class="flex-1"
+                :type="formMode === 'register' ? 'primary' : 'default'"
+                @click="formMode = 'register'"
+              >
+                注册
+              </el-button>
+            </div>
           </Motion>
 
           <el-form
@@ -139,6 +181,17 @@ useEventListener(document, "keydown", ({ code }) => {
             </Motion>
 
             <Motion :delay="150">
+              <el-form-item v-if="formMode === 'register'" prop="nickname">
+                <el-input
+                  v-model="ruleForm.nickname"
+                  clearable
+                  placeholder="昵称（可选）"
+                  :prefix-icon="useRenderIcon(User)"
+                />
+              </el-form-item>
+            </Motion>
+
+            <Motion :delay="200">
               <el-form-item prop="password">
                 <el-input
                   v-model="ruleForm.password"
@@ -157,9 +210,9 @@ useEventListener(document, "keydown", ({ code }) => {
                 type="primary"
                 :loading="loading"
                 :disabled="disabled"
-                @click="onLogin(ruleFormRef)"
+                @click="onSubmit(ruleFormRef)"
               >
-                登录
+                {{ formMode === "login" ? "登录" : "注册并登录" }}
               </el-button>
             </Motion>
           </el-form>
