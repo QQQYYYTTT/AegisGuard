@@ -42,7 +42,7 @@ type Router struct {
 	proxy         *gateway.AegisProxy
 	vkeyMgr       *vkey.Manager
 	auditor       *audit.Logger
-	auditStore    *audit.Store
+	auditStore    audit.Storer
 	tokenStore    *auth.TokenStore
 	verifier      *auth.Verifier
 	userService   *user.Service
@@ -81,9 +81,27 @@ func NewRouter(cfg config.Config) (*Router, error) {
 		return nil, err
 	}
 
-	auditStore, err := audit.NewStore(cfg.AuditFile)
-	if err != nil {
-		logger.Warn("audit store init failed", zap.String("file", cfg.AuditFile), zap.Error(err))
+	var auditStore audit.Storer
+	if cfg.AuditStorageMode == "sqlite" {
+		sqliteCfg := audit.SQLiteConfig{
+			Path:        cfg.AuditDBPath,
+			WALMode:     cfg.SQLiteWALMode,
+			CacheSize:   64000,
+			BusyTimeout: 5 * time.Second,
+		}
+		auditStore, err = audit.NewSQLiteStore(sqliteCfg)
+		if err != nil {
+			logger.Warn("sqlite audit store init failed, falling back to jsonl", zap.Error(err))
+			auditStore, err = audit.NewStore(cfg.AuditFile)
+			if err != nil {
+				logger.Warn("jsonl audit store init failed", zap.Error(err))
+			}
+		}
+	} else {
+		auditStore, err = audit.NewStore(cfg.AuditFile)
+		if err != nil {
+			logger.Warn("jsonl audit store init failed", zap.Error(err))
+		}
 	}
 	auditor := audit.NewLogger(auditStore)
 

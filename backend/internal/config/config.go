@@ -23,6 +23,10 @@ type Config struct {
 	LogEncoding       string
 	PolicyMode        string
 	DevMode           bool
+
+	AuditStorageMode string
+	AuditDBPath      string
+	SQLiteWALMode    bool
 }
 
 func resolveRootDir() string {
@@ -61,6 +65,10 @@ func Load() Config {
 	tokenMode := normalizeTokenMode(getEnv("AEGIS_TOKEN_MODE", "strict"))
 	devMode := strings.EqualFold(getEnv("AEGIS_DEV_MODE", "true"), "true")
 
+	auditStorageMode := normalizeAuditStorageMode(getEnv("AEGIS_AUDIT_STORAGE_MODE", "sqlite"))
+	auditDBPath := getEnv("AEGIS_AUDIT_DB_PATH", filepath.Join(backendDir, "data", "audit-store.db"))
+	sqliteWALMode := strings.EqualFold(getEnv("AEGIS_SQLITE_WAL_MODE", "true"), "true")
+
 	return Config{
 		RootDir:           rootDir,
 		BackendDir:        backendDir,
@@ -77,6 +85,9 @@ func Load() Config {
 		LogEncoding:       logEncoding,
 		PolicyMode:        policyMode,
 		DevMode:           devMode,
+		AuditStorageMode:  auditStorageMode,
+		AuditDBPath:       auditDBPath,
+		SQLiteWALMode:     sqliteWALMode,
 	}
 }
 
@@ -93,5 +104,14 @@ func normalizeTokenMode(mode string) string {
 		return strings.TrimSpace(strings.ToLower(mode))
 	default:
 		return "strict"
+	}
+}
+
+func normalizeAuditStorageMode(mode string) string {
+	switch strings.TrimSpace(strings.ToLower(mode)) {
+	case "sqlite", "jsonl":
+		return strings.TrimSpace(strings.ToLower(mode))
+	default:
+		return "sqlite"
 	}
 }

@@ -9,12 +9,12 @@ import (
 )
 
 type Logger struct {
-	store  *Store
+	store  Storer
 	pended map[string]AuditEvent
 	mu     sync.Mutex
 }
 
-func NewLogger(store *Store) *Logger {
+func NewLogger(store Storer) *Logger {
 	return &Logger{
 		store:  store,
 		pended: make(map[string]AuditEvent),
