@@ -115,7 +115,7 @@ export function resetRouter() {
 }
 
 /** 路由白名单 */
-const whiteList = ["/login"];
+const whiteList = ["/screen", "/login"];
 
 const { VITE_HIDE_HOME } = import.meta.env;
 
@@ -145,7 +145,11 @@ router.beforeEach((to: ToRouteType, _from, next) => {
   }
   /** 如果已经登录并存在登录信息后不能跳转到路由白名单，而是继续保持在当前页面 */
   function toCorrectRoute() {
-    whiteList.includes(to.fullPath) ? next(_from.fullPath) : next();
+    if (to.path === "/login") {
+      next("/dashboard/index");
+      return;
+    }
+    next();
   }
   if (Cookies.get(multipleTabsKey) && userInfo) {
     // 无权限跳转403页面
@@ -205,7 +209,9 @@ router.beforeEach((to: ToRouteType, _from, next) => {
       toCorrectRoute();
     }
   } else {
-    if (to.path !== "/login") {
+    if (to.path === "/") {
+      next({ path: "/screen" });
+    } else if (to.path !== "/login") {
       if (whiteList.indexOf(to.path) !== -1) {
         next();
       } else {

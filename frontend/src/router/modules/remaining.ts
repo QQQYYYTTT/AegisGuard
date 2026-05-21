@@ -2,6 +2,15 @@ const Layout = () => import("@/layout/index.vue");
 
 export default [
   {
+    path: "/screen",
+    name: "Landing",
+    component: () => import("@/views/landing/index.vue"),
+    meta: {
+      title: "态势感知大屏",
+      showLink: false
+    }
+  },
+  {
     path: "/login",
     name: "Login",
     component: () => import("@/views/login/index.vue"),

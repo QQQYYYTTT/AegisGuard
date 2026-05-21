@@ -87,7 +87,6 @@ function renderRiskTrendChart() {
   }
 
   riskTrendChart.setOption({
-    title: { text: '风险趋势 / Risk Trend', left: 'center' },
     tooltip: { trigger: 'axis' },
     legend: { data: ['告警数 / Alerts', '拦截数 / Blocks'], bottom: 0 },
     xAxis: {
@@ -139,10 +138,6 @@ async function renderRiskMapChart() {
   await loadChinaMapJson();
 
   const option = {
-    title: {
-      text: '风险地域分布 / Risk Region Distribution',
-      left: 'center'
-    },
     tooltip: {
       trigger: 'item',
       formatter: '{b}<br/>风险评分: {c}'
@@ -179,74 +174,78 @@ async function renderRiskMapChart() {
 </script>
 
 <template>
-  <div class="dashboard p-4">
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold mb-2">安全监测总览 / Security Monitoring Overview</h1>
-      <div class="flex gap-2">
-        <RealTimeTag label="SM2" :active="sm2Status" />
-        <RealTimeTag label="SM3" :active="sm3Status" />
-        <RealTimeTag label="SM4" :active="sm4Status" />
-        <RealTimeTag label="Action Gate" :active="true" />
-        <RealTimeTag label="Sandbox" :active="true" />
+  <div class="dashboard p-4 bg-white text-slate-900" style="min-height: 100vh;">
+    <!-- Header -->
+    <div class="mb-8">
+      <div class="flex items-center justify-between mb-4">
+        <h1 class="text-3xl font-bold text-slate-900">智能体安全防护总览平台 / Intelligent Security Protection Platform</h1>
+        <div class="flex gap-3">
+          <RealTimeTag label="SM2" :active="sm2Status" />
+          <RealTimeTag label="SM3" :active="sm3Status" />
+          <RealTimeTag label="SM4" :active="sm4Status" />
+          <RealTimeTag label="Action Gate" :active="true" />
+          <RealTimeTag label="Sandbox" :active="true" />
+        </div>
       </div>
     </div>
 
-    <el-row :gutter="16" class="mb-6">
-      <el-col :span="8">
+    <!-- Top KPI Cards - 6 columns compact -->
+    <el-row :gutter="12" class="mb-6">
+      <el-col :span="4">
         <StatCard
-          title="请求总量 / Total Requests"
+          title="请求总量"
           :value="requestTotal"
           icon="ep:data-line"
           color="var(--aegis-primary)"
         />
       </el-col>
-      <el-col :span="8">
+      <el-col :span="4">
         <StatCard
-          title="并发数 / Concurrency"
+          title="并发数"
           :value="concurrency"
           icon="ep:trend-charts"
           color="var(--aegis-info)"
         />
       </el-col>
-      <el-col :span="8">
+      <el-col :span="4">
         <StatCard
-          title="活跃 IP / Active IPs"
+          title="活跃 IP"
           :value="activeIPs"
           icon="ep:ip"
           color="var(--aegis-success)"
         />
       </el-col>
-    </el-row>
-    <el-row :gutter="16" class="mb-6">
-      <el-col :span="8">
+      <el-col :span="4">
         <StatCard
-          title="活跃主机 / Active Hosts"
+          title="活跃主机"
           :value="activeHosts"
           icon="ep:monitor"
           color="var(--aegis-warning)"
         />
       </el-col>
-      <el-col :span="8">
+      <el-col :span="4">
         <StatCard
-          title="高风险事件 / High Risk Events"
+          title="高风险事件"
           :value="highRiskEvents"
           icon="ep:warning-filled"
           color="var(--aegis-danger)"
         />
       </el-col>
-      <el-col :span="8">
+      <el-col :span="4">
         <StatCard
-          title="拦截次数 / Block Count"
+          title="拦截次数"
           :value="blockCount"
           icon="ep:shield"
           color="var(--aegis-danger)"
         />
       </el-col>
     </el-row>
-    <el-row :gutter="16" class="mb-6">
+
+    <!-- System Feature Cards - 3 columns -->
+    <el-row :gutter="12" class="mb-8">
       <el-col :span="8">
         <StatCard
-          title="三级闸门命中次数 / Gate Hits"
+          title="三级闸门命中次数"
           :value="gateHits"
           icon="ep:gate"
           color="var(--aegis-primary)"
@@ -254,7 +253,7 @@ async function renderRiskMapChart() {
       </el-col>
       <el-col :span="8">
         <StatCard
-          title="可信授权异常数 / Auth Exceptions"
+          title="可信授权异常数"
           :value="authExceptions"
           icon="ep:lock"
           color="var(--aegis-warning)"
@@ -262,7 +261,7 @@ async function renderRiskMapChart() {
       </el-col>
       <el-col :span="8">
         <StatCard
-          title="记忆沙箱触发数 / Sandbox Triggers"
+          title="记忆沙箱触发数"
           :value="sandboxTriggers"
           icon="ep:box"
           color="var(--aegis-info)"
@@ -270,16 +269,87 @@ async function renderRiskMapChart() {
       </el-col>
     </el-row>
 
-    <el-row :gutter="16">
-      <el-col :span="12">
-        <el-card shadow="hover" class="mb-4">
-          <div ref="riskTrendChartRef" style="height: 300px;"></div>
-        </el-card>
-        <el-card shadow="hover">
+    <!-- Main Content - Map centered, side panels -->
+    <el-row :gutter="16" class="mb-6">
+      <!-- Left Panel -->
+      <el-col :span="6">
+        <el-card shadow="hover" class="dashboard-card h-full">
           <template #header>
-            <span class="font-semibold">最新告警 / Latest Alerts</span>
+            <div class="card-title">风险趋势 / Risk Trend</div>
           </template>
-          <el-table :data="latestAlerts" stripe size="small" max-height="300">
+          <div ref="riskTrendChartRef" style="height: 280px;"></div>
+        </el-card>
+      </el-col>
+
+      <!-- Central Map - Large and Prominent -->
+      <el-col :span="13">
+        <el-card shadow="hover" class="dashboard-card h-full">
+          <template #header>
+            <div class="card-title text-center flex-1">威胁地域分布 / Threat Geographic Distribution</div>
+          </template>
+          <div v-if="mapLoadError" class="flex items-center justify-center h-96 text-slate-500">
+            地图加载失败，请检查网络或使用本地地图资源。
+          </div>
+          <div v-else ref="riskMapChartRef" style="height: 450px; width: 100%;"></div>
+        </el-card>
+      </el-col>
+
+      <!-- Right Panel -->
+      <el-col :span="5">
+        <el-card shadow="hover" class="dashboard-card mb-4">
+          <template #header>
+            <div class="card-title">闸门状态 / Gate Status</div>
+          </template>
+          <div v-if="overview" class="space-y-3">
+            <div class="gate-status-item">
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-slate-700">消息闸门</span>
+                <el-tag type="success" size="small">{{ overview.message_gate.status }}</el-tag>
+              </div>
+              <div class="text-xs text-slate-500 mt-1">
+                {{ overview.message_gate.block_count }} 次拦截
+              </div>
+            </div>
+            <div class="gate-status-item">
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-slate-700">动作闸门</span>
+                <el-tag type="success" size="small">{{ overview.action_gate.status }}</el-tag>
+              </div>
+              <div class="text-xs text-slate-500 mt-1">
+                {{ overview.action_gate.block_count }} 次拦截
+              </div>
+            </div>
+            <div class="gate-status-item">
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-slate-700">返回闸门</span>
+                <el-tag type="success" size="small">{{ overview.return_gate.status }}</el-tag>
+              </div>
+              <div class="text-xs text-slate-500 mt-1">
+                {{ overview.return_gate.block_count }} 次拦截
+              </div>
+            </div>
+          </div>
+        </el-card>
+        <el-card shadow="hover" class="dashboard-card">
+          <template #header>
+            <div class="card-title">活跃令牌 / Active Tokens</div>
+          </template>
+          <div class="text-center">
+            <div class="text-4xl font-bold text-cyan-400">{{ activeTokens }}</div>
+            <div class="text-xs text-slate-500 mt-2">当前活跃的 SM2 令牌</div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- Bottom Alert Section -->
+    <el-row :gutter="16">
+      <el-col :span="24">
+        <el-card shadow="hover" class="dashboard-card">
+          <template #header>
+            <div class="card-title">最新告警 / Latest Alerts</div>
+          </template>
+          <el-table :data="latestAlerts" stripe size="small" max-height="250" :default-sort="{ prop: 'time', order: 'descending' }">
             <el-table-column prop="time" label="时间 / Time" width="160" />
             <el-table-column prop="level" label="级别 / Level" width="80">
               <template #default="{ row }">
@@ -289,65 +359,37 @@ async function renderRiskMapChart() {
               </template>
             </el-table-column>
             <el-table-column prop="type" label="类型 / Type" width="120" />
-            <el-table-column prop="source" label="来源 / Source" width="120" />
+            <el-table-column prop="source" label="来源 / Source" width="140" />
             <el-table-column prop="description" label="描述 / Description" show-overflow-tooltip />
           </el-table>
-        </el-card>
-      </el-col>
-      <el-col :span="12">
-        <el-card shadow="hover" class="mb-4">
-          <template #header>
-            <span class="font-semibold">全国地图 / National Risk Map</span>
-          </template>
-          <div v-if="mapLoadError" class="flex items-center justify-center h-96 text-gray-500">
-            地图加载失败，请检查网络或使用本地地图资源。
-          </div>
-          <div v-else ref="riskMapChartRef" style="height: 400px; width: 100%;"></div>
-        </el-card>
-        <el-card shadow="hover">
-          <template #header>
-            <span class="font-semibold">闸门状态 / Gate Status</span>
-          </template>
-          <div v-if="overview" class="space-y-3">
-            <div class="flex items-center justify-between p-2 rounded bg-gray-50 dark:bg-gray-800">
-              <span class="text-sm">消息闸门 / Message Gate</span>
-              <div class="flex items-center gap-2">
-                <el-tag type="success" size="small">{{ overview.message_gate.status }}</el-tag>
-                <span class="text-xs text-gray-500">
-                  {{ overview.message_gate.block_count }} 次拦截
-                </span>
-              </div>
-            </div>
-            <div class="flex items-center justify-between p-2 rounded bg-gray-50 dark:bg-gray-800">
-              <span class="text-sm">动作闸门 / Action Gate</span>
-              <div class="flex items-center gap-2">
-                <el-tag type="success" size="small">{{ overview.action_gate.status }}</el-tag>
-                <span class="text-xs text-gray-500">
-                  {{ overview.action_gate.block_count }} 次拦截
-                </span>
-              </div>
-            </div>
-            <div class="flex items-center justify-between p-2 rounded bg-gray-50 dark:bg-gray-800">
-              <span class="text-sm">返回闸门 / Return Gate</span>
-              <div class="flex items-center gap-2">
-                <el-tag type="success" size="small">{{ overview.return_gate.status }}</el-tag>
-                <span class="text-xs text-gray-500">
-                  {{ overview.return_gate.block_count }} 次拦截
-                </span>
-              </div>
-            </div>
-          </div>
-        </el-card>
-        <el-card shadow="hover">
-          <template #header>
-            <span class="font-semibold">活跃令牌 / Active Tokens</span>
-          </template>
-          <div class="text-center">
-            <div class="text-4xl font-bold text-blue-500">{{ activeTokens }}</div>
-            <div class="text-sm text-gray-500 mt-1">当前活跃的 SM2 令牌</div>
-          </div>
         </el-card>
       </el-col>
     </el-row>
   </div>
 </template>
+
+<style scoped>
+.dashboard {
+  background-color: #ffffff;
+}
+.dashboard .dashboard-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+.dashboard .dashboard-card .el-card__body {
+  padding: 20px;
+}
+.dashboard .card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+.dashboard .text-cyan-400 {
+  color: #0ea5e9 !important;
+}
+.dashboard .el-tag {
+  font-size: 12px;
+}
+</style>

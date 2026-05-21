@@ -10,7 +10,7 @@ import { useEventListener } from "@vueuse/core";
 import type { FormInstance } from "element-plus";
 import { useLayout } from "@/layout/hooks/useLayout";
 import { useUserStoreHook } from "@/store/modules/user";
-import { initRouter, getTopMenu } from "@/router/utils";
+import { initRouter } from "@/router/utils";
 import { bg, avatar, illustration } from "./utils/static";
 import { useRenderIcon } from "@/components/ReIcon/src/hooks";
 import { useDataThemeChange } from "@/layout/hooks/useDataThemeChange";
@@ -76,7 +76,7 @@ const onSubmit = async (formEl: FormInstance | undefined) => {
         return initRouter().then(() => {
           disabled.value = true;
           router
-            .push(getTopMenu(true).path)
+            .push("/dashboard/index")
             .then(() => {
               message(
                 formMode.value === "login" ? "登录成功" : "注册并登录成功",
@@ -115,6 +115,9 @@ useEventListener(document, "keydown", ({ code }) => {
 <template>
   <div class="select-none">
     <img :src="bg" class="wave" />
+    <div class="absolute left-5 top-3">
+      <el-button plain @click="router.push('/screen')">返回态势大屏</el-button>
+    </div>
     <div class="flex-c absolute right-5 top-3">
       <el-switch
         v-model="dataTheme"
