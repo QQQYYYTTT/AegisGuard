@@ -32,7 +32,7 @@ export const useSandboxStore = defineStore("aegis-sandbox", {
     },
     async fetchTransfers(params?: object) {
       const res = await getTransferRecords(params);
-      this.transfers = res.data;
+      this.transfers = res.data || [];
       return res.data;
     },
     async isolate(payload?: object) {

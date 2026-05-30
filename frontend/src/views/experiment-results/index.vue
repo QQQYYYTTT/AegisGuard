@@ -142,19 +142,16 @@ function renderLatencyChart() {
     latencyChartInstance = echarts.init(latencyChartRef.value);
   }
 
-  // 模拟攻击类型数据
-  const attackTypes = [
-    { name: '提示注入', value: 28 },
-    { name: '越权工具调用', value: 22 },
-    { name: '敏感信息窃取', value: 18 },
-    { name: '记忆污染', value: 14 },
-    { name: '越狱攻击', value: 12 },
-    { name: '高风险动作', value: 8 },
-    { name: '其他', value: 10 }
-  ];
+  const stats = attackFamilyStats.value || [];
+  const attackTypes = stats.length > 0
+    ? stats
+        .filter(s => s.total_cases > 0)
+        .slice(0, 10)
+        .map(s => ({ name: s.attack, value: Math.round(s.avg_asr * 100) }))
+    : [{ name: "暂无数据", value: 1 }];
 
   latencyChartInstance.setOption({
-    title: { text: "攻击类型占比 / Attack Type Distribution", left: "center" },
+    title: { text: "攻击类型 ASR 分布 / Attack Type ASR Distribution", left: "center" },
     tooltip: { trigger: "item", formatter: "{a} <br/>{b}: {c}% ({d}%)" },
     legend: { orient: "vertical", left: "left" },
     series: [
@@ -254,19 +251,19 @@ function renderRankingChart() {
     rankingChartInstance = echarts.init(rankingChartRef.value);
   }
 
-  const rankingData = [
-    { name: 'agent-003', alerts: 45 },
-    { name: 'agent-007', alerts: 38 },
-    { name: 'agent-001', alerts: 32 },
-    { name: 'agent-012', alerts: 28 },
-    { name: 'agent-005', alerts: 25 },
-    { name: 'agent-009', alerts: 22 },
-    { name: 'agent-015', alerts: 18 },
-    { name: 'agent-002', alerts: 15 }
-  ];
+  const items = summaries.value || [];
+  const rankingData = items.length > 0
+    ? items
+        .sort((a, b) => b.metrics.total - a.metrics.total)
+        .slice(0, 10)
+        .map(s => ({
+          name: s.benchmark ? `${s.benchmark}-${s.attack}`.substring(0, 20) : s.run_id.substring(0, 12),
+          alerts: s.metrics.total
+        }))
+    : [{ name: "暂无数据", alerts: 0 }];
 
   rankingChartInstance.setOption({
-    title: { text: '高风险对象排行 / High Risk Objects Ranking', left: 'center' },
+    title: { text: '测试用例排行 / Test Case Ranking', left: 'center' },
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: {

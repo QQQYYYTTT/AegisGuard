@@ -10,7 +10,7 @@ defineProps<{
 <template>
   <el-card shadow="hover">
     <template #header>
-      <span class="font-semibold">Sandbox Cache</span>
+      <span class="font-semibold">沙箱缓存</span>
     </template>
     <el-descriptions :column="1" border size="small">
       <el-descriptions-item label="SM3 Fingerprint">

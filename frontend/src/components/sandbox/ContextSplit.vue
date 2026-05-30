@@ -18,7 +18,7 @@ defineProps<{
         <div class="flex items-center gap-2">
           <el-icon class="text-green-500"><svg viewBox="0 0 1024 1024" fill="currentColor"><path d="M512 64a448 448 0 1 1 0 896 448 448 0 0 1 0-896zm-55.808 536.384-99.52-99.584a38.4 38.4 0 1 0-54.336 54.336l126.72 126.72a38.272 38.272 0 0 0 54.336 0l262.4-262.464a38.4 38.4 0 1 0-54.272-54.336L456.192 600.384z" /></svg></el-icon>
           <span class="font-semibold text-green-700 dark:text-green-400">
-            Trusted Context
+            可信上下文
           </span>
         </div>
       </template>
@@ -41,7 +41,7 @@ defineProps<{
         <div class="flex items-center gap-2">
           <el-icon class="text-red-500"><svg viewBox="0 0 1024 1024" fill="currentColor"><path d="M512 64a448 448 0 1 1 0 896 448 448 0 0 1 0-896zm0 128a38.4 38.4 0 0 0-38.4 38.4v192a38.4 38.4 0 0 0 76.8 0v-192A38.4 38.4 0 0 0 512 192zm0 512a38.4 38.4 0 1 0 0 76.8 38.4 38.4 0 0 0 0-76.8z" /></svg></el-icon>
           <span class="font-semibold text-red-700 dark:text-red-400">
-            Untrusted / Sandbox
+            不可信内容
           </span>
         </div>
       </template>
