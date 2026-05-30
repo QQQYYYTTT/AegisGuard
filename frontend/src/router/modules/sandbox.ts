@@ -9,7 +9,7 @@ export default {
     icon: "ep:box",
     title: "记忆沙箱",
     rank: 5,
-    showLink: false
+    showLink: true
   },
   children: [
     {
