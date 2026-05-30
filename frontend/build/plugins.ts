@@ -18,7 +18,8 @@ export function getPluginsList(
   VITE_COMPRESSION: ViteCompression
 ): PluginOption[] {
   const lifecycle = process.env.npm_lifecycle_event;
-  const enableMock = process.env.VITE_ENABLE_MOCK !== "false";
+  const isProd = lifecycle === "build";
+  const enableMock = !isProd && (process.argv.includes("--mock") || process.env.VITE_ENABLE_MOCK === "true");
   return [
     tailwindcss(),
     vue(),
@@ -41,13 +42,13 @@ export function getPluginsList(
      * vite-plugin-router-warn只在开发环境下启用，只处理vue-router文件并且只在服务启动或重启时运行一次，性能消耗可忽略不计
      */
     removeNoMatch(),
-    // mock支持
+    // mock支持（生产禁用，开发默认关闭，传 --mock 才开启）
     enableMock
       ? vitePluginFakeServer({
           logger: false,
           include: "mock",
           infixName: false,
-          enableProd: true
+          enableProd: false
         })
       : null,
     // svg组件化支持

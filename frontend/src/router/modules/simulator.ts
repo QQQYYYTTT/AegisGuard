@@ -9,7 +9,7 @@ export default {
     icon: "ep:video-play",
     title: "运行时模拟器",
     rank: 2,
-    showLink: false
+    showLink: true
   },
   children: [
     {

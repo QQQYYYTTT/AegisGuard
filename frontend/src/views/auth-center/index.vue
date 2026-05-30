@@ -1,112 +1,117 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
+import { useRouter } from "vue-router";
 import StatCard from "@/components/common/StatCard.vue";
+import DecisionBadge from "@/components/common/DecisionBadge.vue";
+import RiskBadge from "@/components/common/RiskBadge.vue";
+import { useGateStoreHook } from "@/store/modules/gate";
+import { useAuditStoreHook } from "@/store/modules/audit";
 import * as echarts from "echarts";
 
 defineOptions({ name: "AuthCenterIndex" });
 
-// 告警数据
-const highRiskAlerts = ref(12);
-const mediumRiskAlerts = ref(25);
-const lowRiskAlerts = ref(45);
+const gateStore = useGateStoreHook();
+const auditStore = useAuditStoreHook();
+const router = useRouter();
 
-const alertTypeData = ref([
-  { name: 'SQL注入', value: 15 },
-  { name: 'XSS攻击', value: 12 },
-  { name: 'DDoS攻击', value: 8 },
-  { name: '暴力破解', value: 10 },
-  { name: '扫描探测', value: 20 },
-  { name: '其他', value: 17 },
-]);
+const loading = ref(false);
 
-const alertTrendData = ref([
-  { time: '2024-01-10', high: 5, medium: 8, low: 12 },
-  { time: '2024-01-11', high: 3, medium: 10, low: 15 },
-  { time: '2024-01-12', high: 8, medium: 12, low: 18 },
-  { time: '2024-01-13', high: 6, medium: 9, low: 14 },
-  { time: '2024-01-14', high: 10, medium: 15, low: 20 },
-  { time: '2024-01-15', high: 12, medium: 25, low: 45 },
-]);
+const highRiskCount = computed(() => {
+  const list = gateStore.decisions || [];
+  return list.filter(d => d.risk_level === "high" || d.risk_level === "critical").length;
+});
 
-const alertsList = ref([
-  {
-    id: 1,
-    time: '2024-01-15 14:30:25',
-    level: '高',
-    type: 'SQL注入',
-    source: '192.168.1.100',
-    gate: '消息闸门',
-    authTriggered: true,
-    sandboxTriggered: false,
-    description: '检测到可疑SQL注入攻击'
-  },
-  {
-    id: 2,
-    time: '2024-01-15 14:25:10',
-    level: '中',
-    type: 'XSS攻击',
-    source: '192.168.1.105',
-    gate: '动作闸门',
-    authTriggered: false,
-    sandboxTriggered: true,
-    description: '发现跨站脚本攻击尝试'
-  },
-  {
-    id: 3,
-    time: '2024-01-15 14:20:45',
-    level: '高',
-    type: 'DDoS攻击',
-    source: '10.0.0.50',
-    gate: '返回闸门',
-    authTriggered: true,
-    sandboxTriggered: true,
-    description: '检测到大规模DDoS攻击'
-  },
-  {
-    id: 4,
-    time: '2024-01-15 14:15:30',
-    level: '低',
-    type: '扫描探测',
-    source: '192.168.1.120',
-    gate: '消息闸门',
-    authTriggered: false,
-    sandboxTriggered: false,
-    description: '端口扫描活动'
-  },
-  {
-    id: 5,
-    time: '2024-01-15 14:10:15',
-    level: '中',
-    type: '暴力破解',
-    source: '192.168.1.110',
-    gate: '动作闸门',
-    authTriggered: false,
-    sandboxTriggered: true,
-    description: 'SSH暴力破解尝试'
-  },
-]);
+const mediumRiskCount = computed(() => {
+  const list = gateStore.decisions || [];
+  return list.filter(d => d.risk_level === "medium").length;
+});
+
+const lowRiskCount = computed(() => {
+  const list = gateStore.decisions || [];
+  return list.filter(d => d.risk_level === "low").length;
+});
+
+const alertTypeData = computed(() => {
+  const ruleCounts: Record<string, number> = {};
+  (gateStore.decisions || []).forEach(d => {
+    (d.matched_rules || []).forEach(rule => {
+      ruleCounts[rule] = (ruleCounts[rule] || 0) + 1;
+    });
+  });
+  if (Object.keys(ruleCounts).length === 0) return [];
+  return Object.entries(ruleCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([name, value]) => ({ name, value }));
+});
+
+const alertTrendData = computed(() => {
+  const now = new Date();
+  const buckets: Record<string, { high: number; medium: number; low: number }> = {};
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 24 * 3600000);
+    const key = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    buckets[key] = { high: 0, medium: 0, low: 0 };
+  }
+  const keys = Object.keys(buckets);
+  (gateStore.decisions || []).forEach(d => {
+    const ts = new Date(d.timestamp);
+    const eventKey = `${String(ts.getMonth() + 1).padStart(2, "0")}-${String(ts.getDate()).padStart(2, "0")}`;
+    if (buckets[eventKey]) {
+      if (d.risk_level === "high" || d.risk_level === "critical") buckets[eventKey].high++;
+      else if (d.risk_level === "medium") buckets[eventKey].medium++;
+      else buckets[eventKey].low++;
+    }
+  });
+  return keys.map(time => ({
+    time,
+    high: buckets[time].high,
+    medium: buckets[time].medium,
+    low: buckets[time].low
+  }));
+});
+
+const alertListData = computed(() => {
+  return (gateStore.decisions || []).slice(0, 50).map(d => ({
+    id: d.request_id,
+    time: d.timestamp,
+    level: d.risk_level === "critical" ? "critical" : d.risk_level,
+    levelLabel: d.risk_level === "critical" ? "严重" : d.risk_level === "high" ? "高" : d.risk_level === "medium" ? "中" : "低",
+    type: d.gate_type === "message" ? "消息检测" : d.gate_type === "action" ? "动作检测" : "返回检测",
+    source: d.agent_id || d.request_id?.slice(0, 12) || "unknown",
+    gate: d.gate_type,
+    riskScore: d.risk_score,
+    decision: d.decision,
+    reason: d.reason || `${d.gate_type} 门: ${d.decision} (评分 ${d.risk_score})`,
+    requestId: d.request_id
+  }));
+});
 
 const alertTypeChartRef = ref<HTMLElement>();
 const alertTrendChartRef = ref<HTMLElement>();
 let alertTypeChart: echarts.ECharts | null = null;
 let alertTrendChart: echarts.ECharts | null = null;
+let handleResize: (() => void) | null = null;
 
 function renderAlertTypeChart() {
   if (!alertTypeChartRef.value) return;
   if (!alertTypeChart) {
     alertTypeChart = echarts.init(alertTypeChartRef.value);
   }
+  const data = alertTypeData.value.length > 0
+    ? alertTypeData.value
+    : [{ name: "暂无数据", value: 1 }];
 
   alertTypeChart.setOption({
-    title: { text: '告警类型分布 / Alert Type Distribution', left: 'center' },
-    tooltip: { trigger: 'item' },
-    legend: { orient: 'vertical', left: 'left' },
+    title: { text: "告警类型分布 / Alert Type Distribution", left: "center" },
+    tooltip: { trigger: "item" },
+    legend: { orient: "vertical", left: "left" },
     series: [
       {
-        name: '告警类型',
-        type: 'pie',
-        radius: '50%',
-        data: alertTypeData.value.map(item => ({
+        name: "告警类型",
+        type: "pie",
+        radius: "50%",
+        data: data.map(item => ({
           value: item.value,
           name: item.name
         })),
@@ -114,7 +119,7 @@ function renderAlertTypeChart() {
           itemStyle: {
             shadowBlur: 10,
             shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)'
+            shadowColor: "rgba(0, 0, 0, 0.5)"
           }
         }
       }
@@ -127,51 +132,89 @@ function renderAlertTrendChart() {
   if (!alertTrendChart) {
     alertTrendChart = echarts.init(alertTrendChartRef.value);
   }
+  const data = alertTrendData.value.length > 0
+    ? alertTrendData.value
+    : [{ time: "暂无", high: 0, medium: 0, low: 0 }];
 
   alertTrendChart.setOption({
-    title: { text: '告警时间趋势 / Alert Time Trend', left: 'center' },
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['高风险', '中风险', '低风险'], bottom: 0 },
+    title: { text: "告警时间趋势 / Alert Time Trend", left: "center" },
+    tooltip: { trigger: "axis" },
+    legend: { data: ["高风险", "中风险", "低风险"], bottom: 0 },
     xAxis: {
-      type: 'category',
-      data: alertTrendData.value.map(d => d.time)
+      type: "category",
+      data: data.map(d => d.time)
     },
-    yAxis: { type: 'value' },
+    yAxis: { type: "value" },
     series: [
       {
-        name: '高风险',
-        type: 'bar',
-        stack: 'total',
-        data: alertTrendData.value.map(d => d.high),
-        itemStyle: { color: '#f56c6c' }
+        name: "高风险",
+        type: "bar",
+        stack: "total",
+        data: data.map(d => d.high),
+        itemStyle: { color: "#f56c6c" }
       },
       {
-        name: '中风险',
-        type: 'bar',
-        stack: 'total',
-        data: alertTrendData.value.map(d => d.medium),
-        itemStyle: { color: '#e6a23c' }
+        name: "中风险",
+        type: "bar",
+        stack: "total",
+        data: data.map(d => d.medium),
+        itemStyle: { color: "#e6a23c" }
       },
       {
-        name: '低风险',
-        type: 'bar',
-        stack: 'total',
-        data: alertTrendData.value.map(d => d.low),
-        itemStyle: { color: '#67c23a' }
+        name: "低风险",
+        type: "bar",
+        stack: "total",
+        data: data.map(d => d.low),
+        itemStyle: { color: "#67c23a" }
       }
     ]
   });
 }
 
-onMounted(() => {
+async function loadData() {
+  loading.value = true;
+  try {
+    await Promise.all([
+      gateStore.fetchOverview(),
+      gateStore.fetchDecisions(),
+      auditStore.fetchLogs(),
+      auditStore.fetchStats()
+    ]);
+  } finally {
+    loading.value = false;
+  }
+  await nextTick();
   renderAlertTypeChart();
   renderAlertTrendChart();
+}
+
+function goToAlertDetail(row: { requestId?: string }) {
+  if (row.requestId) {
+    router.push({ path: "/audit-trace/index", query: { request_id: row.requestId } });
+  } else {
+    router.push({ path: "/gate-control/index" });
+  }
+}
+
+onMounted(async () => {
+  await loadData();
+  handleResize = () => {
+    alertTypeChart?.resize();
+    alertTrendChart?.resize();
+  };
+  window.addEventListener("resize", handleResize);
 });
 
-function viewAlertDetail(alert: any) {
-  // TODO: 实现告警详情查看
-  console.log('View alert detail:', alert);
-}
+onUnmounted(() => {
+  alertTypeChart?.dispose();
+  alertTrendChart?.dispose();
+  alertTypeChart = null;
+  alertTrendChart = null;
+  if (handleResize) {
+    window.removeEventListener("resize", handleResize);
+    handleResize = null;
+  }
+});
 </script>
 
 <template>
@@ -181,24 +224,24 @@ function viewAlertDetail(alert: any) {
     <el-row :gutter="16" class="mb-6">
       <el-col :span="8">
         <StatCard
-          title="高风险告警 / High Risk Alerts"
-          :value="highRiskAlerts"
+          title="高风险告警"
+          :value="highRiskCount"
           icon="ep:warning-filled"
           color="var(--aegis-danger)"
         />
       </el-col>
       <el-col :span="8">
         <StatCard
-          title="中风险告警 / Medium Risk Alerts"
-          :value="mediumRiskAlerts"
+          title="中风险告警"
+          :value="mediumRiskCount"
           icon="ep:warning"
           color="var(--aegis-warning)"
         />
       </el-col>
       <el-col :span="8">
         <StatCard
-          title="低风险告警 / Low Risk Alerts"
-          :value="lowRiskAlerts"
+          title="低风险告警"
+          :value="lowRiskCount"
           icon="ep:info-filled"
           color="var(--aegis-info)"
         />
@@ -208,59 +251,59 @@ function viewAlertDetail(alert: any) {
     <el-row :gutter="16" class="mb-6">
       <el-col :span="12">
         <el-card shadow="hover">
-          <div ref="alertTypeChartRef" style="height: 300px;"></div>
+          <div v-loading="loading" ref="alertTypeChartRef" style="height: 300px;"></div>
         </el-card>
       </el-col>
       <el-col :span="12">
         <el-card shadow="hover">
-          <div ref="alertTrendChartRef" style="height: 300px;"></div>
+          <div v-loading="loading" ref="alertTrendChartRef" style="height: 300px;"></div>
         </el-card>
       </el-col>
     </el-row>
 
     <el-card shadow="hover">
       <template #header>
-        <span class="font-semibold">告警列表 / Alert List</span>
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">告警列表 / Alert List</span>
+          <el-button size="small" :loading="loading" @click="loadData">
+            刷新
+          </el-button>
+        </div>
       </template>
-      <el-table :data="alertsList" stripe size="small">
-        <el-table-column prop="time" label="时间 / Time" width="160" />
-        <el-table-column prop="level" label="级别 / Level" width="100">
+      <el-table :data="alertListData" stripe size="small" @row-click="goToAlertDetail" style="cursor: pointer;">
+        <el-table-column prop="time" label="时间 / Time" width="160">
           <template #default="{ row }">
-            <el-tag :type="row.level === '高' ? 'danger' : row.level === '中' ? 'warning' : 'info'" size="small">
-              {{ row.level }}
+            {{ new Date(row.time).toLocaleString() }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="levelLabel" label="级别 / Level" width="80">
+          <template #default="{ row }">
+            <el-tag
+              :type="row.level === 'critical' || row.level === 'high' ? 'danger' : row.level === 'medium' ? 'warning' : 'info'"
+              size="small"
+            >
+              {{ row.levelLabel }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="决策 / Decision" width="100">
+          <template #default="{ row }">
+            <DecisionBadge :decision="row.decision" />
           </template>
         </el-table-column>
         <el-table-column prop="type" label="类型 / Type" width="120" />
         <el-table-column prop="source" label="来源 / Source" width="140" />
-        <el-table-column prop="gate" label="命中闸门 / Gate Hit" width="120">
+        <el-table-column label="风险分数" width="90">
           <template #default="{ row }">
-            <el-tag size="small" type="info">{{ row.gate }}</el-tag>
+            <RiskBadge :level="row.level" />
+            <span class="text-xs ml-1">{{ row.riskScore }}%</span>
           </template>
         </el-table-column>
-        <el-table-column label="可信授权 / Auth" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.authTriggered ? 'success' : 'info'" size="small">
-              {{ row.authTriggered ? '触发' : '未触发' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="记忆沙箱 / Sandbox" width="120">
-          <template #default="{ row }">
-            <el-tag :type="row.sandboxTriggered ? 'warning' : 'info'" size="small">
-              {{ row.sandboxTriggered ? '触发' : '未触发' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="description" label="描述 / Description" show-overflow-tooltip />
-        <el-table-column label="操作 / Action" width="100" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" size="small" @click="viewAlertDetail(row)">
-              详情 / Detail
-            </el-button>
-          </template>
-        </el-table-column>
+        <el-table-column prop="reason" label="描述 / Description" show-overflow-tooltip />
       </el-table>
+      <div v-if="alertListData.length === 0" class="py-8 text-center text-gray-400">
+        暂无告警数据
+      </div>
     </el-card>
   </div>
 </template>

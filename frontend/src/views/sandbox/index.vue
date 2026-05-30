@@ -17,9 +17,9 @@ const {
 
 <template>
   <div class="sandbox-page p-4">
-    <h1 class="text-2xl font-bold mb-4">Memory Sandbox</h1>
+    <h1 class="text-2xl font-bold mb-4">记忆沙箱</h1>
     <p class="text-gray-500 mb-6">
-      Context isolation: trusted core memory vs untrusted external data
+      上下文隔离：受信任的核心记忆vs 不受信任的外部数据
     </p>
 
     <div v-loading="loading">

@@ -161,6 +161,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 
 func (r *Router) registerRoutes() {
 	r.engine.GET("/health", r.handleHealth)
+	r.engine.GET("/get-async-routes", r.handleGetAsyncRoutes)
 	r.registerUserRoutes()
 	r.registerAuthRoutes()
 
@@ -174,9 +175,23 @@ func (r *Router) registerRoutes() {
 	r.engine.GET("/aegis/gate/decisions", r.handleGateDecisions)
 	r.engine.POST("/aegis/gate/evaluate", r.handleGateEvaluate)
 	r.registerSandboxRoutes()
+	r.registerPolicyRoutes()
 
 	if r.cfg.DevMode {
 		r.registerDevRoutes()
+	}
+}
+
+func (r *Router) registerPolicyRoutes() {
+	policyGroup := r.engine.Group("/aegis/policy")
+	{
+		policyGroup.GET("/config", r.handleGetPolicyConfig)
+		policyGroup.GET("/rules", r.handleGetPolicyRules)
+		policyGroup.POST("/rules", r.handleCreatePolicyRule)
+		policyGroup.PUT("/rules", r.handleUpdatePolicyRule)
+		policyGroup.DELETE("/rules/:id", r.handleDeletePolicyRule)
+		policyGroup.PUT("/rules/reorder", r.handleReorderPolicyRules)
+		policyGroup.PUT("/config", r.handleUpdatePolicyConfig)
 	}
 }
 
@@ -297,6 +312,13 @@ func (r *Router) handleHealth(c *gin.Context) {
 	})
 }
 
+func (r *Router) handleGetAsyncRoutes(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    []interface{}{},
+	})
+}
+
 func (r *Router) handleAuditLogs(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "50")
 	limit := 50
@@ -305,7 +327,7 @@ func (r *Router) handleAuditLogs(c *gin.Context) {
 	}
 
 	if r.auditStore == nil {
-		c.JSON(http.StatusOK, gin.H{"logs": []audit.AuditEvent{}, "total": 0, "note": "audit store not initialized"})
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": []audit.AuditEvent{}, "total": 0})
 		return
 	}
 
@@ -321,7 +343,7 @@ func (r *Router) handleAuditLogs(c *gin.Context) {
 		display = display[:limit]
 	}
 
-	c.JSON(http.StatusOK, gin.H{"logs": display, "total": len(allEvents)})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": display, "total": len(allEvents)})
 }
 
 func (r *Router) handleGateOverview(c *gin.Context) {

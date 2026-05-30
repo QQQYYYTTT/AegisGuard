@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useRoute } from "vue-router";
 import LogStream from "@/components/audit/LogStream.vue";
 import EvidenceCard from "@/components/audit/EvidenceCard.vue";
 import AttackFlowGraph from "@/components/audit/AttackFlowGraph.vue";
@@ -13,6 +14,8 @@ defineOptions({ name: "LogReplayIndex" });
 
 const { events, attackChains, stats, loadLogs, loadChains, loadStats, loading, startPolling, stopPolling } =
   useAuditStream();
+
+const route = useRoute();
 
 const selectedSession = ref<string | null>(null);
 const selectedEvent = ref<AuditEvent | null>(null);
@@ -34,7 +37,7 @@ const sessionList = computed(() => {
     toolCalls: string[];
   }>();
 
-  events.value.forEach(event => {
+  (events.value || []).forEach(event => {
     const sessionId = event.session_id || "unknown";
     if (!sessionMap.has(sessionId)) {
       sessionMap.set(sessionId, {
@@ -190,7 +193,12 @@ function getRiskLevelColor(level: string) {
 }
 
 onMounted(() => {
-  Promise.all([loadLogs(), loadChains(), loadStats()]);
+  Promise.all([loadLogs(), loadChains(), loadStats()]).then(() => {
+    const sessionParam = route.query.session as string;
+    if (sessionParam && sessionList.value.some(s => s.sessionId === sessionParam)) {
+      selectSession(sessionParam);
+    }
+  });
   startPolling(5000);
 });
 

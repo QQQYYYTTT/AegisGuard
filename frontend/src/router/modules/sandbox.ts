@@ -7,9 +7,9 @@ export default {
   redirect: "/sandbox/index",
   meta: {
     icon: "ep:box",
-    title: "记忆沙箱",
+    title: "记忆沙箱查看",
     rank: 5,
-    showLink: false
+    showLink: true
   },
   children: [
     {
@@ -17,7 +17,7 @@ export default {
       name: "SandboxIndex",
       component: () => import("@/views/sandbox/index.vue"),
       meta: {
-        title: "记忆沙箱"
+        title: "记忆沙箱查看"
       }
     }
   ]

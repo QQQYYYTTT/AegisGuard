@@ -20,7 +20,9 @@ const props = defineProps<{
 
 const chartRef = ref<HTMLElement>();
 let chart: echarts.ECharts | null = null;
+let isDisposed = false;
 const containerWidth = ref(0);
+let resizeHandler: (() => void) | null = null;
 
 const flowData = computed(() => {
   const total = props.stats.totalIntercepts + props.stats.totalAllowed;
@@ -234,7 +236,7 @@ const flowData = computed(() => {
 });
 
 function initChart() {
-  if (!chartRef.value) return;
+  if (!chartRef.value || isDisposed) return;
   
   // 获取容器实际宽度
   const rect = chartRef.value.getBoundingClientRect();
@@ -248,7 +250,7 @@ function initChart() {
 }
 
 function renderChart() {
-  if (!chart || containerWidth.value === 0) return;
+  if (!chart || isDisposed || chart.isDisposed() || containerWidth.value === 0) return;
 
   const { nodes, links } = flowData.value;
 
@@ -308,7 +310,8 @@ function renderChart() {
 }
 
 // 监听数据变化
-watch(() => props.stats, () => {
+watch(() => props.stats, (newVal, oldVal) => {
+  if (isDisposed) return;
   nextTick(() => {
     initChart();
   });
@@ -324,21 +327,33 @@ onMounted(() => {
     // 使用 ResizeObserver 监听容器大小变化，只调用 resize 不重新渲染
     if (chartRef.value && window.ResizeObserver) {
       resizeObserver = new ResizeObserver(() => {
-        chart?.resize();
+        if (chart && !chart.isDisposed()) chart.resize();
       });
       resizeObserver.observe(chartRef.value);
     }
   });
   
-  window.addEventListener("resize", () => chart?.resize());
+  resizeHandler = () => {
+    if (chart && !chart.isDisposed()) chart.resize();
+  };
+  window.addEventListener("resize", resizeHandler);
 });
 
 onUnmounted(() => {
+  isDisposed = true;
   if (resizeObserver && chartRef.value) {
     resizeObserver.unobserve(chartRef.value);
+    resizeObserver.disconnect();
+    resizeObserver = null;
   }
-  chart?.dispose();
-  window.removeEventListener("resize", () => chart?.resize());
+  if (resizeHandler) {
+    window.removeEventListener("resize", resizeHandler);
+    resizeHandler = null;
+  }
+  if (chart) {
+    chart.dispose();
+    chart = null;
+  }
 });
 </script>
 

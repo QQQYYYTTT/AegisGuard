@@ -6,7 +6,7 @@ export default {
   component: Layout,
   redirect: "/gate-control/index",
   meta: {
-    icon: "ep:shield",
+    icon: "ep:switch-button",
     title: "自动处置中心",
     rank: 4
   },
