@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useRouter } from "vue-router";
 import StatCard from "@/components/common/StatCard.vue";
 import DecisionBadge from "@/components/common/DecisionBadge.vue";
 import RiskBadge from "@/components/common/RiskBadge.vue";
@@ -13,6 +14,7 @@ defineOptions({ name: "AutoDisposalCenter" });
 
 const gateStore = useGateStoreHook();
 const auditStore = useAuditStoreHook();
+const router = useRouter();
 
 const activeTab = ref("overview");
 const timeRange = ref("24h");
@@ -22,8 +24,8 @@ const gateDecisions = computed(() => gateStore.decisions);
 const auditEvents = computed(() => auditStore.events);
 
 const disposalStats = computed(() => {
-  const decisions = gateDecisions.value;
-  const events = auditEvents.value;
+  const decisions = gateDecisions.value || [];
+  const events = auditEvents.value || [];
   
   const totalIntercepts = decisions.filter(d => d.decision === "Block" || d.decision === "Deny").length;
   const totalAllowed = decisions.filter(d => d.decision === "Allow").length;
@@ -69,7 +71,7 @@ const disposalStats = computed(() => {
 });
 
 const interceptionTrend = computed(() => {
-  const decisions = gateDecisions.value;
+  const decisions = gateDecisions.value || [];
   const hourlyData: Record<string, { allow: number; block: number }> = {};
   
   decisions.forEach(d => {
@@ -91,7 +93,7 @@ const interceptionTrend = computed(() => {
 });
 
 const filteredDecisions = computed(() => {
-  let decisions = gateDecisions.value;
+  let decisions = gateDecisions.value || [];
   if (selectedGateType.value !== "all") {
     decisions = decisions.filter(d => d.gate_type === selectedGateType.value);
   }
@@ -99,7 +101,8 @@ const filteredDecisions = computed(() => {
 });
 
 const authDenialRecords = computed(() => {
-  return auditEvents.value
+  const list = auditEvents.value || [];
+  return list
     .filter(e => e.event_type === "authorization" && (e.decision === "Deny" || e.decision === "Block"))
     .slice(0, 20)
     .map(e => ({
@@ -114,7 +117,8 @@ const authDenialRecords = computed(() => {
 });
 
 const sandboxIsolationRecords = computed(() => {
-  return auditEvents.value
+  const list = auditEvents.value || [];
+  return list
     .filter(e => e.event_type === "sandbox")
     .slice(0, 20)
     .map(e => ({
@@ -128,17 +132,29 @@ const sandboxIsolationRecords = computed(() => {
     }));
 });
 
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
+
 async function refreshData() {
-  await Promise.all([
-    gateStore.fetchDecisions(),
-    auditStore.fetchLogs()
-  ]);
+  try {
+    await Promise.all([
+      gateStore.fetchDecisions(),
+      auditStore.fetchLogs()
+    ]);
+  } catch (e) {
+    console.warn('gate-control refresh failed:', e);
+  }
 }
 
 onMounted(() => {
   refreshData();
-  const timer = setInterval(refreshData, 10000);
-  onUnmounted(() => clearInterval(timer));
+  refreshTimer = setInterval(refreshData, 10000);
+});
+
+onUnmounted(() => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
 });
 
 function viewAlertDetail(alert: any) {
@@ -306,7 +322,7 @@ function viewAlertDetail(alert: any) {
           </el-radio-group>
         </div>
 
-        <el-table :data="filteredDecisions" stripe size="small" max-height="600">
+        <el-table :data="filteredDecisions" stripe size="small" max-height="600" @row-click="(row) => router.push({ path: '/audit-trace', query: { chain: row.request_id } })">
           <el-table-column prop="timestamp" label="时间 / Time" width="180">
             <template #default="{ row }">
               {{ new Date(row.timestamp).toLocaleString() }}

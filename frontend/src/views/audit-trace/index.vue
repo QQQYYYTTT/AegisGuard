@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useRoute } from "vue-router";
 import AttackChainGraph from "@/components/audit/AttackChainGraph.vue";
 import EvidenceCard from "@/components/audit/EvidenceCard.vue";
 import StatCard from "@/components/common/StatCard.vue";
@@ -10,6 +11,8 @@ defineOptions({ name: "AuditTraceIndex" });
 
 const { events, attackChains, stats, loadLogs, loadChains, loadStats, loading, startPolling, stopPolling } =
   useAuditStream();
+
+const route = useRoute();
 
 const selectedChain = ref<AttackChain | null>(null);
 const activeTab = ref("summary");
@@ -110,7 +113,17 @@ function selectEvent(event: AuditEvent) {
 }
 
 onMounted(() => {
-  Promise.all([loadLogs(), loadChains(), loadStats()]);
+  Promise.all([loadLogs(), loadChains(), loadStats()]).then(() => {
+    const chainParam = route.query.chain as string;
+    if (chainParam) {
+      const found = attackChains.value.find(
+        c => c.chain_id === chainParam || c.events.some(e => e.request_id === chainParam)
+      );
+      if (found) {
+        selectChain(found);
+      }
+    }
+  });
   startPolling(5000);
 });
 

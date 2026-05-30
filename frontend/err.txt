@@ -1,0 +1,33 @@
+main.ts:1 [Vue warn]: Unhandled error during execution of render function 
+  at <ElCol data-insp-path="frontend/src/views/log-replay/index.vue:215:7:el-col" span=6 > 
+  at <ElRow data-insp-path="frontend/src/views/log-replay/index.vue:214:5:el-row" gutter=16 class="mb-4" > 
+  at <LogReplayIndex data-insp-path="frontend/src/layout/components/lay-content/index.vue:140:17:transitionMain" onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< null >  ... > 
+  at <KeepAlive key=0 include= 
+['DashboardIndex']
+ data-insp-path="frontend/src/layout/components/lay-content/index.vue:140:17:transitionMain" > 
+  at <BaseTransition mode="out-in" appear=true persisted=false  ... > 
+  at <Transition name="fade-transform" enterActiveClass=undefined leaveActiveClass=undefined  ... > 
+  at <Anonymous data-insp-path="frontend/src/layout/components/lay-content/index.vue:140:17:transitionMain" route= 
+{fullPath: '/log-replay/index', hash: '', query: {…}, name: 'LogReplayIndex', path: '/log-replay/index', …}
+ > 
+  at <ElScrollbar key=0 data-insp-path="frontend/src/layout/components/lay-content/index.vue:117:13:el-scrollbar" wrap-style= 
+{display: 'flex', flex-wrap: 'wrap', max-width: '100%', margin: '0 auto', transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)'}
+  ... > 
+  at <Index data-insp-path="frontend/src/layout/components/lay-content/index.vue:115:9:LayFrame" currComp= 
+{__v_isVNode: true, __v_skip: true, type: {…}, props: {…}, key: null, …}
+ currRoute= 
+{fullPath: '/log-replay/index', hash: '', query: {…}, name: 'LogReplayIndex', path: '/log-replay/index', …}
+ > 
+  at <RouterView data-insp-path="frontend/src/layout/components/lay-content/index.vue:113:5:router-view" > 
+  at <Index data-insp-path="frontend/src/layout/index.vue:185:9:LayContent" fixed-header=true > 
+  at <Index data-insp-path="frontend/src/App.vue:3:5:router-view" onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< 
+Proxy(Object) {__v_skip: true}
+ > > 
+  at <RouterView data-insp-path="frontend/src/App.vue:3:5:router-view" > 
+  at <ElConfigProvider data-insp-path="frontend/src/App.vue:2:3:el-config-provider" locale= 
+{name: 'zh-cn', el: {…}}
+ > 
+  at <App>
+runtime-core.esm-bundler.js:268 Uncaught TypeError: Cannot read properties of undefined (reading 'forEach')
+    at ComputedRefImpl.fn (index.vue:40:16)
+    at index.vue:216:130

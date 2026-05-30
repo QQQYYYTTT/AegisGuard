@@ -161,6 +161,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 
 func (r *Router) registerRoutes() {
 	r.engine.GET("/health", r.handleHealth)
+	r.engine.GET("/get-async-routes", r.handleGetAsyncRoutes)
 	r.registerUserRoutes()
 	r.registerAuthRoutes()
 
@@ -174,9 +175,23 @@ func (r *Router) registerRoutes() {
 	r.engine.GET("/aegis/gate/decisions", r.handleGateDecisions)
 	r.engine.POST("/aegis/gate/evaluate", r.handleGateEvaluate)
 	r.registerSandboxRoutes()
+	r.registerPolicyRoutes()
 
 	if r.cfg.DevMode {
 		r.registerDevRoutes()
+	}
+}
+
+func (r *Router) registerPolicyRoutes() {
+	policyGroup := r.engine.Group("/aegis/policy")
+	{
+		policyGroup.GET("/config", r.handleGetPolicyConfig)
+		policyGroup.GET("/rules", r.handleGetPolicyRules)
+		policyGroup.POST("/rules", r.handleCreatePolicyRule)
+		policyGroup.PUT("/rules", r.handleUpdatePolicyRule)
+		policyGroup.DELETE("/rules/:id", r.handleDeletePolicyRule)
+		policyGroup.PUT("/rules/reorder", r.handleReorderPolicyRules)
+		policyGroup.PUT("/config", r.handleUpdatePolicyConfig)
 	}
 }
 
@@ -294,6 +309,13 @@ func (r *Router) handleHealth(c *gin.Context) {
 		"target_url":    r.targetURL,
 		"gateway_key":   r.vkeyMgr.GatewayKeyID(),
 		"audit_pending": r.auditor.PendingCount(),
+	})
+}
+
+func (r *Router) handleGetAsyncRoutes(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    []interface{}{},
 	})
 }
 

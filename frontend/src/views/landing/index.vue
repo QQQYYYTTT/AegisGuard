@@ -42,24 +42,15 @@ let radarChart: echarts.ECharts | null = null;
 let healthChart: echarts.ECharts | null = null;
 let chinaMapLoaded = false;
 let animationTimer: ReturnType<typeof setInterval> | null = null;
+let isActive = true;
 
 const particles: Particle[] = [
   { top: "10%", left: "8%", size: "5px", delay: "0s", duration: "10s" },
-  { top: "18%", left: "30%", size: "8px", delay: "1s", duration: "13s" },
-  { top: "14%", left: "75%", size: "6px", delay: "3s", duration: "12s" },
   { top: "32%", left: "10%", size: "10px", delay: "2s", duration: "15s" },
-  { top: "26%", left: "88%", size: "4px", delay: "4s", duration: "11s" },
   { top: "40%", left: "22%", size: "7px", delay: "1.5s", duration: "9s" },
-  { top: "46%", left: "70%", size: "12px", delay: "0.5s", duration: "16s" },
   { top: "58%", left: "6%", size: "6px", delay: "5s", duration: "14s" },
-  { top: "52%", left: "92%", size: "8px", delay: "3.5s", duration: "10s" },
   { top: "67%", left: "28%", size: "9px", delay: "1.2s", duration: "12s" },
-  { top: "74%", left: "58%", size: "5px", delay: "2.4s", duration: "9s" },
-  { top: "82%", left: "16%", size: "11px", delay: "0.2s", duration: "14s" },
-  { top: "86%", left: "80%", size: "7px", delay: "4.1s", duration: "10s" },
-  { top: "24%", left: "50%", size: "6px", delay: "5.3s", duration: "17s" },
-  { top: "12%", left: "58%", size: "9px", delay: "2.2s", duration: "15s" },
-  { top: "64%", left: "84%", size: "5px", delay: "3.2s", duration: "11s" }
+  { top: "52%", left: "92%", size: "8px", delay: "3.5s", duration: "10s" }
 ];
 
 const nationalHeatData = ref<RegionHeat[]>([
@@ -88,15 +79,6 @@ const cityScatterData = ref([
   { name: "武汉", value: [114.3, 30.59, 65] },
   { name: "成都", value: [104.06, 30.67, 68] },
   { name: "西安", value: [108.94, 34.34, 59] }
-]);
-
-const attackLinks = ref([
-  [{ coord: [87.62, 43.82] }, { coord: [116.4, 39.9] }],
-  [{ coord: [126.63, 45.75] }, { coord: [121.47, 31.23] }],
-  [{ coord: [91.11, 29.97] }, { coord: [114.05, 22.55] }],
-  [{ coord: [111.67, 40.82] }, { coord: [120.15, 30.28] }],
-  [{ coord: [103.84, 36.06] }, { coord: [118.78, 32.04] }],
-  [{ coord: [112.55, 37.87] }, { coord: [113.26, 23.13] }]
 ]);
 
 const trendHours = ref(["00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "24:00"]);
@@ -465,6 +447,7 @@ async function loadChinaMap() {
 }
 
 function renderTrendChart() {
+  if (!isActive) return;
   if (!trendChartRef.value) return;
   if (!trendChart) {
     trendChart = echarts.init(trendChartRef.value);
@@ -573,7 +556,7 @@ function renderDecisionChart() {
     22;
 
   decisionChart.setOption({
-    animationDuration: 1200,
+    animation: false,
     tooltip: {
       trigger: "item"
     },
@@ -643,13 +626,14 @@ function renderDecisionChart() {
 }
 
 function renderFunnelChart() {
+  if (!isActive) return;
   if (!funnelChartRef.value) return;
   if (!funnelChart) {
     funnelChart = echarts.init(funnelChartRef.value);
   }
 
   funnelChart.setOption({
-    animationDuration: 1200,
+    animation: false,
     tooltip: {
       trigger: "item"
     },
@@ -689,6 +673,7 @@ function renderFunnelChart() {
 }
 
 function renderRadarChart() {
+  if (!isActive) return;
   if (!radarChartRef.value) return;
   if (!radarChart) {
     radarChart = echarts.init(radarChartRef.value);
@@ -699,7 +684,7 @@ function renderRadarChart() {
     tooltip: {},
     radar: {
       radius: "64%",
-      splitNumber: 4,
+      alignTicks: false,
       indicator: [
         { name: "授权可信", max: 100 },
         { name: "闸门阻断", max: 100 },
@@ -754,13 +739,14 @@ function renderRadarChart() {
 }
 
 function renderHealthChart() {
+  if (!isActive) return;
   if (!healthChartRef.value) return;
   if (!healthChart) {
     healthChart = echarts.init(healthChartRef.value);
   }
 
   healthChart.setOption({
-    animationDuration: 1200,
+    animation: false,
     tooltip: {
       position: "top",
       formatter: (params: any) => {
@@ -827,106 +813,116 @@ function renderHealthChart() {
   });
 }
 
-async function renderMapChart() {
+function renderMapChart() {
+  if (!isActive) return;
   if (!mapChartRef.value) return;
   if (!mapChart) {
     mapChart = echarts.init(mapChartRef.value);
   }
 
-  await loadChinaMap();
-
-  mapChart.setOption({
-    animationDuration: 1600,
-    tooltip: {
-      trigger: "item",
-      formatter: (params: any) => {
-        const value = Array.isArray(params.value) ? params.value[2] : params.value;
-        return `${params.name}<br/>威胁热度 ${value ?? 0}`;
-      }
-    },
-    geo: {
-      map: "china",
-      roam: false,
-      layoutCenter: ["50%", "50%"],
-      layoutSize: "92%",
-      itemStyle: {
-        areaColor: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: "#123a84" },
-          { offset: 0.6, color: "#0b1f4b" },
-          { offset: 1, color: "#08122c" }
-        ]),
-        borderColor: "#2ecbff",
-        borderWidth: 1,
-        shadowBlur: 24,
-        shadowColor: "rgba(46, 203, 255, 0.35)"
-      },
-      emphasis: {
-        itemStyle: {
-          areaColor: "#1b5cb0"
-        },
-        label: {
-          color: "#fff"
+  loadChinaMap().then(() => {
+    if (!isActive || !mapChart) return;
+    mapChart.setOption({
+      animation: false,
+      tooltip: {
+        trigger: "item",
+        formatter: (params: any) => {
+          const value = Array.isArray(params.value) ? params.value[2] : params.value;
+          return `${params.name}<br/>威胁热度 ${value ?? 0}`;
         }
-      }
-    },
-    visualMap: {
-      min: 0,
-      max: 100,
-      orient: "horizontal",
-      left: "center",
-      bottom: 6,
-      text: ["高热", "低热"],
-      textStyle: { color: "#9dbbff" },
-      inRange: {
-        color: ["#0d2a64", "#1b63d2", "#22cfff", "#78f5ff"]
-      }
-    },
-    series: [
-      {
-        name: "全国威胁热度",
-        type: "map",
+      },
+      geo: {
         map: "china",
-        geoIndex: 0,
-        data: nationalHeatData.value
-      },
-      {
-        name: "威胁节点",
-        type: "effectScatter",
-        coordinateSystem: "geo",
-        rippleEffect: {
-          scale: 5,
-          brushType: "stroke"
-        },
-        symbolSize: (val: number[]) => Math.max(8, val[2] / 8),
+        roam: false,
+        layoutCenter: ["50%", "50%"],
+        layoutSize: "92%",
         itemStyle: {
-          color: "#75f2ff",
-          shadowBlur: 20,
-          shadowColor: "#75f2ff"
+          areaColor: (echarts as any).graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: "#123a84" },
+            { offset: 0.6, color: "#0b1f4b" },
+            { offset: 1, color: "#08122c" }
+          ]),
+          borderColor: "#2ecbff",
+          borderWidth: 1,
+          shadowBlur: 24,
+          shadowColor: "rgba(46, 203, 255, 0.35)"
         },
-        data: cityScatterData.value
+        emphasis: {
+          itemStyle: {
+            areaColor: "#1b5cb0"
+          },
+          label: {
+            color: "#fff"
+          }
+        }
       },
-      {
-        name: "跨域攻击链",
-        type: "lines",
-        coordinateSystem: "geo",
-        zlevel: 2,
-        effect: {
-          show: true,
-          period: 4,
-          trailLength: 0.3,
-          symbol: "arrow",
-          symbolSize: 7,
-          color: "#ff79bd"
+      visualMap: {
+        min: 0,
+        max: 100,
+        orient: "horizontal",
+        left: "center",
+        bottom: 6,
+        text: ["高热", "低热"],
+        textStyle: { color: "#9dbbff" },
+        inRange: {
+          color: ["#0d2a64", "#1b63d2", "#22cfff", "#78f5ff"]
+        }
+      },
+      series: [
+        {
+          name: "全国威胁热度",
+          type: "map",
+          map: "china",
+          geoIndex: 0,
+          data: nationalHeatData.value
         },
-        lineStyle: {
-          color: "#8f6bff",
-          width: 1.5,
-          opacity: 0.68,
-          curveness: 0.28
+        {
+          name: "威胁节点",
+          type: "effectScatter",
+          coordinateSystem: "geo",
+          rippleEffect: {
+            scale: 3,
+            period: 8,
+            brushType: "stroke"
+          },
+          symbolSize: (val: number[]) => Math.max(6, val[2] / 10),
+          itemStyle: {
+            color: "#75f2ff",
+            shadowBlur: 12,
+            shadowColor: "#75f2ff"
+          },
+          data: cityScatterData.value
         },
-        data: attackLinks.value
-      }
-    ]
+        {
+          name: "跨域攻击链",
+          type: "lines",
+          coordinateSystem: "geo",
+          zlevel: 2,
+          effect: {
+            show: true,
+            period: 6,
+            trailLength: 0.2,
+            symbol: "arrow",
+            symbolSize: 5,
+            color: "#ff79bd"
+          },
+          lineStyle: {
+            color: "#8f6bff",
+            width: 1.2,
+            opacity: 0.5,
+            curveness: 0.28
+          },
+          data: [
+            { coords: [[87.62, 43.82], [116.4, 39.9]] },
+            { coords: [[126.63, 45.75], [121.47, 31.23]] },
+            { coords: [[91.11, 29.97], [114.05, 22.55]] },
+            { coords: [[111.67, 40.82], [120.15, 30.28]] },
+            { coords: [[103.84, 36.06], [118.78, 32.04]] },
+            { coords: [[112.55, 37.87], [113.26, 23.13]] }
+          ]
+        }
+      ]
+    });
   });
 }
 
@@ -940,7 +936,8 @@ function renderAllCharts() {
 }
 
 function rotateVisualData() {
-  trendHours.value = [...trendHours.value.slice(1), trendHours.value[0]];
+  if (!isActive) return;
+
   trendAlerts.value = [...trendAlerts.value.slice(1), Math.max(24, Math.min(82, trendAlerts.value[0] + 6 - Math.floor(Math.random() * 12)))];
   trendBlocks.value = [...trendBlocks.value.slice(1), Math.max(12, Math.min(62, trendBlocks.value[0] + 4 - Math.floor(Math.random() * 8)))];
 
@@ -953,27 +950,39 @@ function rotateVisualData() {
     Math.max(72, Math.min(99, value + (Math.random() > 0.5 ? 2 : -2)))
   );
 
-  nationalHeatData.value = nationalHeatData.value.map((item, index) => ({
-    ...item,
-    value: Math.max(42, Math.min(99, item.value + ((index % 3) - 1) * 2))
-  }));
-
-  cityScatterData.value = cityScatterData.value.map(item => ({
-    ...item,
-    value: [item.value[0], item.value[1], Math.max(48, Math.min(99, item.value[2] + (Math.random() > 0.5 ? 3 : -2)))]
-  }));
-
-  healthMatrix.value = healthMatrix.value.map(([x, y, v], index) => [
-    x,
-    y,
-    Math.max(72, Math.min(99, v + ((index % 4) - 1)))
-  ]);
-
   rotatingSignals.value = [...rotatingSignals.value.slice(1), rotatingSignals.value[0]];
-  renderAllCharts();
+
+  if (trendChart && isActive) trendChart.setOption({
+    animation: false,
+    xAxis: { data: trendHours.value },
+    series: [
+      { data: trendAlerts.value },
+      { data: trendBlocks.value }
+    ]
+  }, { notMerge: false });
+
+  if (funnelChart && isActive) {
+    const funnelColors = ["#34d4ff", "#5f9fff", "#8b7bff", "#ff7db0", "#ffb36b"];
+    funnelChart.setOption({
+      series: [{
+        data: stageData.value.map((item, index) => ({
+          ...item,
+          itemStyle: { color: funnelColors[index] }
+        }))
+      }]
+    }, { notMerge: false });
+  }
+
+  if (radarChart && isActive) {
+    radarChart.setOption({
+      animation: false,
+      series: [{ data: [{ value: radarValues.value, name: "联防健康度" }] }]
+    }, { notMerge: false });
+  }
 }
 
 function resizeCharts() {
+  if (!isActive) return;
   mapChart?.resize();
   trendChart?.resize();
   decisionChart?.resize();
@@ -990,13 +999,14 @@ async function initializeScreen() {
 
 onMounted(async () => {
   await initializeScreen();
-  startGatePolling(6000);
-  startAuditPolling(6000);
-  animationTimer = setInterval(rotateVisualData, 4500);
+  startGatePolling(10000);
+  startAuditPolling(10000);
+  animationTimer = setInterval(rotateVisualData, 10000);
   window.addEventListener("resize", resizeCharts);
 });
 
 onUnmounted(() => {
+  isActive = false;
   stopGatePolling();
   stopAuditPolling();
   if (animationTimer) {
@@ -1065,6 +1075,54 @@ onUnmounted(() => {
 
     <main class="screen-layout">
       <section class="panel panel-left">
+        <div class="panel-card metrics-card">
+          <div class="card-title">快速入口</div>
+          <div class="quick-entry-grid">
+            <div class="quick-entry-item" @click="router.push('/gate-control')">
+              <div class="qe-icon" style="background:rgba(255,95,159,0.15)">⚡</div>
+              <div>
+                <strong>自动处置中心</strong>
+                <small>Gate 控制面板</small>
+              </div>
+            </div>
+            <div class="quick-entry-item" @click="router.push('/policy')">
+              <div class="qe-icon" style="background:rgba(57,208,255,0.15)">📋</div>
+              <div>
+                <strong>策略规则管理</strong>
+                <small>CRUD / 优先级</small>
+              </div>
+            </div>
+            <div class="quick-entry-item" @click="router.push('/simulator')">
+              <div class="qe-icon" style="background:rgba(141,125,255,0.15)">▶</div>
+              <div>
+                <strong>运行时模拟器</strong>
+                <small>场景测试</small>
+              </div>
+            </div>
+            <div class="quick-entry-item" @click="router.push('/audit-trace')">
+              <div class="qe-icon" style="background:rgba(105,255,200,0.15)">🔍</div>
+              <div>
+                <strong>审计追踪</strong>
+                <small>攻击链溯源</small>
+              </div>
+            </div>
+            <div class="quick-entry-item" @click="router.push('/log-replay')">
+              <div class="qe-icon" style="background:rgba(248,186,74,0.15)">⏱</div>
+              <div>
+                <strong>日志回放</strong>
+                <small>会话重演</small>
+              </div>
+            </div>
+            <div class="quick-entry-item" @click="router.push('/dashboard')">
+              <div class="qe-icon" style="background:rgba(52,212,255,0.15)">📊</div>
+              <div>
+                <strong>安全监测总览</strong>
+                <small>图表看板</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="panel-card metrics-card">
           <div class="card-title">核心战情指标</div>
           <div class="metrics-grid metrics-grid-large">
@@ -1311,6 +1369,8 @@ onUnmounted(() => {
   animation-name: floatParticle;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .topbar {
@@ -2246,5 +2306,54 @@ onUnmounted(() => {
   .map-chart {
     min-height: 420px;
   }
+}
+
+.quick-entry-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.quick-entry-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(118, 178, 255, 0.06);
+  border: 1px solid rgba(118, 178, 255, 0.12);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.quick-entry-item:hover {
+  background: rgba(118, 178, 255, 0.15);
+  border-color: rgba(118, 178, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.qe-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.quick-entry-item strong {
+  display: block;
+  color: var(--text-main, #dff4ff);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.quick-entry-item small {
+  display: block;
+  color: var(--text-soft, #85a8eb);
+  font-size: 10px;
+  margin-top: 1px;
 }
 </style>

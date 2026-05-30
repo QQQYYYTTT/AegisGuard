@@ -6,7 +6,7 @@ export default {
   component: Layout,
   redirect: "/dashboard/index",
   meta: {
-    icon: "ep:monitor",
+    icon: "ep:data-analysis",
     title: "安全监测总览",
     rank: 1
   },

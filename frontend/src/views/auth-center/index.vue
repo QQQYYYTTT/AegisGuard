@@ -11,21 +11,22 @@ const mediumRiskAlerts = ref(25);
 const lowRiskAlerts = ref(45);
 
 const alertTypeData = ref([
-  { name: 'SQL注入', value: 15 },
-  { name: 'XSS攻击', value: 12 },
-  { name: 'DDoS攻击', value: 8 },
-  { name: '暴力破解', value: 10 },
-  { name: '扫描探测', value: 20 },
-  { name: '其他', value: 17 },
+  { name: '提示注入', value: 18 },
+  { name: '越权工具调用', value: 14 },
+  { name: '敏感信息窃取', value: 11 },
+  { name: '记忆污染', value: 8 },
+  { name: '越狱攻击', value: 9 },
+  { name: '高风险动作', value: 7 },
+  { name: '其他', value: 15 },
 ]);
 
 const alertTrendData = ref([
-  { time: '2024-01-10', high: 5, medium: 8, low: 12 },
-  { time: '2024-01-11', high: 3, medium: 10, low: 15 },
-  { time: '2024-01-12', high: 8, medium: 12, low: 18 },
-  { time: '2024-01-13', high: 6, medium: 9, low: 14 },
-  { time: '2024-01-14', high: 10, medium: 15, low: 20 },
-  { time: '2024-01-15', high: 12, medium: 25, low: 45 },
+  { time: '01-10', high: 5, medium: 8, low: 12 },
+  { time: '01-11', high: 3, medium: 10, low: 15 },
+  { time: '01-12', high: 8, medium: 12, low: 18 },
+  { time: '01-13', high: 6, medium: 9, low: 14 },
+  { time: '01-14', high: 10, medium: 15, low: 20 },
+  { time: '01-15', high: 12, medium: 25, low: 45 },
 ]);
 
 const alertsList = ref([
@@ -33,56 +34,56 @@ const alertsList = ref([
     id: 1,
     time: '2024-01-15 14:30:25',
     level: '高',
-    type: 'SQL注入',
-    source: '192.168.1.100',
+    type: '提示注入',
+    source: 'agent-003',
     gate: '消息闸门',
     authTriggered: true,
     sandboxTriggered: false,
-    description: '检测到可疑SQL注入攻击'
+    description: '检测到提示注入：试图绕过系统指令并泄露System Prompt'
   },
   {
     id: 2,
     time: '2024-01-15 14:25:10',
     level: '中',
-    type: 'XSS攻击',
-    source: '192.168.1.105',
+    type: '越权工具调用',
+    source: 'agent-005',
     gate: '动作闸门',
     authTriggered: false,
     sandboxTriggered: true,
-    description: '发现跨站脚本攻击尝试'
+    description: 'Agent试图调用 code_exec 工具，超出授权范围'
   },
   {
     id: 3,
     time: '2024-01-15 14:20:45',
     level: '高',
-    type: 'DDoS攻击',
-    source: '10.0.0.50',
+    type: '敏感信息窃取',
+    source: 'agent-001',
     gate: '返回闸门',
     authTriggered: true,
     sandboxTriggered: true,
-    description: '检测到大规模DDoS攻击'
+    description: '返回结果中包含API密钥和数据库凭证，已被沙箱隔离'
   },
   {
     id: 4,
     time: '2024-01-15 14:15:30',
     level: '低',
-    type: '扫描探测',
-    source: '192.168.1.120',
+    type: '记忆污染',
+    source: 'agent-002',
     gate: '消息闸门',
     authTriggered: false,
     sandboxTriggered: false,
-    description: '端口扫描活动'
+    description: '消息试图向Agent长期记忆写入恶意指令'
   },
   {
     id: 5,
     time: '2024-01-15 14:10:15',
     level: '中',
-    type: '暴力破解',
-    source: '192.168.1.110',
+    type: '越狱攻击',
+    source: 'agent-004',
     gate: '动作闸门',
     authTriggered: false,
     sandboxTriggered: true,
-    description: 'SSH暴力破解尝试'
+    description: '检测到DAN越狱模式，Agent试图绕过安全限制执行高风险操作'
   },
 ]);
 

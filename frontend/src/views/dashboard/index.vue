@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import StatCard from "@/components/common/StatCard.vue";
 import RealTimeTag from "@/components/common/RealTimeTag.vue";
 import { useGateDecision } from "@/hooks/useGateDecision";
@@ -10,7 +10,7 @@ import * as echarts from "echarts";
 defineOptions({ name: "DashboardIndex" });
 
 const { overview, decisions, loadOverview, startPolling: startGatePolling, stopPolling: stopGatePolling } = useGateDecision();
-const { stats, loadStats, startPolling: startAuditPolling, stopPolling: stopAuditPolling } = useAuditStream();
+const { stats, events, loadStats, loadLogs, startPolling: startAuditPolling, stopPolling: stopAuditPolling } = useAuditStream();
 const { sm2Status, sm3Status, sm4Status, activeTokens } = useCryptoStatus();
 
 const riskTrendChartRef = ref<HTMLElement>();
@@ -18,24 +18,143 @@ const riskMapChartRef = ref<HTMLElement>();
 let riskTrendChart: echarts.ECharts | null = null;
 let riskMapChart: echarts.ECharts | null = null;
 let chinaMapLoaded = false;
-
-const requestTotal = ref(12543);
-const concurrency = ref(234);
-const activeIPs = ref(89);
-const activeHosts = ref(45);
-const highRiskEvents = ref(12);
-const blockCount = ref(113);
-const gateHits = ref(67);
-const authExceptions = ref(3);
-const sandboxTriggers = ref(8);
 const mapLoadError = ref(false);
 
-onMounted(async () => {
-  await Promise.all([loadOverview(), loadStats()]);
-  startGatePolling(5000);
-  startAuditPolling(5000);
-  renderRiskTrendChart();
-  renderRiskMapChart();
+// ----- 从真实 API 数据计算的指标 -----
+
+const requestTotal = computed(() => {
+  if (!overview.value) return 0;
+  return (
+    (overview.value.message_gate?.today_count || 0) +
+    (overview.value.action_gate?.today_count || 0) +
+    (overview.value.return_gate?.today_count || 0)
+  );
+});
+
+const blockCount = computed(() => {
+  if (!overview.value) return 0;
+  return (
+    (overview.value.message_gate?.block_count || 0) +
+    (overview.value.action_gate?.block_count || 0) +
+    (overview.value.return_gate?.block_count || 0)
+  );
+});
+
+const concurrency = ref(0);
+
+const activeIPs = computed(() => {
+  const ips = new Set(decisions.value.map(d => d.agent_id).filter(Boolean));
+  return ips.size || 0;
+});
+
+const activeHosts = computed(() => {
+  if (!stats.value?.top_agents) return 0;
+  return stats.value.top_agents.length;
+});
+
+const highRiskEvents = computed(() => {
+  const list = decisions.value || [];
+  return list.filter(d => d.risk_level === "high" || d.risk_level === "critical").length;
+});
+
+const gateHits = computed(() => {
+  if (!overview.value) return 0;
+  const mg = overview.value.message_gate?.decision_counts || {};
+  const ag = overview.value.action_gate?.decision_counts || {};
+  const rg = overview.value.return_gate?.decision_counts || {};
+  return Object.values(mg).reduce((a, b) => a + b, 0) +
+         Object.values(ag).reduce((a, b) => a + b, 0) +
+         Object.values(rg).reduce((a, b) => a + b, 0);
+});
+
+const authExceptions = computed(() => {
+  const list = events.value || [];
+  return list.filter(e => e.event_type === "authorization" && (e.decision === "Deny" || e.decision === "Block")).length;
+});
+
+const sandboxTriggers = computed(() => {
+  const list = events.value || [];
+  return list.filter(e => e.event_type === "sandbox").length;
+});
+
+// ----- 风险趋势数据（从 decisions 聚合） -----
+
+const riskTrendData = computed(() => {
+  const now = new Date();
+  const buckets: Record<string, { alerts: number; blocks: number }> = {};
+  for (let i = 5; i >= 0; i--) {
+    const h = new Date(now.getTime() - i * 4 * 3600000);
+    const key = `${String(h.getHours()).padStart(2, "0")}:00`;
+    buckets[key] = { alerts: 0, blocks: 0 };
+  }
+  const keys = Object.keys(buckets);
+  decisions.value.forEach(d => {
+    const ts = new Date(d.timestamp);
+    const h = ts.getHours();
+    const bucketKey = keys.find(k => {
+      const bk = parseInt(k.split(":")[0]);
+      return Math.abs(h - bk) <= 2;
+    });
+    if (bucketKey) {
+      buckets[bucketKey].alerts++;
+      if (d.decision === "Block" || d.decision === "Deny") {
+        buckets[bucketKey].blocks++;
+      }
+    }
+  });
+  return Object.entries(buckets).map(([time, v]) => ({
+    time,
+    alerts: v.alerts,
+    blocks: v.blocks
+  }));
+});
+
+// ----- 地域数据（静态 fallback，暂无 API 支持） -----
+
+const riskRegionData = ref([
+  { name: "北京", value: 82 },
+  { name: "上海", value: 65 },
+  { name: "广东", value: 95 },
+  { name: "浙江", value: 68 },
+  { name: "江苏", value: 74 },
+  { name: "四川", value: 53 },
+  { name: "湖北", value: 48 },
+  { name: "福建", value: 39 },
+  { name: "安徽", value: 32 },
+  { name: "天津", value: 28 }
+]);
+
+// ----- 最新告警（从 decisions + events 生成） -----
+
+const latestAlerts = computed(() => {
+  const alerts: Array<{ time: string; level: string; type: string; source: string; description: string }> = [];
+  const list = decisions.value || [];
+
+  list.slice(0, 10).forEach(d => {
+    alerts.push({
+      time: d.timestamp,
+      level: d.risk_level === "critical" ? "高" : d.risk_level === "high" ? "高" : d.risk_level === "medium" ? "中" : "低",
+      type: d.gate_type === "message" ? "消息检测" : d.gate_type === "action" ? "动作检测" : "返回检测",
+      source: d.agent_id || d.request_id?.slice(0, 12) || "unknown",
+      description: d.reason || `${d.gate_type} 门: ${d.decision} (评分 ${d.risk_score})`
+    });
+  });
+
+  if (alerts.length === 0) {
+    return [
+      { time: "暂无数据", level: "低", type: "系统", source: "-", description: "系统初始化中" }
+    ];
+  }
+  return alerts.slice(0, 10);
+});
+
+onMounted(() => {
+  Promise.all([loadOverview(), loadStats(), loadLogs()]).then(() => {
+    startGatePolling(5000);
+    startAuditPolling(5000);
+    renderRiskTrendChart();
+    renderRiskMapChart();
+  });
 });
 
 onUnmounted(() => {
@@ -47,38 +166,7 @@ onUnmounted(() => {
   riskMapChart = null;
 });
 
-// 风险趋势数据
-const riskTrendData = ref([
-  { time: '00:00', alerts: 5, blocks: 3 },
-  { time: '04:00', alerts: 8, blocks: 5 },
-  { time: '08:00', alerts: 12, blocks: 8 },
-  { time: '12:00', alerts: 15, blocks: 10 },
-  { time: '16:00', alerts: 18, blocks: 12 },
-  { time: '20:00', alerts: 10, blocks: 7 },
-]);
-
-// 攻击来源数据
-const riskRegionData = ref([
-  { name: '北京', value: 82 },
-  { name: '上海', value: 65 },
-  { name: '广东', value: 95 },
-  { name: '浙江', value: 68 },
-  { name: '江苏', value: 74 },
-  { name: '四川', value: 53 },
-  { name: '湖北', value: 48 },
-  { name: '福建', value: 39 },
-  { name: '安徽', value: 32 },
-  { name: '天津', value: 28 }
-]);
-
-// 最新告警数据
-const latestAlerts = ref([
-  { time: '2024-01-15 14:30:25', level: '高', type: 'SQL注入', source: '192.168.1.100', description: '检测到可疑SQL注入攻击' },
-  { time: '2024-01-15 14:25:10', level: '中', type: 'XSS攻击', source: '192.168.1.105', description: '发现跨站脚本攻击尝试' },
-  { time: '2024-01-15 14:20:45', level: '高', type: 'DDoS攻击', source: '10.0.0.50', description: '检测到大规模DDoS攻击' },
-  { time: '2024-01-15 14:15:30', level: '低', type: '扫描探测', source: '192.168.1.120', description: '端口扫描活动' },
-  { time: '2024-01-15 14:10:15', level: '中', type: '暴力破解', source: '192.168.1.110', description: 'SSH暴力破解尝试' },
-]);
+watch(riskTrendData, () => renderRiskTrendChart(), { deep: true });
 
 function renderRiskTrendChart() {
   if (!riskTrendChartRef.value) return;
@@ -235,7 +323,7 @@ async function renderRiskMapChart() {
         <StatCard
           title="拦截次数"
           :value="blockCount"
-          icon="ep:shield"
+          icon="ep:switch-button"
           color="var(--aegis-danger)"
         />
       </el-col>

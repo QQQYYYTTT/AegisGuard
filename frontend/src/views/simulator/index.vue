@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, watch } from "vue";
+import { useRouter } from "vue-router";
 import TokenPanel from "@/components/security/TokenPanel.vue";
 import VerificationFlow from "@/components/security/VerificationFlow.vue";
 import GateController from "@/components/security/GateController.vue";
@@ -13,6 +14,7 @@ defineOptions({ name: "SimulatorIndex" });
 
 const { token, verify, verification, issueNew, loading: authLoading } = useAuth();
 const { decisions, evaluate } = useGateDecision();
+const router = useRouter();
 
 const scenario = reactive({
   type: "prompt_injection",
@@ -140,6 +142,14 @@ function buildEvaluateRequest(): GateEvaluateRequest {
               </span>
             </div>
             <div class="text-sm text-gray-600">{{ lastDecision.reason }}</div>
+            <el-button
+              size="small"
+              type="primary"
+              link
+              @click="router.push({ path: '/log-replay', query: { session: lastDecision.request_id } })"
+            >
+              查看审计日志 / View Audit Logs →
+            </el-button>
           </div>
         </el-card>
       </el-col>
