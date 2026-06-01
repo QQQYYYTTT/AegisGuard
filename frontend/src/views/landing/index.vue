@@ -5,6 +5,8 @@ import * as echarts from "echarts";
 import { useGateDecision } from "@/hooks/useGateDecision";
 import { useAuditStream } from "@/hooks/useAuditStream";
 import { useCryptoStatus } from "@/hooks/useCryptoStatus";
+import Cookies from "js-cookie";
+import { multipleTabsKey } from "@/utils/auth";
 
 defineOptions({
   name: "LandingScreen"
@@ -26,6 +28,15 @@ type RegionHeat = {
 type GateKey = "message" | "action" | "return";
 
 const router = useRouter();
+
+function enterSystem() {
+  const isLoggedIn = Cookies.get(multipleTabsKey);
+  if (isLoggedIn) {
+    router.push("/dashboard/index");
+  } else {
+    router.push("/login");
+  }
+}
 
 const mapChartRef = ref<HTMLElement | null>(null);
 const trendChartRef = ref<HTMLElement | null>(null);
@@ -1067,8 +1078,8 @@ onUnmounted(() => {
       </div>
 
       <div class="topbar-actions">
-        <button class="enter-button" @click="router.push('/login')">
-          进入注册 / 登录
+        <button class="enter-button" @click="enterSystem">
+          进入系统
         </button>
       </div>
     </header>

@@ -76,7 +76,7 @@ const onSubmit = async (formEl: FormInstance | undefined) => {
         return initRouter().then(() => {
           disabled.value = true;
           router
-            .push("/dashboard/index")
+            .push("/screen")
             .then(() => {
               message(
                 formMode.value === "login" ? "登录成功" : "注册并登录成功",
