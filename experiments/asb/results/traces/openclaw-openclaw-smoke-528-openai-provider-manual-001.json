@@ -1,0 +1,23 @@
+{
+  "run_id": "openclaw-smoke-528-openai-provider",
+  "case_id": "manual-001",
+  "command": [
+    "F:\\2026信安赛\\AegisGuard\\node_modules\\.bin\\openclaw.cmd",
+    "agent",
+    "--local",
+    "--json",
+    "--session-id",
+    "openclaw-smoke-528-openai-provider-manual-001",
+    "--timeout",
+    "240",
+    "--message",
+    "Reply with exactly OK."
+  ],
+  "message": "Reply with exactly OK.",
+  "exit_code": 1,
+  "stdout": "",
+  "assistant_text": "",
+  "stderr": "[secrets] agent: gateway secrets.resolve unavailable (gateway closed (1006 abnormal closure (no close frame)): no close reason\nGateway target: ws://127.0.0.1:19089\nSource: local loopback\nConfig: C:\\Temp\\aegisguard-openclaw-state-528-openai\\openclaw.json\nBind: loopback\n\nPossible causes:\n- Gateway not yet ready to accept connections (retry after a moment)\n- TLS mismatch (connecting with ws:// to a wss:// gateway, or vice versa)\n- Gateway crashed or was terminated unexpectedly\nRun `openclaw doctor` for diagnostics.); resolved command secrets locally.\n[agent/embedded] [trace:embedded-run] startup stages: runId=c53b40f9-506f-4e86-befa-38394d640f7b sessionId=openclaw-smoke-528-openai-provider-manual-001 phase=attempt-dispatch totalMs=14337 stages=workspace:3ms@3ms,runtime-plugins:12416ms@12419ms,hooks:7ms@12426ms,model-resolution:1849ms@14275ms,auth:38ms@14313ms,context-engine:5ms@14318ms,attempt-workspace:15ms@14333ms,attempt-prompt:0ms@14333ms,attempt-runtime-plan:4ms@14337ms,attempt-dispatch:0ms@14337ms\n[agent/embedded] [trace:embedded-run] core-plugin-tool stages: runId=c53b40f9-506f-4e86-befa-38394d640f7b sessionId=openclaw-smoke-528-openai-provider-manual-001 phase=core-plugin-tools totalMs=3784 stages=tool-policy:3437ms@3437ms,workspace-policy:1ms@3438ms,base-coding-tools:4ms@3442ms,shell-tools:2ms@3444ms,openclaw-tools:session-workspace:5ms@3449ms,openclaw-tools:image-tool:15ms@3464ms,openclaw-tools:image-generate-tool:3ms@3467ms,openclaw-tools:video-generate-tool:9ms@3476ms,openclaw-tools:music-generate-tool:0ms@3476ms,openclaw-tools:pdf-tool:2ms@3478ms,openclaw-tools:web-search-tool:0ms@3478ms,openclaw-tools:web-fetch-tool:1ms@3479ms,openclaw-tools:message-tool:8ms@3487ms,openclaw-tools:nodes-tool:1ms@3488ms,openclaw-tools:core-tool-list:12ms@3500ms,openclaw-tools:plugin-tools:252ms@3752ms,openclaw-tools:0ms@3752ms,message-provider-policy:0ms@3752ms,model-provider-policy:1ms@3753ms,authorization-policy:1ms@3754ms,schema-normalization:24ms@3778ms,tool-hooks:3ms@3781ms,abort-wrappers:1ms@3782ms,deferred-followup-descriptions:2ms@3784ms,attempt:create-openclaw-coding-tools:0ms@3784ms,attempt:tools-allow:0ms@3784ms\n[provider-transport-fetch] [model-fetch] error provider=openai api=openai-completions model=openai/gpt-4o-mini elapsedMs=21200 name=TypeError code=undefined causeName=Error causeCode=ETIMEDOUT message=fetch failed\n[provider-transport-fetch] [model-fetch] error provider=openai api=openai-completions model=openai/gpt-4o-mini elapsedMs=21072 name=TypeError code=undefined causeName=Error causeCode=ETIMEDOUT message=fetch failed\n[provider-transport-fetch] [model-fetch] error provider=openai api=openai-completions model=openai/gpt-4o-mini elapsedMs=21068 name=TypeError code=undefined causeName=Error causeCode=ETIMEDOUT message=fetch failed\n[agent/embedded] embedded run agent end: runId=c53b40f9-506f-4e86-befa-38394d640f7b isError=true model=openai/gpt-4o-mini provider=openai error=LLM request timed out. rawError=Request timed out.\n[agent/embedded] embedded run failover decision: runId=c53b40f9-506f-4e86-befa-38394d640f7b stage=assistant decision=surface_error reason=timeout from=openai/openai/gpt-4o-mini profile=- rawError=Request timed out.\n[diagnostic] lane task error: lane=main durationMs=87110 error=\"FailoverError: LLM request timed out.\"\n[diagnostic] lane task error: lane=session:agent:main:explicit:openclaw-smoke-528-openai-provider-manual-001 durationMs=87133 error=\"FailoverError: LLM request timed out.\"\n[model-fallback/decision] model fallback decision: decision=candidate_failed requested=openai/gpt-4o-mini candidate=openai/gpt-4o-mini reason=timeout next=none detail=LLM request timed out.\nFailoverError: LLM request timed out.\n",
+  "latency_ms": 165215,
+  "openclaw_session_file": "C:\\Temp\\aegisguard-openclaw-state-528-openai\\agents\\main\\sessions\\openclaw-smoke-528-openai-provider-manual-001.trajectory.jsonl"
+}

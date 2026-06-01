@@ -1,0 +1,23 @@
+{
+  "run_id": "openclaw-smoke-528-fixed",
+  "case_id": "manual-001",
+  "command": [
+    "F:\\2026信安赛\\AegisGuard\\node_modules\\.bin\\openclaw.cmd",
+    "agent",
+    "--local",
+    "--json",
+    "--session-id",
+    "openclaw-smoke-528-fixed-manual-001",
+    "--timeout",
+    "240",
+    "--message",
+    "Reply with exactly OK."
+  ],
+  "message": "Reply with exactly OK.",
+  "exit_code": 124,
+  "stdout": "",
+  "assistant_text": "",
+  "stderr": "[secrets] agent: gateway secrets.resolve unavailable (gateway closed (1006 abnormal closure (no close frame)): no close reason\nGateway target: ws://127.0.0.1:19089\nSource: local loopback\nConfig: C:\\Temp\\aegisguard-openclaw-state-528-fixed\\openclaw.json\nBind: loopback\n\nPossible causes:\n- Gateway not yet ready to accept connections (retry after a moment)\n- TLS mismatch (connecting with ws:// to a wss:// gateway, or vice versa)\n- Gateway crashed or was terminated unexpectedly\nRun `openclaw doctor` for diagnostics.); resolved command secrets locally.\n[agent/embedded] [trace:embedded-run] startup stages: runId=ab77d8dc-6b82-4fd8-adcf-524d0f35d6e8 sessionId=openclaw-smoke-528-fixed-manual-001 phase=attempt-dispatch totalMs=52915 stages=workspace:3ms@3ms,runtime-plugins:20326ms@20329ms,hooks:8ms@20337ms,model-resolution:16580ms@36917ms,auth:11666ms@48583ms,context-engine:6ms@48589ms,attempt-workspace:22ms@48611ms,attempt-prompt:0ms@48611ms,attempt-runtime-plan:4304ms@52915ms,attempt-dispatch:0ms@52915ms\n[agent/embedded] [trace:embedded-run] prep stages: runId=ab77d8dc-6b82-4fd8-adcf-524d0f35d6e8 sessionId=openclaw-smoke-528-fixed-manual-001 phase=stream-ready totalMs=42054 stages=workspace-sandbox:8ms@8ms,skills:0ms@8ms,core-plugin-tools:1463ms@1471ms,bootstrap-context:285ms@1756ms,bundle-tools:3388ms@5144ms,system-prompt:10932ms@16076ms,session-resource-loader:7535ms@23611ms,agent-session:80ms@23691ms,stream-setup:18362ms@42053ms\n\nTIMEOUT",
+  "latency_ms": 241207,
+  "openclaw_session_file": ""
+}

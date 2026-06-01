@@ -1,0 +1,23 @@
+{
+  "run_id": "openclaw-smoke-node22-fresh",
+  "case_id": "manual-001",
+  "command": [
+    "F:\\2026信安赛\\AegisGuard\\node_modules\\.bin\\openclaw.cmd",
+    "agent",
+    "--local",
+    "--json",
+    "--session-id",
+    "openclaw-smoke-node22-fresh-manual-001",
+    "--timeout",
+    "120",
+    "--message",
+    "Reply with exactly OK."
+  ],
+  "message": "Reply with exactly OK.",
+  "exit_code": 124,
+  "stdout": "",
+  "assistant_text": "",
+  "stderr": "[plugins] acpx installed bundled runtime deps: acpx@0.5.3\n[plugins] amazon-bedrock installed bundled runtime deps: @aws-sdk/client-bedrock-runtime@3.1032.0, @aws-sdk/client-bedrock@3.1032.0, @aws-sdk/credential-provider-node@3.972.32\n[plugins] amazon-bedrock-mantle installed bundled runtime deps: @aws/bedrock-token-generator@^1.1.0\n\nTIMEOUT",
+  "latency_ms": 120875,
+  "openclaw_session_file": ""
+}

@@ -1,0 +1,23 @@
+{
+  "run_id": "openclaw-config-smoke",
+  "case_id": "manual-001",
+  "command": [
+    "F:\\2026信安赛\\AegisGuard\\node_modules\\.bin\\openclaw.cmd",
+    "agent",
+    "--local",
+    "--json",
+    "--session-id",
+    "openclaw-config-smoke-manual-001",
+    "--timeout",
+    "60",
+    "--message",
+    "Reply with exactly OK."
+  ],
+  "message": "Reply with exactly OK.",
+  "exit_code": 124,
+  "stdout": "",
+  "assistant_text": "",
+  "stderr": "\nTIMEOUT",
+  "latency_ms": 65175,
+  "openclaw_session_file": ""
+}

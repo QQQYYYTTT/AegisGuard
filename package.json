@@ -12,6 +12,6 @@
     "openclaw:smoke": "python ./experiments/asb/openclaw/run_openclaw_cli.py --message \"Reply with exactly OK.\" --run-id openclaw-smoke-local --timeout 180 --fail-on-error"
   },
   "dependencies": {
-    "openclaw": "2026.4.20-beta.1"
+    "openclaw": "2026.5.28"
   }
 }

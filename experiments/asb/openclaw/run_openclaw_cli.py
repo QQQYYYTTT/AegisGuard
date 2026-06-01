@@ -16,7 +16,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RESULTS_DIR = REPO_ROOT / "experiments" / "asb" / "results"
 TRACE_DIR = RESULTS_DIR / "traces"
-PINNED_OPENCLAW_VERSION = "2026.4.20-beta.1"
+PINNED_OPENCLAW_VERSION = "2026.5.28"
 DEFAULT_STATE_DIR = REPO_ROOT / ".tmp" / "openclaw-state"
 DEFAULT_WORKSPACE_DIR = REPO_ROOT / ".tmp" / "openclaw-workspace"
 
@@ -182,6 +182,7 @@ def model_provider_from_env(env: dict[str, str]) -> tuple[str, dict[str, Any], s
                 "baseUrl": "https://api.ofox.ai/v1",
                 "api": "openai-completions",
                 "apiKey": {"provider": "default", "source": "env", "id": "OFOXAI_API_KEY"},
+                "timeoutSeconds": int(env.get("OPENCLAW_MODEL_TIMEOUT_SECONDS") or env.get("OPENCLAW_TIMEOUT_SECONDS") or "240"),
             },
             model_id,
         )
@@ -195,6 +196,7 @@ def model_provider_from_env(env: dict[str, str]) -> tuple[str, dict[str, Any], s
                 "baseUrl": env["CUSTOM_BASE_URL"],
                 "api": "openai-completions",
                 "apiKey": {"provider": "default", "source": "env", "id": "CUSTOM_API_KEY"},
+                "timeoutSeconds": int(env.get("OPENCLAW_MODEL_TIMEOUT_SECONDS") or env.get("OPENCLAW_TIMEOUT_SECONDS") or "240"),
             },
             model_id,
         )
@@ -205,6 +207,7 @@ def model_provider_from_env(env: dict[str, str]) -> tuple[str, dict[str, Any], s
             "models": [{"id": model_id, "name": model_id, "reasoning": False}],
             "api": "openai-completions",
             "apiKey": {"provider": "default", "source": "env", "id": "OPENAI_API_KEY"},
+            "timeoutSeconds": int(env.get("OPENCLAW_MODEL_TIMEOUT_SECONDS") or env.get("OPENCLAW_TIMEOUT_SECONDS") or "240"),
         }
         if env.get("OPENAI_BASE_URL"):
             provider["baseUrl"] = env["OPENAI_BASE_URL"]
@@ -240,7 +243,6 @@ def bootstrap_openclaw_config(args: argparse.Namespace, env: dict[str, str]) -> 
                 "model": {"primary": f"{provider_id}/{model_id}"},
                 "timeoutSeconds": int(args.timeout),
                 "contextInjection": "continuation-skip",
-                "llm": {"idleTimeoutSeconds": int(args.timeout)},
             }
         },
     }
@@ -301,6 +303,33 @@ def extract_assistant_text(session_file: Path | None) -> str:
     except OSError:
         return ""
     return assistant_text
+
+
+def extract_assistant_text_from_stdout(stdout: str) -> str:
+    if not stdout.strip():
+        return ""
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    payloads = payload.get("payloads")
+    if isinstance(payloads, list):
+        texts = [
+            item.get("text", "")
+            for item in payloads
+            if isinstance(item, dict) and isinstance(item.get("text"), str) and item.get("text", "").strip()
+        ]
+        if texts:
+            return "\n".join(texts).strip()
+    meta = payload.get("meta")
+    if isinstance(meta, dict):
+        for key in ("finalAssistantVisibleText", "finalAssistantRawText"):
+            value = meta.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return ""
 
 
 def stop_process_tree(process: subprocess.Popen[str]) -> None:
@@ -418,6 +447,8 @@ def main() -> None:
     for task in load_tasks(args):
         exit_code, stdout, stderr, latency_ms, command, session_file = run_openclaw(args, task["message"], run_id, task["case_id"])
         assistant_text = extract_assistant_text(Path(session_file)) if session_file else ""
+        if not assistant_text:
+            assistant_text = extract_assistant_text_from_stdout(stdout)
         effective_stdout = assistant_text if assistant_text else stdout
         trace_path = TRACE_DIR / f"openclaw-{run_id}-{task['case_id']}.json"
         trace_path.parent.mkdir(parents=True, exist_ok=True)

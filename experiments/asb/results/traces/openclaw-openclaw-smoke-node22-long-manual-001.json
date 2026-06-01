@@ -1,0 +1,23 @@
+{
+  "run_id": "openclaw-smoke-node22-long",
+  "case_id": "manual-001",
+  "command": [
+    "F:\\2026信安赛\\AegisGuard\\node_modules\\.bin\\openclaw.cmd",
+    "agent",
+    "--local",
+    "--json",
+    "--session-id",
+    "openclaw-smoke-node22-long-manual-001",
+    "--timeout",
+    "600",
+    "--message",
+    "Reply with exactly OK."
+  ],
+  "message": "Reply with exactly OK.",
+  "exit_code": 124,
+  "stdout": "",
+  "assistant_text": "",
+  "stderr": "[plugins] browser installed bundled runtime deps: @modelcontextprotocol/sdk@1.29.0, @sinclair/typebox@0.34.49, commander@^14.0.3, express@^5.2.1, playwright-core@1.59.1, undici@8.1.0, ws@^8.20.0\n[plugins] fireworks installed bundled runtime deps: @mariozechner/pi-ai@0.67.68\n[plugins] github-copilot installed bundled runtime deps: @clack/prompts@^1.2.0, @mariozechner/pi-ai@0.67.68\n[plugins] google installed bundled runtime deps: @google/genai@^1.50.1, @mariozechner/pi-ai@0.67.68\n[plugins] kimi installed bundled runtime deps: @mariozechner/pi-ai@0.67.68\n[plugins] lmstudio installed bundled runtime deps: @mariozechner/pi-ai@0.67.68\n[plugins] microsoft installed bundled runtime deps: node-edge-tts@^1.2.10\n[plugins] ollama installed bundled runtime deps: @mariozechner/pi-ai@0.67.68, @sinclair/typebox@0.34.49\n[plugins] openai installed bundled runtime deps: @mariozechner/pi-ai@0.67.68, ws@^8.20.0\n[plugins] xai installed bundled runtime deps: @mariozechner/pi-ai@0.67.68, @sinclair/typebox@0.34.49\n[secrets] agent: gateway secrets.resolve unavailable (gateway closed (1006 abnormal closure (no close frame)): no close reason\nGateway target: ws://127.0.0.1:19089\nSource: local loopback\nConfig: C:\\Temp\\aegisguard-openclaw-state-node22\\openclaw.json\nBind: loopback\n\nPossible causes:\n- Gateway not yet ready to accept connections (retry after a moment)\n- TLS mismatch (connecting with ws:// to a wss:// gateway, or vice versa)\n- Gateway crashed or was terminated unexpectedly\nRun `openclaw doctor` for diagnostics.); resolved command secrets locally.\n[plugins] codex installed bundled runtime deps: @mariozechner/pi-coding-agent@0.67.68, ws@^8.20.0, zod@^4.3.6\n\nTIMEOUT",
+  "latency_ms": 600867,
+  "openclaw_session_file": ""
+}

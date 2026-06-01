@@ -1,0 +1,23 @@
+{
+  "run_id": "openclaw-smoke-528-node2221",
+  "case_id": "manual-001",
+  "command": [
+    "F:\\2026信安赛\\AegisGuard\\node_modules\\.bin\\openclaw.cmd",
+    "agent",
+    "--local",
+    "--json",
+    "--session-id",
+    "openclaw-smoke-528-node2221-manual-001",
+    "--timeout",
+    "240",
+    "--message",
+    "Reply with exactly OK."
+  ],
+  "message": "Reply with exactly OK.",
+  "exit_code": 1,
+  "stdout": "",
+  "assistant_text": "",
+  "stderr": "OpenClaw config is invalid\nFile: C:\\Temp\\aegisguard-openclaw-state-528\\openclaw.json\nProblem:\n  - agents.defaults: Invalid input\nLegacy config keys detected:\n  - agents.defaults.llm: agents.defaults.llm is legacy; use models.providers.<id>.timeoutSeconds for slow model/provider timeouts. Run \"openclaw doctor --fix\".\n\nFix: openclaw doctor --fix\nInspect: openclaw config validate\nStatus, health, logs, and doctor commands still run with invalid config.\n",
+  "latency_ms": 21059,
+  "openclaw_session_file": ""
+}

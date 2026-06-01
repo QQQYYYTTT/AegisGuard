@@ -93,8 +93,7 @@ def main() -> None:
     if config_rel:
         config_path = asb_root / config_rel
         require_file(config_path, "ASB config")
-        if args.attack != "pot":
-            command.extend(["--cfg_path", config_rel])
+        command.extend(["--cfg_path", config_rel])
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_id = args.run_id or f"asb-{args.attack}-{timestamp}"
