@@ -6,11 +6,14 @@ __pycache__/
 *.pyc
 .env
 .gocache/
+.gocache-*/
+build/
 
 # 网关凭据配置（含真实 API Key，请勿提交）
 backend/config/gateway.yaml
 node_modules/
 experiments/native/langchain/.env
+experiments/asb/results/
 *.exe
 *.db
 *.db-wal
