@@ -447,7 +447,7 @@ func (r *Router) handleAuditChains(c *gin.Context) {
 	}
 
 	if r.auditStore == nil {
-		c.JSON(http.StatusOK, gin.H{"success": true, "data": []audit.AuditEvent{}, "total": 0})
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": []audit.AttackChain{}, "total": 0})
 		return
 	}
 
@@ -457,11 +457,12 @@ func (r *Router) handleAuditChains(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "read audit chains failed"})
 		return
 	}
-	if len(events) > limit {
-		events = events[:limit]
-	}
-
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": events, "total": len(events)})
+	chains := audit.BuildAttackChains(events, limit)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    chains,
+		"total":   audit.CountAttackChains(events),
+	})
 }
 
 func (r *Router) handleAuditStats(c *gin.Context) {
@@ -504,7 +505,7 @@ func (r *Router) handleAuditStats(c *gin.Context) {
 	}
 	stats["total_events"] = len(events)
 	stats["today_events"] = todayEvents
-	stats["attack_chains"] = len(events)
+	stats["attack_chains"] = audit.CountAttackChains(events)
 	stats["avg_duration_ms"] = avgDuration
 	stats["decision_distribution"] = decisionDistribution
 
