@@ -7,6 +7,7 @@ __pycache__/
 .env
 .gocache/
 .gocache-*/
+.tools/
 build/
 
 # 网关凭据配置（含真实 API Key，请勿提交）
