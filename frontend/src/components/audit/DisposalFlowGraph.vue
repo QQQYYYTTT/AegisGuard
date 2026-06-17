@@ -395,9 +395,13 @@ onUnmounted(() => {
   min-width: 100%;
   height: 320px;
   min-height: 320px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid rgba(78, 192, 255, 0.18);
   border-radius: 8px;
-  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  background:
+    linear-gradient(rgb(0 212 255 / 4%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(0 212 255 / 4%) 1px, transparent 1px),
+    rgba(5, 18, 38, 0.82);
+  background-size: 24px 24px;
 }
 
 .flow-legend {
@@ -406,7 +410,8 @@ onUnmounted(() => {
   gap: 16px;
   margin-top: 12px;
   padding: 8px;
-  background: #f8fafc;
+  background: rgba(7, 28, 55, 0.82);
+  border: 1px solid rgba(78, 192, 255, 0.14);
   border-radius: 6px;
 }
 
@@ -415,7 +420,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #666;
+  color: #8fb6d8;
 }
 
 .dot {

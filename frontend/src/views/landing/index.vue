@@ -1063,7 +1063,9 @@ onUnmounted(() => {
 
     <header class="topbar">
       <div class="brand">
-        <div class="brand-badge">AG</div>
+        <div class="brand-badge">
+          <img src="/logo.svg?v=aegisguard-20260617" alt="AegisGuard logo" />
+        </div>
         <div>
           <p class="brand-title">AegisGuard 态势感知指挥屏</p>
           <p class="brand-subtitle">可信授权 / 三闸门联防 / 审计溯源 / 沙箱隔离</p>
@@ -1413,9 +1415,13 @@ onUnmounted(() => {
   border-radius: 12px;
   background: linear-gradient(135deg, rgba(44, 147, 255, 0.28), rgba(103, 244, 255, 0.08));
   box-shadow: inset 0 0 12px rgba(103, 244, 255, 0.12), 0 0 20px rgba(62, 220, 255, 0.12);
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+}
+
+.brand-badge img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.42));
 }
 
 .brand-title {

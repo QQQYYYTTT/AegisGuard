@@ -13,8 +13,8 @@ import { darken, lighten, useGlobal, storageLocal } from "@pureadmin/utils";
 export function useDataThemeChange() {
   const { layoutTheme, layout } = useLayout();
   const themeColors = ref<Array<themeColorsType>>([
-    /* 亮白色 */
-    { color: "#ffffff", themeColor: "light" },
+    /* AegisGuard 蓝黑 */
+    { color: "#00d4ff", themeColor: "light" },
     /* 道奇蓝 */
     { color: "#1b2a47", themeColor: "default" },
     /* 深紫罗兰色 */

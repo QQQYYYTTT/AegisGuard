@@ -18,6 +18,15 @@ export default {
       meta: {
         title: "风险告警中心"
       }
+    },
+    {
+      path: "/risk-alert/index",
+      name: "RiskAlertIndex",
+      component: () => import("@/views/auth-center/index.vue"),
+      meta: {
+        title: "风险告警中心",
+        showLink: false
+      }
     }
   ]
 } satisfies RouteConfigsTable;

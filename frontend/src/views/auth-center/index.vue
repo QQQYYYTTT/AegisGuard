@@ -7,6 +7,7 @@ import RiskBadge from "@/components/common/RiskBadge.vue";
 import { useGateStoreHook } from "@/store/modules/gate";
 import { useAuditStoreHook } from "@/store/modules/audit";
 import * as echarts from "echarts";
+import type { GateDecision } from "@/api/gate";
 
 defineOptions({ name: "AuthCenterIndex" });
 
@@ -16,24 +17,65 @@ const router = useRouter();
 
 const loading = ref(false);
 
+const demoAlertDecisions: GateDecision[] = [
+  {
+    request_id: "demo-alert-dpi-001",
+    timestamp: new Date(Date.now() - 12 * 60_000).toISOString(),
+    gate_type: "message",
+    decision: "Block",
+    risk_score: 100,
+    risk_level: "critical",
+    matched_rules: ["DPI_DIRECT_PROMPT_INJECTION", "SYSTEM_OVERRIDE"],
+    reason: "DPI 直接提示注入，试图覆盖系统策略。",
+    agent_id: "openclaw"
+  },
+  {
+    request_id: "demo-alert-opi-002",
+    timestamp: new Date(Date.now() - 28 * 60_000).toISOString(),
+    gate_type: "return",
+    decision: "Degrade",
+    risk_score: 65,
+    risk_level: "high",
+    matched_rules: ["OPI_EXTERNAL_CONTENT", "RETURN_GATE_SANITIZE"],
+    reason: "OPI 外部观察结果夹带隐藏指令。",
+    agent_id: "openclaw"
+  },
+  {
+    request_id: "demo-alert-pot-003",
+    timestamp: new Date(Date.now() - 45 * 60_000).toISOString(),
+    gate_type: "action",
+    decision: "HumanApproval",
+    risk_score: 97,
+    risk_level: "critical",
+    matched_rules: ["POT_PRIVILEGED_TOOL", "MISSING_TOKEN"],
+    reason: "POT 权限工具诱导，缺少可信授权令牌。",
+    tool_name: "AdminTransferTool",
+    agent_id: "openclaw"
+  }
+];
+
+const alertDecisions = computed(() =>
+  gateStore.decisions?.length ? gateStore.decisions : demoAlertDecisions
+);
+
 const highRiskCount = computed(() => {
-  const list = gateStore.decisions || [];
+  const list = alertDecisions.value;
   return list.filter(d => d.risk_level === "high" || d.risk_level === "critical").length;
 });
 
 const mediumRiskCount = computed(() => {
-  const list = gateStore.decisions || [];
+  const list = alertDecisions.value;
   return list.filter(d => d.risk_level === "medium").length;
 });
 
 const lowRiskCount = computed(() => {
-  const list = gateStore.decisions || [];
+  const list = alertDecisions.value;
   return list.filter(d => d.risk_level === "low").length;
 });
 
 const alertTypeData = computed(() => {
   const ruleCounts: Record<string, number> = {};
-  (gateStore.decisions || []).forEach(d => {
+  alertDecisions.value.forEach(d => {
     (d.matched_rules || []).forEach(rule => {
       ruleCounts[rule] = (ruleCounts[rule] || 0) + 1;
     });
@@ -54,7 +96,7 @@ const alertTrendData = computed(() => {
     buckets[key] = { high: 0, medium: 0, low: 0 };
   }
   const keys = Object.keys(buckets);
-  (gateStore.decisions || []).forEach(d => {
+  alertDecisions.value.forEach(d => {
     const ts = new Date(d.timestamp);
     const eventKey = `${String(ts.getMonth() + 1).padStart(2, "0")}-${String(ts.getDate()).padStart(2, "0")}`;
     if (buckets[eventKey]) {
@@ -72,7 +114,7 @@ const alertTrendData = computed(() => {
 });
 
 const alertListData = computed(() => {
-  return (gateStore.decisions || []).slice(0, 50).map(d => ({
+  return alertDecisions.value.slice(0, 50).map(d => ({
     id: d.request_id,
     time: d.timestamp,
     level: d.risk_level === "critical" ? "critical" : d.risk_level,

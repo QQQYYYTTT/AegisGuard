@@ -23,6 +23,85 @@ const activeTab = ref("timeline");
 const logFilter = ref("all");
 const showRawLog = ref(false);
 
+const demoReplayEvents: AuditEvent[] = [
+  {
+    id: "demo-replay-1",
+    request_id: "demo-chain-openclaw-001",
+    timestamp: new Date(Date.now() - 9 * 60_000).toISOString(),
+    method: "POST",
+    path: "/aegis/gate/evaluate",
+    status_code: 200,
+    status: 200,
+    duration_ms: 48,
+    decision: "Allow",
+    risk_score: 22,
+    risk_level: "low",
+    gate_type: "message",
+    reason: "会话进入 Message Gate。",
+    token_status: "valid",
+    auth_mode: "strict",
+    unauthorized_allow: false,
+    agent_id: "openclaw",
+    session_id: "demo-session-openclaw",
+    tool_name: "",
+    body_hash: "demo-replay-hash-1",
+    event_type: "gate",
+    description: "OpenClaw Agent 提交 DPI 测试请求，进入策略匹配。"
+  },
+  {
+    id: "demo-replay-2",
+    request_id: "demo-chain-openclaw-001",
+    timestamp: new Date(Date.now() - 8 * 60_000).toISOString(),
+    method: "POST",
+    path: "/aegis/gate/evaluate",
+    status_code: 403,
+    status: 403,
+    duration_ms: 61,
+    decision: "Block",
+    risk_score: 100,
+    risk_level: "critical",
+    gate_type: "message",
+    reason: "检测到 DPI 直接提示注入和系统指令覆盖意图。",
+    token_status: "valid",
+    auth_mode: "strict",
+    unauthorized_allow: false,
+    agent_id: "openclaw",
+    session_id: "demo-session-openclaw",
+    tool_name: "",
+    body_hash: "demo-replay-hash-2",
+    event_type: "gate",
+    description: "Message Gate 阻断直接提示注入。"
+  },
+  {
+    id: "demo-replay-3",
+    request_id: "demo-chain-openclaw-001",
+    timestamp: new Date(Date.now() - 7 * 60_000).toISOString(),
+    method: "POST",
+    path: "/aegis/sandbox/isolate",
+    status_code: 200,
+    status: 200,
+    duration_ms: 39,
+    decision: "Block",
+    risk_score: 82,
+    risk_level: "high",
+    gate_type: "return",
+    reason: "MP 记忆投毒候选内容进入隔离区。",
+    token_status: "valid",
+    auth_mode: "strict",
+    unauthorized_allow: false,
+    agent_id: "openclaw",
+    session_id: "demo-session-openclaw",
+    tool_name: "memory.write",
+    body_hash: "demo-replay-hash-3",
+    event_type: "sandbox",
+    description: "记忆沙箱隔离高风险候选内容。"
+  }
+];
+
+const replayEvents = computed(() =>
+  events.value?.length ? events.value : demoReplayEvents
+);
+
 const sessionList = computed(() => {
   const sessionMap = new Map<string, {
     sessionId: string;
@@ -37,7 +116,7 @@ const sessionList = computed(() => {
     toolCalls: string[];
   }>();
 
-  (events.value || []).forEach(event => {
+  replayEvents.value.forEach(event => {
     const sessionId = event.session_id || "unknown";
     if (!sessionMap.has(sessionId)) {
       sessionMap.set(sessionId, {
@@ -197,6 +276,8 @@ onMounted(() => {
     const sessionParam = route.query.session as string;
     if (sessionParam && sessionList.value.some(s => s.sessionId === sessionParam)) {
       selectSession(sessionParam);
+    } else if (!selectedSession.value && sessionList.value.length) {
+      selectSession(sessionList.value[0].sessionId);
     }
   });
   startPolling(5000);

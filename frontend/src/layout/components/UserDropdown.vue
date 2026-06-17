@@ -94,7 +94,7 @@ async function openProfile() {
   gap: 10px;
   height: 48px;
   padding: 0 10px;
-  color: #000000d9;
+  color: #d9f4ff;
   cursor: pointer;
 
   p {
@@ -112,7 +112,7 @@ async function openProfile() {
   border-radius: 9999px;
   object-fit: cover;
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 212, 255, 0.24);
 }
 
 .logout {

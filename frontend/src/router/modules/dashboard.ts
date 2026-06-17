@@ -7,7 +7,7 @@ export default {
   redirect: "/dashboard/index",
   meta: {
     icon: "ep:data-analysis",
-    title: "安全监测总览",
+    title: "安全态势总览",
     rank: 1
   },
   children: [
@@ -16,7 +16,7 @@ export default {
       name: "DashboardIndex",
       component: () => import("@/views/dashboard/index.vue"),
       meta: {
-        title: "安全监测总览"
+        title: "安全态势总览"
       }
     }
   ]

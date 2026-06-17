@@ -5,6 +5,8 @@
   left: 0;
   bottom: 0;
   z-index: -1;
+  opacity: 0.2;
+  filter: hue-rotate(160deg) saturate(1.4) brightness(0.45);
 }
 
 .login-container {
@@ -15,6 +17,10 @@
   grid-template-columns: repeat(2, 1fr);
   grid-gap: 18rem;
   padding: 0 2rem;
+  background:
+    radial-gradient(circle at 22% 20%, rgb(0 212 255 / 18%), transparent 28%),
+    radial-gradient(circle at 78% 76%, rgb(29 155 240 / 16%), transparent 32%),
+    linear-gradient(135deg, #020817 0%, #06172e 54%, #030b18 100%);
 }
 
 .img {
@@ -36,21 +42,54 @@
 
 .login-form {
   width: 360px;
+  padding: 34px 30px;
+  background: rgb(5 18 38 / 88%);
+  border: 1px solid rgb(0 212 255 / 22%);
+  border-radius: 10px;
+  box-shadow:
+    0 24px 60px rgb(0 0 0 / 35%),
+    inset 0 0 40px rgb(0 212 255 / 5%);
 }
 
-.avatar {
-  width: 350px;
-  height: 80px;
+.project-logo-wrap {
+  display: grid;
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 12px;
+  place-items: center;
+  background:
+    linear-gradient(145deg, rgb(0 212 255 / 22%), rgb(29 155 240 / 8%)),
+    #06172e;
+  border: 1px solid rgb(0 212 255 / 38%);
+  border-radius: 18px;
+  box-shadow: 0 0 26px rgb(0 212 255 / 20%);
+}
+
+.project-logo-wrap img {
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 14px rgb(0 212 255 / 38%));
 }
 
 .login-form h2 {
   text-transform: uppercase;
   margin: 15px 0;
-  color: #999;
+  color: #e8f8ff;
   font:
     bold 200% Consolas,
     Monaco,
     monospace;
+}
+
+.login-form .el-input__wrapper {
+  background: rgb(3 11 24 / 76%);
+  border: 1px solid rgb(78 192 255 / 22%);
+  box-shadow: none;
+}
+
+.login-form .el-input__inner {
+  color: #e8f8ff;
 }
 
 @media screen and (max-width: 1180px) {
@@ -71,9 +110,14 @@
     width: 360px;
   }
 
-  .avatar {
-    width: 280px;
-    height: 80px;
+  .project-logo-wrap {
+    width: 68px;
+    height: 68px;
+  }
+
+  .project-logo-wrap img {
+    width: 52px;
+    height: 52px;
   }
 }
 

@@ -14,6 +14,9 @@ type Config struct {
 	UserDBPath        string
 	Port              string
 	LangGraphChatURL  string
+	AssistantAPIBase  string
+	AssistantAPIKey   string
+	AssistantModel    string
 	SigningPrivateKey string
 	UserTokenSecret   string
 	TokenMode         string
@@ -56,6 +59,9 @@ func Load() Config {
 
 	port := getEnv("PORT", "8090")
 	langGraphChatURL := getEnv("LANGGRAPH_CHAT_URL", "http://127.0.0.1:8765")
+	assistantAPIBase := getEnv("AEGIS_ASSISTANT_API_BASE", "https://api.siliconflow.cn/v1")
+	assistantAPIKey := getEnv("AEGIS_ASSISTANT_API_KEY", "")
+	assistantModel := getEnv("AEGIS_ASSISTANT_MODEL", "Qwen/Qwen3.5-9B")
 	auditFile := getEnv("AEGIS_AUDIT_FILE", filepath.Join(backendDir, "data", "audit-store.jsonl"))
 	userDBPath := getEnv("AEGIS_USER_DB_PATH", filepath.Join(backendDir, "data", "aegisguard-users.db"))
 	gatewayConfigPath := getEnv("AEGIS_GATEWAY_CONFIG", filepath.Join(backendDir, "config", "gateway.yaml"))
@@ -77,6 +83,9 @@ func Load() Config {
 		UserDBPath:        userDBPath,
 		Port:              port,
 		LangGraphChatURL:  langGraphChatURL,
+		AssistantAPIBase:  strings.TrimRight(assistantAPIBase, "/"),
+		AssistantAPIKey:   assistantAPIKey,
+		AssistantModel:    assistantModel,
 		SigningPrivateKey: getEnv("AEGIS_SIGNING_PRIVATE_KEY", ""),
 		UserTokenSecret:   getEnv("AEGIS_USER_TOKEN_SECRET", "aegisguard-dev-user-secret"),
 		TokenMode:         tokenMode,

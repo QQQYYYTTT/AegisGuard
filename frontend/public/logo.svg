@@ -1,1 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" class="icon" viewBox="0 0 1024 1024"><path fill="#386BF3" d="M410.558.109c0 210.974-300.876 361.752-300.876 633.548 0 174.943 134.704 316.787 300.876 316.787s300.877-141.817 300.877-316.787C711.408 361.752 410.558 210.974 410.558.109"/><path fill="#C3D2FB" d="M613.469 73.665c0 211.055-300.877 361.914-300.877 633.547C312.592 882.156 447.296 1024 613.47 1024s300.876-141.817 300.876-316.788C914.29 435.58 613.469 284.72 613.469 73.665"/><path fill="#303F5B" d="M312.592 707.212c0-183.713 137.636-312.171 226.723-441.39 81.702 106.112 172.12 218.74 172.12 367.726A309.755 309.755 0 0 1 420.36 950.064a323.1 323.1 0 0 1-107.769-242.852z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="AegisGuard logo">
+  <defs>
+    <linearGradient id="shield" x1="18" y1="10" x2="82" y2="88" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00D4FF"/>
+      <stop offset="0.52" stop-color="#1D9BF0"/>
+      <stop offset="1" stop-color="#37F6A4"/>
+    </linearGradient>
+    <linearGradient id="core" x1="31" y1="20" x2="66" y2="76" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E8F8FF"/>
+      <stop offset="1" stop-color="#9FDFFF"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3.8" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0 0 0 0 0 0.83 0 0 0 0 1 0 0 0 0.55 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="96" height="96" rx="22" fill="#030B18"/>
+  <path d="M48 8 78 19v21c0 22.8-12.2 38.4-30 48-17.8-9.6-30-25.2-30-48V19L48 8Z" fill="#06172E" stroke="url(#shield)" stroke-width="3" filter="url(#glow)"/>
+  <path d="M48 18 69 26v16c0 16.3-8.2 27.7-21 35-12.8-7.3-21-18.7-21-35V26l21-8Z" fill="#092440" stroke="rgba(159,223,255,.42)" stroke-width="1.5"/>
+  <path d="M33 65 46.2 29h5.6L65 65h-8.4l-2.3-7.1H43.7L41.4 65H33Zm13-14.7h6l-3-9.5-3 9.5Z" fill="url(#core)"/>
+  <path d="M24 43c9.2-8.8 38.8-8.8 48 0" fill="none" stroke="#00D4FF" stroke-width="2" stroke-linecap="round" opacity=".72"/>
+  <path d="M25 53c11.8 7.8 34.2 7.8 46 0" fill="none" stroke="#37F6A4" stroke-width="2" stroke-linecap="round" opacity=".72"/>
+  <circle cx="24" cy="43" r="3.2" fill="#00D4FF"/>
+  <circle cx="72" cy="43" r="3.2" fill="#00D4FF"/>
+  <circle cx="25" cy="53" r="2.8" fill="#37F6A4"/>
+  <circle cx="71" cy="53" r="2.8" fill="#37F6A4"/>
+</svg>

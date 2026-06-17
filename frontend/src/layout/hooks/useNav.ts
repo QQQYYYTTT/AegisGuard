@@ -123,7 +123,7 @@ export function useNav() {
 
   /** 获取`logo` */
   function getLogo() {
-    return new URL("/logo.svg", import.meta.url).href;
+    return "/logo.svg?v=aegisguard-20260617";
   }
 
   return {

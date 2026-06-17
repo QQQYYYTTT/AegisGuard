@@ -542,7 +542,7 @@ onUnmounted(() => removeMatchMedia);
     border-radius: 4px;
 
     &:nth-child(1) {
-      border: 1px solid #ddd;
+      border: 1px solid rgb(78 192 255 / 22%);
     }
   }
 }
@@ -557,7 +557,7 @@ onUnmounted(() => removeMatchMedia);
     height: 36px;
     overflow: hidden;
     cursor: pointer;
-    background: #f0f2f5;
+    background: #06172e;
     border-radius: 4px;
     box-shadow: 0 1px 2.5px 0 rgb(0 0 0 / 18%);
 
@@ -575,8 +575,8 @@ onUnmounted(() => removeMatchMedia);
           right: 0;
           width: 70%;
           height: 30%;
-          background: #fff;
-          box-shadow: 0 0 1px #888;
+          background: #092440;
+          box-shadow: 0 0 1px rgb(0 212 255 / 36%);
         }
       }
     }
@@ -587,7 +587,7 @@ onUnmounted(() => removeMatchMedia);
           width: 100%;
           height: 30%;
           background: #1b2a47;
-          box-shadow: 0 0 1px #888;
+          box-shadow: 0 0 1px rgb(0 212 255 / 36%);
         }
       }
     }
@@ -598,7 +598,7 @@ onUnmounted(() => removeMatchMedia);
           width: 100%;
           height: 30%;
           background: #1b2a47;
-          box-shadow: 0 0 1px #888;
+          box-shadow: 0 0 1px rgb(0 212 255 / 36%);
         }
 
         &:nth-child(2) {
@@ -607,8 +607,8 @@ onUnmounted(() => removeMatchMedia);
           left: 0;
           width: 30%;
           height: 70%;
-          background: #fff;
-          box-shadow: 0 0 1px #888;
+          background: #092440;
+          box-shadow: 0 0 1px rgb(0 212 255 / 36%);
         }
       }
     }

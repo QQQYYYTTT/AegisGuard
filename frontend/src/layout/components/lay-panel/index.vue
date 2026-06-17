@@ -104,7 +104,7 @@ onBeforeUnmount(() => {
   top: 0;
   left: 0;
   z-index: -1;
-  background: rgb(0 0 0 / 20%);
+  background: rgb(1 9 20 / 56%);
   opacity: 0;
   transition: opacity 0.3s cubic-bezier(0.7, 0.3, 0.1, 1);
 }
@@ -116,7 +116,13 @@ onBeforeUnmount(() => {
   z-index: 40000;
   width: 100%;
   max-width: 280px;
-  box-shadow: 0 0 15px 0 rgb(0 0 0 / 5%);
+  min-height: 100vh;
+  color: #d9f4ff;
+  background:
+    radial-gradient(circle at 18% 0%, rgb(0 212 255 / 14%), transparent 34%),
+    linear-gradient(180deg, rgb(5 18 38 / 98%), rgb(3 11 24 / 98%)) !important;
+  border-left: 1px solid rgb(0 212 255 / 24%);
+  box-shadow: -18px 0 44px rgb(0 0 0 / 36%);
   transform: translate(100%);
   transition: all 0.25s cubic-bezier(0.7, 0.3, 0.1, 1);
 }
@@ -141,5 +147,12 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 14px 20px;
+  color: #f4fbff;
+  background: rgb(0 212 255 / 8%);
+  border-color: rgb(78 192 255 / 18%) !important;
+}
+
+:deep(.el-scrollbar__view) {
+  color: #d9f4ff;
 }
 </style>

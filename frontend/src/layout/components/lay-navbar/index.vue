@@ -20,7 +20,7 @@ const {
 </script>
 
 <template>
-  <div class="navbar bg-[#fff] shadow-xs shadow-[rgba(0,21,41,0.08)]">
+  <div class="navbar">
     <LaySidebarTopCollapse
       v-if="device === 'mobile'"
       class="hamburger-container"
@@ -73,7 +73,7 @@ const {
     justify-content: flex-end;
     min-width: 280px;
     height: 48px;
-    color: #000000d9;
+    color: #d9f4ff;
 
     .el-dropdown-link {
       display: flex;
@@ -81,7 +81,7 @@ const {
       justify-content: space-around;
       height: 48px;
       padding: 10px;
-      color: #000000d9;
+      color: #d9f4ff;
       cursor: pointer;
 
       p {

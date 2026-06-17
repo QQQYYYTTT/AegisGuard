@@ -19,6 +19,96 @@ const activeTab = ref("summary");
 
 const selectedEvent = ref<AuditEvent | null>(null);
 
+const demoTraceEvents: AuditEvent[] = [
+  {
+    id: "demo-trace-1",
+    request_id: "demo-chain-openclaw-001",
+    timestamp: new Date(Date.now() - 11 * 60_000).toISOString(),
+    method: "POST",
+    path: "/aegis/gate/evaluate",
+    status_code: 200,
+    status: 200,
+    duration_ms: 44,
+    decision: "Allow",
+    risk_score: 24,
+    risk_level: "low",
+    gate_type: "message",
+    reason: "OpenClaw 测试流量进入 Message Gate。",
+    token_status: "valid",
+    auth_mode: "strict",
+    unauthorized_allow: false,
+    agent_id: "openclaw",
+    session_id: "demo-session-openclaw",
+    tool_name: "",
+    body_hash: "demo-trace-hash-1",
+    event_type: "gate",
+    description: "策略引擎解析 DPI 测试载荷。"
+  },
+  {
+    id: "demo-trace-2",
+    request_id: "demo-chain-openclaw-001",
+    timestamp: new Date(Date.now() - 10 * 60_000).toISOString(),
+    method: "POST",
+    path: "/aegis/gate/evaluate",
+    status_code: 403,
+    status: 403,
+    duration_ms: 68,
+    decision: "Block",
+    risk_score: 100,
+    risk_level: "critical",
+    gate_type: "message",
+    reason: "DPI 直接提示注入命中系统覆盖规则。",
+    token_status: "valid",
+    auth_mode: "strict",
+    unauthorized_allow: false,
+    agent_id: "openclaw",
+    session_id: "demo-session-openclaw",
+    tool_name: "",
+    body_hash: "demo-trace-hash-2",
+    event_type: "gate",
+    description: "Message Gate 阻断直接提示注入。"
+  },
+  {
+    id: "demo-trace-3",
+    request_id: "demo-chain-openclaw-001",
+    timestamp: new Date(Date.now() - 9 * 60_000).toISOString(),
+    method: "POST",
+    path: "/aegis/sandbox/isolate",
+    status_code: 200,
+    status: 200,
+    duration_ms: 52,
+    decision: "Block",
+    risk_score: 82,
+    risk_level: "high",
+    gate_type: "return",
+    reason: "MP 记忆投毒候选内容被隔离。",
+    token_status: "valid",
+    auth_mode: "strict",
+    unauthorized_allow: false,
+    agent_id: "openclaw",
+    session_id: "demo-session-openclaw",
+    tool_name: "memory.write",
+    body_hash: "demo-trace-hash-3",
+    event_type: "sandbox",
+    description: "沙箱阻止高风险内容进入可信记忆。"
+  }
+];
+
+const demoAttackChains: AttackChain[] = [
+  {
+    chain_id: "demo-chain-openclaw-001",
+    events: demoTraceEvents,
+    start_time: demoTraceEvents[0].timestamp,
+    end_time: demoTraceEvents[demoTraceEvents.length - 1].timestamp,
+    severity: "critical",
+    summary: "OpenClaw DPI + MP 测试链路：提示注入被 Message Gate 阻断，记忆投毒候选进入沙箱隔离。"
+  }
+];
+
+const displayAttackChains = computed(() =>
+  attackChains.value?.length ? attackChains.value : demoAttackChains
+);
+
 const chainSummary = computed(() => {
   if (!selectedChain.value) return null;
   const chain = selectedChain.value;
@@ -116,12 +206,14 @@ onMounted(() => {
   Promise.all([loadLogs(), loadChains(), loadStats()]).then(() => {
     const chainParam = route.query.chain as string;
     if (chainParam) {
-      const found = attackChains.value.find(
+      const found = displayAttackChains.value.find(
         c => c.chain_id === chainParam || c.events.some(e => e.request_id === chainParam)
       );
       if (found) {
         selectChain(found);
       }
+    } else if (!selectedChain.value && displayAttackChains.value.length) {
+      selectChain(displayAttackChains.value[0]);
     }
   });
   startPolling(5000);
@@ -164,7 +256,7 @@ onUnmounted(() => {
           </template>
           <div v-loading="loading" class="space-y-2 max-h-96 overflow-y-auto">
             <div
-              v-for="chain in attackChains"
+              v-for="chain in displayAttackChains"
               :key="chain.chain_id"
               class="p-3 border rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               :class="{ 'border-blue-500 bg-blue-50 dark:bg-blue-900': selectedChain?.chain_id === chain.chain_id }"
@@ -185,7 +277,7 @@ onUnmounted(() => {
                 {{ chain.events.length }} 事件 | {{ new Date(chain.start_time).toLocaleTimeString() }}
               </div>
             </div>
-            <el-empty v-if="!attackChains.length && !loading" description="暂未检测到攻击链" />
+            <el-empty v-if="!displayAttackChains.length && !loading" description="暂未检测到攻击链" />
           </div>
         </el-card>
       </el-col>

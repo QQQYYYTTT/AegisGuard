@@ -16,12 +16,91 @@ const gateStore = useGateStoreHook();
 const auditStore = useAuditStoreHook();
 const router = useRouter();
 
+const demoBaseTime = Date.now();
+const demoGateDecisions: GateDecision[] = [
+  {
+    request_id: "demo-dpi-message-001",
+    timestamp: new Date(demoBaseTime - 8 * 60_000).toISOString(),
+    gate_type: "message",
+    decision: "Block",
+    risk_score: 100,
+    risk_level: "critical",
+    matched_rules: ["DPI_DIRECT_PROMPT_INJECTION", "SYSTEM_OVERRIDE"],
+    reason: "DPI 直接提示注入，试图覆盖系统策略并请求敏感操作。",
+    agent_id: "openclaw"
+  },
+  {
+    request_id: "demo-pot-action-002",
+    timestamp: new Date(demoBaseTime - 18 * 60_000).toISOString(),
+    gate_type: "action",
+    decision: "HumanApproval",
+    risk_score: 97,
+    risk_level: "critical",
+    matched_rules: ["POT_PRIVILEGED_TOOL", "MISSING_TOKEN"],
+    reason: "POT 权限工具诱导，缺少可信授权令牌。",
+    tool_name: "AdminTransferTool",
+    agent_id: "openclaw",
+    token_status: "missing"
+  },
+  {
+    request_id: "demo-opi-return-003",
+    timestamp: new Date(demoBaseTime - 34 * 60_000).toISOString(),
+    gate_type: "return",
+    decision: "Degrade",
+    risk_score: 65,
+    risk_level: "high",
+    matched_rules: ["OPI_EXTERNAL_CONTENT", "RETURN_GATE_SANITIZE"],
+    reason: "OPI 外部观察结果夹带隐藏指令，已降级净化。",
+    agent_id: "openclaw"
+  },
+  {
+    request_id: "demo-mp-return-004",
+    timestamp: new Date(demoBaseTime - 52 * 60_000).toISOString(),
+    gate_type: "return",
+    decision: "Block",
+    risk_score: 75,
+    risk_level: "high",
+    matched_rules: ["MP_MEMORY_POISONING", "SANDBOX_ISOLATION"],
+    reason: "MP 记忆投毒候选内容，已进入沙箱隔离。",
+    agent_id: "openclaw"
+  }
+];
+
+const demoAuditEvents: AuditEvent[] = demoGateDecisions.map((decision, index) => ({
+  id: `demo-audit-${index + 1}`,
+  request_id: decision.request_id,
+  timestamp: decision.timestamp,
+  method: "POST",
+  path: "/aegis/gate/evaluate",
+  status_code: decision.decision === "Block" ? 403 : 200,
+  status: decision.decision === "Block" ? 403 : 200,
+  duration_ms: 42 + index * 11,
+  decision: decision.decision,
+  risk_score: decision.risk_score,
+  risk_level: decision.risk_level,
+  gate_type: decision.gate_type,
+  reason: decision.reason,
+  token_status: decision.token_status || "valid",
+  auth_mode: "strict",
+  unauthorized_allow: false,
+  agent_id: decision.agent_id || "openclaw",
+  session_id: "demo-session-openclaw",
+  tool_name: decision.tool_name || "",
+  body_hash: `demo-hash-${index + 1}`,
+  event_type: index === 1 ? "authorization" : index === 3 ? "sandbox" : "gate",
+  description: decision.reason
+}));
+
 const activeTab = ref("overview");
 const timeRange = ref("24h");
 const selectedGateType = ref("all");
 
-const gateDecisions = computed(() => gateStore.decisions);
-const auditEvents = computed(() => auditStore.events);
+const gateDecisions = computed(() =>
+  gateStore.decisions?.length ? gateStore.decisions : demoGateDecisions
+);
+const auditEvents = computed(() =>
+  auditStore.events?.length ? auditStore.events : demoAuditEvents
+);
 
 const disposalStats = computed(() => {
   const decisions = gateDecisions.value || [];
@@ -164,7 +243,7 @@ function viewAlertDetail(alert: any) {
 </script>
 
 <template>
-  <div class="auto-disposal-center p-4">
+  <div class="auto-disposal-center tech-page p-4">
     <h1 class="text-2xl font-bold mb-4">自动处置中心 / Auto Disposal Center</h1>
 
     <el-row :gutter="16" class="mb-4">
@@ -418,3 +497,41 @@ function viewAlertDetail(alert: any) {
     </el-card>
   </div>
 </template>
+
+<style scoped>
+.auto-disposal-center {
+  min-height: 100vh;
+  color: #d9f4ff;
+}
+
+.auto-disposal-center :deep(.el-card) {
+  color: #d9f4ff;
+  background: rgb(5 18 38 / 88%);
+  border-color: rgb(78 192 255 / 18%);
+  border-radius: 8px;
+  box-shadow: inset 0 0 30px rgb(0 212 255 / 4%);
+}
+
+.auto-disposal-center :deep(.el-descriptions__table) {
+  background: transparent;
+}
+
+.auto-disposal-center :deep(.el-descriptions__cell) {
+  border-color: rgb(78 192 255 / 16%) !important;
+}
+
+.auto-disposal-center :deep(.el-descriptions__label),
+.auto-disposal-center :deep(.el-descriptions__content) {
+  color: #d9f4ff !important;
+  background: rgb(7 28 55 / 78%) !important;
+}
+
+.auto-disposal-center :deep(.el-descriptions__label) {
+  color: #9fdfff !important;
+  font-weight: 700;
+}
+
+.auto-disposal-center :deep(.border) {
+  border-color: rgb(78 192 255 / 18%) !important;
+}
+</style>

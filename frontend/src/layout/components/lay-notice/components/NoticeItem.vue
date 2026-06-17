@@ -49,7 +49,7 @@ function hoverDescription(event, description) {
 
 <template>
   <div
-    class="notice-container border-0 border-b-[1px] border-solid border-[#f0f0f0] dark:border-[#303030]"
+    class="notice-container"
   >
     <el-avatar
       v-if="noticeItem.avatar"
@@ -58,7 +58,7 @@ function hoverDescription(event, description) {
       class="notice-container-avatar"
     />
     <div class="notice-container-text">
-      <div class="notice-text-title text-[#000000d9] dark:text-white">
+      <div class="notice-text-title">
         <el-tooltip
           popper-class="notice-title-popper"
           :effect="tooltipEffect"
@@ -100,7 +100,7 @@ function hoverDescription(event, description) {
           {{ noticeItem.description }}
         </div>
       </el-tooltip>
-      <div class="notice-text-datetime text-[#00000073] dark:text-white">
+      <div class="notice-text-datetime">
         {{ noticeItem.datetime }}
       </div>
     </div>
@@ -118,12 +118,13 @@ function hoverDescription(event, description) {
   align-items: flex-start;
   justify-content: space-between;
   padding: 12px 0;
+  border-bottom: 1px solid rgba(78, 192, 255, 0.14);
 
   // border-bottom: 1px solid #f0f0f0;
 
   .notice-container-avatar {
     margin-right: 16px;
-    background: #fff;
+    background: rgba(0, 212, 255, 0.1);
   }
 
   .notice-container-text {
@@ -139,6 +140,7 @@ function hoverDescription(event, description) {
       font-weight: 400;
       line-height: 1.5715;
       cursor: pointer;
+      color: #d9f4ff;
 
       .notice-title-content {
         flex: 1;
@@ -159,6 +161,7 @@ function hoverDescription(event, description) {
     .notice-text-datetime {
       font-size: 12px;
       line-height: 1.5715;
+      color: #8fb6d8;
     }
 
     .notice-text-description {

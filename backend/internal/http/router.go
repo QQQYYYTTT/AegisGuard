@@ -164,6 +164,7 @@ func (r *Router) registerRoutes() {
 	r.engine.GET("/get-async-routes", r.handleGetAsyncRoutes)
 	r.registerUserRoutes()
 	r.registerAuthRoutes()
+	r.registerAssistantRoutes()
 
 	r.engine.Any("/v1/*path", r.handleProxy)
 

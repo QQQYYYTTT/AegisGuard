@@ -69,7 +69,7 @@ function buildFlowData(steps: AttackStep[]) {
     symbolSize: 45 + step.riskScore / 4,
     itemStyle: {
       color: step.isAnomaly ? "#ef4444" : (eventTypeColors[step.eventType] || "#999"),
-      borderColor: step.decision === "Block" || step.decision === "Deny" ? "#7f1d1d" : "#fff",
+      borderColor: step.decision === "Block" || step.decision === "Deny" ? "#ff4d7d" : "#06172e",
       borderWidth: step.decision === "Block" || step.decision === "Deny" ? 4 : 2,
       shadowBlur: step.isAnomaly ? 15 : 0,
       shadowColor: step.isAnomaly ? "#ef4444" : "transparent"
@@ -167,8 +167,8 @@ function renderChart() {
                 决策: <span style="color: ${step.decision === 'Allow' ? '#22c55e' : '#ef4444'}; font-weight: bold;">${step.decision}</span>
               </div>
               <div style="margin-bottom: 8px; color: #666;">${step.description}</div>
-              ${features.length ? `<div style="border-top: 1px solid #eee; padding-top: 8px; margin-top: 8px;">${features.map(f => `<div style="font-size: 12px; margin-bottom: 2px;">${f}</div>`).join('')}</div>` : ''}
-              ${step.reason ? `<div style="border-top: 1px solid #eee; padding-top: 8px; margin-top: 8px; color: #ef4444; font-size: 12px;">原因: ${step.reason}</div>` : ''}
+              ${features.length ? `<div style="border-top: 1px solid rgba(78,192,255,.22); padding-top: 8px; margin-top: 8px;">${features.map(f => `<div style="font-size: 12px; margin-bottom: 2px;">${f}</div>`).join('')}</div>` : ''}
+              ${step.reason ? `<div style="border-top: 1px solid rgba(78,192,255,.22); padding-top: 8px; margin-top: 8px; color: #ff4d7d; font-size: 12px;">原因: ${step.reason}</div>` : ''}
             </div>
           `;
         }
@@ -308,9 +308,13 @@ onUnmounted(() => {
   min-width: 100%;
   height: 350px;
   min-height: 350px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid rgba(78, 192, 255, 0.18);
   border-radius: 8px;
-  background: linear-gradient(to right, #f8fafc 0%, #ffffff 50%, #f8fafc 100%);
+  background:
+    linear-gradient(rgb(0 212 255 / 4%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(0 212 255 / 4%) 1px, transparent 1px),
+    rgba(5, 18, 38, 0.82);
+  background-size: 24px 24px;
 }
 
 .flow-footer {
@@ -321,6 +325,7 @@ onUnmounted(() => {
   display: flex;
   gap: 20px;
   font-size: 12px;
+  color: #8fb6d8;
 }
 
 .legend-item {

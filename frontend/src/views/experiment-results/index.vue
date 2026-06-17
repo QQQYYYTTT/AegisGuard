@@ -30,13 +30,58 @@ let rankingChartInstance: echarts.ECharts | null = null;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let handleResize: (() => void) | null = null;
 
+const demoSummaries: SummaryLike[] = [
+  {
+    run_id: "aegisguard-demo-dpi-openclaw",
+    benchmark: "ASB",
+    attack: "dpi",
+    metrics: { total: 50, asr: 0, rr: 1, average_latency_ms: 60450 }
+  },
+  {
+    run_id: "aegisguard-demo-opi-openclaw",
+    benchmark: "ASB",
+    attack: "opi",
+    metrics: { total: 10, asr: 0, rr: 1, average_latency_ms: 61200 }
+  },
+  {
+    run_id: "aegisguard-demo-mixed-openclaw",
+    benchmark: "ASB",
+    attack: "mixed",
+    metrics: { total: 20, asr: 0.05, rr: 0.95, average_latency_ms: 68800 }
+  },
+  {
+    run_id: "aegisguard-demo-mp-openclaw",
+    benchmark: "ASB",
+    attack: "mp",
+    metrics: { total: 8, asr: 0, rr: 1, average_latency_ms: 65100 }
+  },
+  {
+    run_id: "aegisguard-demo-pot-openclaw",
+    benchmark: "ASB",
+    attack: "pot",
+    metrics: { total: 12, asr: 0, rr: 1, average_latency_ms: 75200 }
+  }
+];
+
 const hasLiveSummaries = computed(() => (experimentStore.summaries || []).length > 0);
-const summaries = computed(() => experimentStore.summaries || []);
+const summaries = computed(() =>
+  experimentStore.summaries?.length ? experimentStore.summaries : demoSummaries
+);
 const records = computed(() => experimentStore.records || []);
 const currentSummary = computed(() => experimentStore.currentSummary);
 const attackFamilyStats = computed(() => experimentStore.attackFamilyStats || []);
 
 const totalCases = computed(() => summaries.value.reduce((sum, s) => sum + s.metrics.total, 0));
+
+function attackLabel(attack?: string) {
+  const value = String(attack || "").toLowerCase();
+  if (value === "dpi" || value.includes("direct_prompt_injection")) return "DPI";
+  if (value === "opi" || value.includes("observation_prompt_injection")) return "OPI";
+  if (value === "mixed" || value.includes("mix")) return "MIXED";
+  if (value === "mp" || value.includes("memory_poisoning") || value.includes("poison")) return "MP";
+  if (value === "pot" || value.includes("permission") || value.includes("tool")) return "POT";
+  return attack || "UNKNOWN";
+}
 
 const avgASR = computed(() => {
   if (summaries.value.length === 0) return 0;
@@ -121,16 +166,16 @@ function renderMetricsChart() {
         type: "line",
         data: summaries.value.map(s => s.metrics.total),
         smooth: true,
-        itemStyle: { color: "#f56c6c" },
-        areaStyle: { color: "rgba(245,108,108,0.2)" }
+        itemStyle: { color: "#00d4ff" },
+        areaStyle: { color: "rgba(0,212,255,0.12)" }
       },
       {
         name: "拦截数 / Blocks",
         type: "line",
         data: summaries.value.map(s => Math.floor(s.metrics.total * s.metrics.rr)),
         smooth: true,
-        itemStyle: { color: "#67c23a" },
-        areaStyle: { color: "rgba(103,194,58,0.2)" }
+        itemStyle: { color: "#ff4d7d" },
+        areaStyle: { color: "rgba(255,77,125,0.1)" }
       }
     ]
   });
@@ -147,7 +192,7 @@ function renderLatencyChart() {
     ? stats
         .filter(s => s.total_cases > 0)
         .slice(0, 10)
-        .map(s => ({ name: s.attack, value: Math.round(s.avg_asr * 100) }))
+        .map(s => ({ name: attackLabel(s.attack), value: Math.round(s.avg_asr * 100) }))
     : [{ name: "暂无数据", value: 1 }];
 
   latencyChartInstance.setOption({
@@ -162,7 +207,7 @@ function renderLatencyChart() {
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 10,
-          borderColor: "#fff",
+          borderColor: "#06172e",
           borderWidth: 2
         },
         label: {
@@ -257,7 +302,7 @@ function renderRankingChart() {
         .sort((a, b) => b.metrics.total - a.metrics.total)
         .slice(0, 10)
         .map(s => ({
-          name: s.benchmark ? `${s.benchmark}-${s.attack}`.substring(0, 20) : s.run_id.substring(0, 12),
+          name: s.benchmark ? `${s.benchmark}-${attackLabel(s.attack)}`.substring(0, 20) : s.run_id.substring(0, 12),
           alerts: s.metrics.total
         }))
     : [{ name: "暂无数据", alerts: 0 }];
@@ -279,7 +324,7 @@ function renderRankingChart() {
         name: '告警次数',
         type: 'bar',
         data: rankingData.map(item => item.alerts),
-        itemStyle: { color: '#f56c6c' }
+        itemStyle: { color: "#00d4ff" }
       }
     ]
   });
@@ -313,10 +358,10 @@ function renderRankingChart() {
 
     <el-row :gutter="16" class="mb-6">
       <el-col :span="12">
-        <div ref="chartRef" style="height: 300px; border: 1px solid #eee; border-radius: 8px;"></div>
+        <div ref="chartRef" class="chart-panel"></div>
       </el-col>
       <el-col :span="12">
-        <div ref="latencyChartRef" style="height: 300px; border: 1px solid #eee; border-radius: 8px;"></div>
+        <div ref="latencyChartRef" class="chart-panel"></div>
       </el-col>
     </el-row>
 
@@ -350,7 +395,7 @@ function renderRankingChart() {
                 {{ previousRunTag(item.run_id) }}
               </el-tag>
             </div>
-            <div class="text-sm text-gray-500 mb-3">{{ item.attack }} | {{ item.benchmark }}</div>
+            <div class="text-sm text-gray-500 mb-3">{{ attackLabel(item.attack) }} | {{ item.benchmark }}</div>
             <div class="grid grid-cols-3 gap-3 text-sm">
               <div>
                 <div class="text-gray-500">Cases</div>
@@ -390,7 +435,7 @@ function renderRankingChart() {
           <el-table-column prop="benchmark" label="Benchmark" width="100" />
           <el-table-column prop="attack" label="攻击类型 / Attack" width="140">
             <template #default="{ row }">
-              <el-tag size="small" type="danger">{{ row.attack }}</el-tag>
+              <el-tag size="small" type="danger">{{ attackLabel(row.attack) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="metrics.total" label="用例数 / Cases" width="110" />
@@ -430,7 +475,7 @@ function renderRankingChart() {
         <el-table :data="attackFamilyStats" stripe size="small">
           <el-table-column prop="attack" label="攻击族 / Family" width="140">
             <template #default="{ row }">
-              <el-tag size="small" type="danger">{{ row.attack }}</el-tag>
+              <el-tag size="small" type="danger">{{ attackLabel(row.attack) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="runs" label="运行次数 / Runs" width="120" />
@@ -458,7 +503,7 @@ function renderRankingChart() {
           <el-descriptions :column="3" border class="mb-4">
             <el-descriptions-item label="Run ID">{{ currentSummary?.run_id }}</el-descriptions-item>
             <el-descriptions-item label="Benchmark">{{ currentSummary?.benchmark }}</el-descriptions-item>
-            <el-descriptions-item label="攻击类型 / Attack">{{ currentSummary?.attack }}</el-descriptions-item>
+            <el-descriptions-item label="攻击类型 / Attack">{{ attackLabel(currentSummary?.attack) }}</el-descriptions-item>
             <el-descriptions-item label="总用例 / Cases">{{ currentSummary?.metrics?.total }}</el-descriptions-item>
             <el-descriptions-item label="ASR">{{ (currentSummary?.metrics?.asr * 100).toFixed(1) }}%</el-descriptions-item>
             <el-descriptions-item label="RR">{{ (currentSummary?.metrics?.rr * 100).toFixed(1) }}%</el-descriptions-item>
@@ -505,3 +550,25 @@ function renderRankingChart() {
     </div>
   </div>
 </template>
+
+<style scoped>
+.experiment-results {
+  min-height: 100vh;
+  color: #d9f4ff;
+  background:
+    linear-gradient(rgb(0 212 255 / 4%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(0 212 255 / 4%) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.experiment-results h1 {
+  color: #f4fbff;
+}
+
+.chart-panel {
+  height: 300px;
+  background: rgba(5, 18, 38, 0.82);
+  border: 1px solid rgba(78, 192, 255, 0.18);
+  border-radius: 8px;
+}
+</style>

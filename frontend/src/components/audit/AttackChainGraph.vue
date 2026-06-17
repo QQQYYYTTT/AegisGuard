@@ -52,7 +52,7 @@ function buildGraphData(events: AuditEvent[]) {
       symbolSize,
       itemStyle: {
         color: eventTypeColors[event.event_type] || "#999",
-        borderColor: event.decision === "Block" || event.decision === "Deny" ? "#ff0000" : "#fff",
+        borderColor: event.decision === "Block" || event.decision === "Deny" ? "#ff4d7d" : "#06172e",
         borderWidth: event.decision === "Block" || event.decision === "Deny" ? 3 : 1
       },
       label: {
@@ -283,9 +283,14 @@ onUnmounted(() => {
   min-width: 100%;
   height: 450px;
   min-height: 400px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid rgba(78, 192, 255, 0.18);
   border-radius: 8px;
   overflow: hidden;
+  background:
+    linear-gradient(rgb(0 212 255 / 4%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(0 212 255 / 4%) 1px, transparent 1px),
+    rgba(5, 18, 38, 0.82);
+  background-size: 24px 24px;
 }
 
 .graph-footer {

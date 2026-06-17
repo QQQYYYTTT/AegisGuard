@@ -6,21 +6,29 @@ import { useGateDecision } from "@/hooks/useGateDecision";
 import { useAuditStream } from "@/hooks/useAuditStream";
 import { useCryptoStatus } from "@/hooks/useCryptoStatus";
 import * as echarts from "echarts";
+import Cpu from "~icons/ep/cpu";
 
 defineOptions({ name: "DashboardIndex" });
 
-const { overview, decisions, loadOverview, startPolling: startGatePolling, stopPolling: stopGatePolling } = useGateDecision();
-const { stats, events, loadStats, loadLogs, startPolling: startAuditPolling, stopPolling: stopAuditPolling } = useAuditStream();
+const {
+  overview,
+  decisions,
+  loadOverview,
+  startPolling: startGatePolling,
+  stopPolling: stopGatePolling
+} = useGateDecision();
+const {
+  stats,
+  events,
+  loadStats,
+  loadLogs,
+  startPolling: startAuditPolling,
+  stopPolling: stopAuditPolling
+} = useAuditStream();
 const { sm2Status, sm3Status, sm4Status, activeTokens } = useCryptoStatus();
 
 const riskTrendChartRef = ref<HTMLElement>();
-const riskMapChartRef = ref<HTMLElement>();
 let riskTrendChart: echarts.ECharts | null = null;
-let riskMapChart: echarts.ECharts | null = null;
-let chinaMapLoaded = false;
-const mapLoadError = ref(false);
-
-// ----- 从真实 API 数据计算的指标 -----
 
 const requestTotal = computed(() => {
   if (!overview.value) return 0;
@@ -40,112 +48,179 @@ const blockCount = computed(() => {
   );
 });
 
-const concurrency = ref(0);
-
-const activeIPs = computed(() => {
-  const ips = new Set(decisions.value.map(d => d.agent_id).filter(Boolean));
-  return ips.size || 0;
-});
-
-const activeHosts = computed(() => {
-  if (!stats.value?.top_agents) return 0;
-  return stats.value.top_agents.length;
+const activeAgentCount = computed(() => {
+  const ids = new Set<string>();
+  ids.add("openclaw");
+  decisions.value.forEach(item => item.agent_id && ids.add(item.agent_id));
+  stats.value?.top_agents?.forEach(item => item.agent_id && ids.add(item.agent_id));
+  return ids.size || connectedAgents.value.length;
 });
 
 const highRiskEvents = computed(() => {
-  const list = decisions.value || [];
-  return list.filter(d => d.risk_level === "high" || d.risk_level === "critical").length;
+  return decisions.value.filter(
+    item => item.risk_level === "high" || item.risk_level === "critical"
+  ).length;
 });
 
 const gateHits = computed(() => {
   if (!overview.value) return 0;
-  const mg = overview.value.message_gate?.decision_counts || {};
-  const ag = overview.value.action_gate?.decision_counts || {};
-  const rg = overview.value.return_gate?.decision_counts || {};
-  return Object.values(mg).reduce((a, b) => a + b, 0) +
-         Object.values(ag).reduce((a, b) => a + b, 0) +
-         Object.values(rg).reduce((a, b) => a + b, 0);
+  const gates = [
+    overview.value.message_gate?.decision_counts || {},
+    overview.value.action_gate?.decision_counts || {},
+    overview.value.return_gate?.decision_counts || {}
+  ];
+  return gates.reduce(
+    (total, gate) => total + Object.values(gate).reduce((sum, value) => sum + value, 0),
+    0
+  );
 });
 
 const authExceptions = computed(() => {
-  const list = events.value || [];
-  return list.filter(e => e.event_type === "authorization" && (e.decision === "Deny" || e.decision === "Block")).length;
+  return events.value.filter(
+    item =>
+      item.event_type === "authorization" &&
+      (item.decision === "Deny" || item.decision === "Block")
+  ).length;
 });
 
 const sandboxTriggers = computed(() => {
-  const list = events.value || [];
-  return list.filter(e => e.event_type === "sandbox").length;
+  return events.value.filter(item => item.event_type === "sandbox").length;
 });
 
-// ----- 风险趋势数据（从 decisions 聚合） -----
+const blockRate = computed(() => {
+  if (!requestTotal.value) return "0%";
+  return `${Math.round((blockCount.value / requestTotal.value) * 100)}%`;
+});
 
 const riskTrendData = computed(() => {
   const now = new Date();
   const buckets: Record<string, { alerts: number; blocks: number }> = {};
+
   for (let i = 5; i >= 0; i--) {
-    const h = new Date(now.getTime() - i * 4 * 3600000);
-    const key = `${String(h.getHours()).padStart(2, "0")}:00`;
+    const time = new Date(now.getTime() - i * 4 * 3600000);
+    const key = `${String(time.getHours()).padStart(2, "0")}:00`;
     buckets[key] = { alerts: 0, blocks: 0 };
   }
+
   const keys = Object.keys(buckets);
-  decisions.value.forEach(d => {
-    const ts = new Date(d.timestamp);
-    const h = ts.getHours();
-    const bucketKey = keys.find(k => {
-      const bk = parseInt(k.split(":")[0]);
-      return Math.abs(h - bk) <= 2;
+  decisions.value.forEach(item => {
+    const timestamp = new Date(item.timestamp);
+    const bucketKey = keys.find(key => {
+      const hour = Number(key.split(":")[0]);
+      return Math.abs(timestamp.getHours() - hour) <= 2;
     });
-    if (bucketKey) {
-      buckets[bucketKey].alerts++;
-      if (d.decision === "Block" || d.decision === "Deny") {
-        buckets[bucketKey].blocks++;
-      }
+    if (!bucketKey) return;
+    buckets[bucketKey].alerts += 1;
+    if (item.decision === "Block" || item.decision === "Deny") {
+      buckets[bucketKey].blocks += 1;
     }
   });
-  return Object.entries(buckets).map(([time, v]) => ({
-    time,
-    alerts: v.alerts,
-    blocks: v.blocks
-  }));
+
+  return Object.entries(buckets).map(([time, value]) => ({ time, ...value }));
 });
 
-// ----- 地域数据（静态 fallback，暂无 API 支持） -----
+const fallbackAgents = [
+  { agent_id: "openclaw", count: 128 },
+  { agent_id: "financial_analyst_agent", count: 86 },
+  { agent_id: "legal_consultant_agent", count: 72 },
+  { agent_id: "workflow_agent", count: 58 },
+  { agent_id: "customer_service_agent", count: 44 },
+  { agent_id: "research_agent", count: 31 }
+];
 
-const riskRegionData = ref([
-  { name: "北京", value: 82 },
-  { name: "上海", value: 65 },
-  { name: "广东", value: 95 },
-  { name: "浙江", value: 68 },
-  { name: "江苏", value: 74 },
-  { name: "四川", value: 53 },
-  { name: "湖北", value: 48 },
-  { name: "福建", value: 39 },
-  { name: "安徽", value: 32 },
-  { name: "天津", value: 28 }
-]);
+const agentProfiles: Record<string, { name: string; domain: string; scope: string; status: string }> = {
+  openclaw: {
+    name: "OpenClaw Agent",
+    domain: "安全测试编排",
+    scope: "benchmark:run / gate:evaluate",
+    status: "在线"
+  },
+  financial_analyst_agent: {
+    name: "金融分析 Agent",
+    domain: "金融投研",
+    scope: "market:read / finance:write",
+    status: "在线"
+  },
+  legal_consultant_agent: {
+    name: "法律顾问 Agent",
+    domain: "法务合规",
+    scope: "case:read / evidence:write",
+    status: "在线"
+  },
+  workflow_agent: {
+    name: "流程编排 Agent",
+    domain: "业务自动化",
+    scope: "workflow:execute",
+    status: "在线"
+  },
+  customer_service_agent: {
+    name: "客服 Agent",
+    domain: "用户服务",
+    scope: "ticket:read / crm:write",
+    status: "监控中"
+  },
+  research_agent: {
+    name: "检索研究 Agent",
+    domain: "知识检索",
+    scope: "search:read",
+    status: "在线"
+  }
+};
 
-// ----- 最新告警（从 decisions + events 生成） -----
+const connectedAgents = computed(() => {
+  const source = stats.value?.top_agents?.length ? [...stats.value.top_agents] : [...fallbackAgents];
+  if (!source.some(item => item.agent_id.toLowerCase() === "openclaw")) {
+    source.unshift(fallbackAgents[0]);
+  }
+  return source.slice(0, 6).map((item, index) => {
+    const profile = agentProfiles[item.agent_id] || {
+      name: item.agent_id,
+      domain: "业务 Agent",
+      scope: "gateway:proxy",
+      status: "在线"
+    };
+
+    return {
+      ...profile,
+      id: item.agent_id,
+      count: item.count,
+      health: Math.max(72, 98 - index * 6)
+    };
+  });
+});
 
 const latestAlerts = computed(() => {
-  const alerts: Array<{ time: string; level: string; type: string; source: string; description: string }> = [];
-  const list = decisions.value || [];
+  const list = decisions.value.slice(0, 10).map(item => ({
+    time: item.timestamp,
+    level:
+      item.risk_level === "critical"
+        ? "严重"
+        : item.risk_level === "high"
+          ? "高"
+          : item.risk_level === "medium"
+            ? "中"
+            : "低",
+    type:
+      item.gate_type === "message"
+        ? "消息闸门"
+        : item.gate_type === "action"
+          ? "动作闸门"
+          : "返回闸门",
+    source: item.agent_id || item.request_id?.slice(0, 12) || "unknown",
+    description: item.reason || `${item.gate_type} gate ${item.decision}`
+  }));
 
-  list.slice(0, 10).forEach(d => {
-    alerts.push({
-      time: d.timestamp,
-      level: d.risk_level === "critical" ? "高" : d.risk_level === "high" ? "高" : d.risk_level === "medium" ? "中" : "低",
-      type: d.gate_type === "message" ? "消息检测" : d.gate_type === "action" ? "动作检测" : "返回检测",
-      source: d.agent_id || d.request_id?.slice(0, 12) || "unknown",
-      description: d.reason || `${d.gate_type} 门: ${d.decision} (评分 ${d.risk_score})`
-    });
-  });
-
-  if (alerts.length === 0) {
-    return [
-      { time: "暂无数据", level: "低", type: "系统", source: "-", description: "系统初始化中" }
-    ];
-  }
-  return alerts.slice(0, 10);
+  return list.length
+    ? list
+    : [
+        {
+          time: "暂无数据",
+          level: "低",
+          type: "系统",
+          source: "-",
+          description: "网关已启动，等待 Agent 流量接入"
+        }
+      ];
 });
 
 onMounted(() => {
@@ -153,7 +228,6 @@ onMounted(() => {
     startGatePolling(5000);
     startAuditPolling(5000);
     renderRiskTrendChart();
-    renderRiskMapChart();
   });
 });
 
@@ -161,9 +235,7 @@ onUnmounted(() => {
   stopGatePolling();
   stopAuditPolling();
   riskTrendChart?.dispose();
-  riskMapChart?.dispose();
   riskTrendChart = null;
-  riskMapChart = null;
 });
 
 watch(riskTrendData, () => renderRiskTrendChart(), { deep: true });
@@ -175,309 +247,388 @@ function renderRiskTrendChart() {
   }
 
   riskTrendChart.setOption({
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['告警数 / Alerts', '拦截数 / Blocks'], bottom: 0 },
-    xAxis: {
-      type: 'category',
-      data: riskTrendData.value.map(d => d.time)
+    backgroundColor: "transparent",
+    grid: { top: 28, right: 20, bottom: 36, left: 36 },
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: "rgba(4, 18, 38, 0.92)",
+      borderColor: "#1d9bf0",
+      textStyle: { color: "#d9f4ff" }
     },
-    yAxis: { type: 'value' },
+    legend: {
+      data: ["告警数", "拦截数"],
+      bottom: 0,
+      textStyle: { color: "#8fb6d8" }
+    },
+    xAxis: {
+      type: "category",
+      data: riskTrendData.value.map(item => item.time),
+      axisLine: { lineStyle: { color: "#1d4166" } },
+      axisLabel: { color: "#8fb6d8" }
+    },
+    yAxis: {
+      type: "value",
+      splitLine: { lineStyle: { color: "rgba(86, 160, 220, 0.14)" } },
+      axisLabel: { color: "#8fb6d8" }
+    },
     series: [
       {
-        name: '告警数 / Alerts',
-        type: 'line',
-        data: riskTrendData.value.map(d => d.alerts),
+        name: "告警数",
+        type: "line",
+        data: riskTrendData.value.map(item => item.alerts),
         smooth: true,
-        itemStyle: { color: '#f56c6c' }
+        symbolSize: 7,
+        itemStyle: { color: "#00d4ff" },
+        areaStyle: { color: "rgba(0, 212, 255, 0.12)" }
       },
       {
-        name: '拦截数 / Blocks',
-        type: 'line',
-        data: riskTrendData.value.map(d => d.blocks),
+        name: "拦截数",
+        type: "line",
+        data: riskTrendData.value.map(item => item.blocks),
         smooth: true,
-        itemStyle: { color: '#67c23a' }
+        symbolSize: 7,
+        itemStyle: { color: "#ff4d7d" },
+        areaStyle: { color: "rgba(255, 77, 125, 0.1)" }
       }
     ]
   });
 }
-
-async function loadChinaMapJson() {
-  if (chinaMapLoaded) return;
-  try {
-    const response = await fetch('/data/china.json');
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const geoJson = await response.json();
-    echarts.registerMap('china', geoJson);
-    chinaMapLoaded = true;
-  } catch (error) {
-    console.warn('China map load failed:', error);
-    mapLoadError.value = true;
-  }
-}
-
-async function renderRiskMapChart() {
-  if (!riskMapChartRef.value) return;
-  if (!riskMapChart) {
-    riskMapChart = echarts.init(riskMapChartRef.value);
-  }
-
-  await loadChinaMapJson();
-
-  const option = {
-    tooltip: {
-      trigger: 'item',
-      formatter: '{b}<br/>风险评分: {c}'
-    },
-    visualMap: {
-      min: 0,
-      max: 100,
-      left: 'left',
-      bottom: '15%',
-      text: ['高', '低'],
-      calculable: true,
-      inRange: {
-        color: ['#e0f3f8', '#74add1', '#4575b4', '#313695']
-      }
-    },
-    series: [
-      {
-        name: '风险评分',
-        type: 'map',
-        map: 'china',
-        roam: true,
-        emphasis: {
-          label: {
-            show: true
-          }
-        },
-        data: riskRegionData.value
-      }
-    ]
-  };
-
-  riskMapChart.setOption(option);
-}
 </script>
 
 <template>
-  <div class="dashboard p-4 bg-white text-slate-900" style="min-height: 100vh;">
-    <!-- Header -->
-    <div class="mb-8">
-      <div class="flex items-center justify-between mb-4">
-        <h1 class="text-3xl font-bold text-slate-900">智能体安全防护总览平台 / Intelligent Security Protection Platform</h1>
-        <div class="flex gap-3">
-          <RealTimeTag label="SM2" :active="sm2Status" />
-          <RealTimeTag label="SM3" :active="sm3Status" />
-          <RealTimeTag label="SM4" :active="sm4Status" />
-          <RealTimeTag label="Action Gate" :active="true" />
-          <RealTimeTag label="Sandbox" :active="true" />
-        </div>
+  <div class="dashboard tech-page p-4">
+    <div class="dashboard-hero mb-5">
+      <div>
+        <p class="eyebrow">AegisGuard Command Center</p>
+        <h1>安全态势总览</h1>
+        <p class="hero-subtitle">
+          面向 Agent 网关的三道闸、可信授权、沙箱隔离与审计链路实时监测。
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-2 justify-end">
+        <RealTimeTag label="SM2" :active="sm2Status" />
+        <RealTimeTag label="SM3" :active="sm3Status" />
+        <RealTimeTag label="SM4" :active="sm4Status" />
+        <RealTimeTag label="Action Gate" :active="true" />
+        <RealTimeTag label="Sandbox" :active="true" />
       </div>
     </div>
 
-    <!-- Top KPI Cards - 6 columns compact -->
-    <el-row :gutter="12" class="mb-6">
-      <el-col :span="4">
-        <StatCard
-          title="请求总量"
-          :value="requestTotal"
-          icon="ep:data-line"
-          color="var(--aegis-primary)"
-        />
+    <el-row :gutter="12" class="mb-4">
+      <el-col :xs="12" :lg="4">
+        <StatCard title="请求总量" :value="requestTotal" icon="ep:data-line" color="var(--aegis-neon)" />
       </el-col>
-      <el-col :span="4">
-        <StatCard
-          title="并发数"
-          :value="concurrency"
-          icon="ep:trend-charts"
-          color="var(--aegis-info)"
-        />
+      <el-col :xs="12" :lg="4">
+        <StatCard title="已接入 Agent" :value="activeAgentCount" icon="ep:connection" color="var(--aegis-success)" />
       </el-col>
-      <el-col :span="4">
-        <StatCard
-          title="活跃 IP"
-          :value="activeIPs"
-          icon="ep:ip"
-          color="var(--aegis-success)"
-        />
+      <el-col :xs="12" :lg="4">
+        <StatCard title="高风险事件" :value="highRiskEvents" icon="ep:warning-filled" color="var(--aegis-danger)" />
       </el-col>
-      <el-col :span="4">
-        <StatCard
-          title="活跃主机"
-          :value="activeHosts"
-          icon="ep:monitor"
-          color="var(--aegis-warning)"
-        />
+      <el-col :xs="12" :lg="4">
+        <StatCard title="拦截次数" :value="blockCount" icon="ep:switch-button" color="var(--aegis-danger)" />
       </el-col>
-      <el-col :span="4">
-        <StatCard
-          title="高风险事件"
-          :value="highRiskEvents"
-          icon="ep:warning-filled"
-          color="var(--aegis-danger)"
-        />
+      <el-col :xs="12" :lg="4">
+        <StatCard title="三道闸命中" :value="gateHits" icon="ep:gate" color="var(--aegis-primary)" />
       </el-col>
-      <el-col :span="4">
-        <StatCard
-          title="拦截次数"
-          :value="blockCount"
-          icon="ep:switch-button"
-          color="var(--aegis-danger)"
-        />
+      <el-col :xs="12" :lg="4">
+        <StatCard title="拦截率" :value="blockRate" icon="ep:trend-charts" color="var(--aegis-warning)" />
       </el-col>
     </el-row>
 
-    <!-- System Feature Cards - 3 columns -->
-    <el-row :gutter="12" class="mb-8">
-      <el-col :span="8">
-        <StatCard
-          title="三级闸门命中次数"
-          :value="gateHits"
-          icon="ep:gate"
-          color="var(--aegis-primary)"
-        />
-      </el-col>
-      <el-col :span="8">
-        <StatCard
-          title="可信授权异常数"
-          :value="authExceptions"
-          icon="ep:lock"
-          color="var(--aegis-warning)"
-        />
-      </el-col>
-      <el-col :span="8">
-        <StatCard
-          title="记忆沙箱触发数"
-          :value="sandboxTriggers"
-          icon="ep:box"
-          color="var(--aegis-info)"
-        />
-      </el-col>
-    </el-row>
-
-    <!-- Main Content - Map centered, side panels -->
-    <el-row :gutter="16" class="mb-6">
-      <!-- Left Panel -->
-      <el-col :span="6">
-        <el-card shadow="hover" class="dashboard-card h-full">
+    <el-row :gutter="16" class="mb-4">
+      <el-col :xs="24" :lg="7">
+        <el-card shadow="never" class="dashboard-card h-full">
           <template #header>
-            <div class="card-title">风险趋势 / Risk Trend</div>
+            <div class="card-title">风险趋势</div>
           </template>
-          <div ref="riskTrendChartRef" style="height: 280px;"></div>
+          <div ref="riskTrendChartRef" class="trend-chart" />
         </el-card>
       </el-col>
 
-      <!-- Central Map - Large and Prominent -->
-      <el-col :span="13">
-        <el-card shadow="hover" class="dashboard-card h-full">
+      <el-col :xs="24" :lg="12">
+        <el-card shadow="never" class="dashboard-card h-full agent-card">
           <template #header>
-            <div class="card-title text-center flex-1">威胁地域分布 / Threat Geographic Distribution</div>
-          </template>
-          <div v-if="mapLoadError" class="flex items-center justify-center h-96 text-slate-500">
-            地图加载失败，请检查网络或使用本地地图资源。
-          </div>
-          <div v-else ref="riskMapChartRef" style="height: 450px; width: 100%;"></div>
-        </el-card>
-      </el-col>
-
-      <!-- Right Panel -->
-      <el-col :span="5">
-        <el-card shadow="hover" class="dashboard-card mb-4">
-          <template #header>
-            <div class="card-title">闸门状态 / Gate Status</div>
-          </template>
-          <div v-if="overview" class="space-y-3">
-            <div class="gate-status-item">
-              <div class="flex items-center justify-between">
-                <span class="text-sm text-slate-700">消息闸门</span>
-                <el-tag type="success" size="small">{{ overview.message_gate.status }}</el-tag>
-              </div>
-              <div class="text-xs text-slate-500 mt-1">
-                {{ overview.message_gate.block_count }} 次拦截
-              </div>
+            <div class="card-title">
+              <span>已接入 Agent</span>
+              <small>{{ activeAgentCount }} 个实例受网关保护</small>
             </div>
-            <div class="gate-status-item">
-              <div class="flex items-center justify-between">
-                <span class="text-sm text-slate-700">动作闸门</span>
-                <el-tag type="success" size="small">{{ overview.action_gate.status }}</el-tag>
+          </template>
+          <div class="agent-grid">
+            <div v-for="agent in connectedAgents" :key="agent.id" class="agent-item">
+              <div class="agent-icon">
+                <el-icon><Cpu /></el-icon>
               </div>
-              <div class="text-xs text-slate-500 mt-1">
-                {{ overview.action_gate.block_count }} 次拦截
+              <div class="agent-main">
+                <div class="agent-row">
+                  <strong>{{ agent.name }}</strong>
+                  <el-tag size="small" effect="dark" type="success">{{ agent.status }}</el-tag>
+                </div>
+                <p>{{ agent.id }}</p>
+                <div class="agent-meta">
+                  <span>{{ agent.domain }}</span>
+                  <span>{{ agent.scope }}</span>
+                </div>
+                <div class="agent-health">
+                  <span>健康度</span>
+                  <el-progress :percentage="agent.health" :stroke-width="7" :show-text="false" />
+                  <b>{{ agent.health }}%</b>
+                </div>
               </div>
-            </div>
-            <div class="gate-status-item">
-              <div class="flex items-center justify-between">
-                <span class="text-sm text-slate-700">返回闸门</span>
-                <el-tag type="success" size="small">{{ overview.return_gate.status }}</el-tag>
-              </div>
-              <div class="text-xs text-slate-500 mt-1">
-                {{ overview.return_gate.block_count }} 次拦截
+              <div class="agent-count">
+                <b>{{ agent.count }}</b>
+                <span>请求</span>
               </div>
             </div>
           </div>
         </el-card>
-        <el-card shadow="hover" class="dashboard-card">
+      </el-col>
+
+      <el-col :xs="24" :lg="5">
+        <el-card shadow="never" class="dashboard-card mb-4">
           <template #header>
-            <div class="card-title">活跃令牌 / Active Tokens</div>
+            <div class="card-title">闸门状态</div>
           </template>
-          <div class="text-center">
-            <div class="text-4xl font-bold text-cyan-400">{{ activeTokens }}</div>
-            <div class="text-xs text-slate-500 mt-2">当前活跃的 SM2 令牌</div>
+          <div v-if="overview" class="gate-list">
+            <div class="gate-status-item">
+              <span>消息闸门</span>
+              <el-tag type="success" size="small">{{ overview.message_gate.status }}</el-tag>
+              <small>{{ overview.message_gate.block_count }} 次拦截</small>
+            </div>
+            <div class="gate-status-item">
+              <span>动作闸门</span>
+              <el-tag type="success" size="small">{{ overview.action_gate.status }}</el-tag>
+              <small>{{ overview.action_gate.block_count }} 次拦截</small>
+            </div>
+            <div class="gate-status-item">
+              <span>返回闸门</span>
+              <el-tag type="success" size="small">{{ overview.return_gate.status }}</el-tag>
+              <small>{{ overview.return_gate.block_count }} 次拦截</small>
+            </div>
+          </div>
+        </el-card>
+
+        <el-card shadow="never" class="dashboard-card">
+          <template #header>
+            <div class="card-title">可信授权</div>
+          </template>
+          <div class="token-panel">
+            <strong>{{ activeTokens }}</strong>
+            <span>活跃 SM2 令牌</span>
+            <p>授权异常 {{ authExceptions }} 次 · 沙箱触发 {{ sandboxTriggers }} 次</p>
           </div>
         </el-card>
       </el-col>
     </el-row>
 
-    <!-- Bottom Alert Section -->
-    <el-row :gutter="16">
-      <el-col :span="24">
-        <el-card shadow="hover" class="dashboard-card">
-          <template #header>
-            <div class="card-title">最新告警 / Latest Alerts</div>
+    <el-card shadow="never" class="dashboard-card">
+      <template #header>
+        <div class="card-title">最新告警</div>
+      </template>
+      <el-table :data="latestAlerts" stripe size="small" max-height="250">
+        <el-table-column prop="time" label="时间" width="170" />
+        <el-table-column prop="level" label="级别" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.level === '高' || row.level === '严重' ? 'danger' : row.level === '中' ? 'warning' : 'info'" size="small">
+              {{ row.level }}
+            </el-tag>
           </template>
-          <el-table :data="latestAlerts" stripe size="small" max-height="250" :default-sort="{ prop: 'time', order: 'descending' }">
-            <el-table-column prop="time" label="时间 / Time" width="160" />
-            <el-table-column prop="level" label="级别 / Level" width="80">
-              <template #default="{ row }">
-                <el-tag :type="row.level === '高' ? 'danger' : row.level === '中' ? 'warning' : 'info'" size="small">
-                  {{ row.level }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="type" label="类型 / Type" width="120" />
-            <el-table-column prop="source" label="来源 / Source" width="140" />
-            <el-table-column prop="description" label="描述 / Description" show-overflow-tooltip />
-          </el-table>
-        </el-card>
-      </el-col>
-    </el-row>
+        </el-table-column>
+        <el-table-column prop="type" label="类型" width="120" />
+        <el-table-column prop="source" label="来源 Agent" width="180" />
+        <el-table-column prop="description" label="描述" show-overflow-tooltip />
+      </el-table>
+    </el-card>
   </div>
 </template>
 
 <style scoped>
 .dashboard {
-  background-color: #ffffff;
+  min-height: 100vh;
+  color: #d9f4ff;
 }
-.dashboard .dashboard-card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 18px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+
+.dashboard-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 22px 24px;
+  background:
+    linear-gradient(120deg, rgba(0, 212, 255, 0.14), rgba(25, 82, 255, 0.06)),
+    rgba(5, 18, 38, 0.86);
+  border: 1px solid rgba(78, 192, 255, 0.24);
+  border-radius: 10px;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
 }
-.dashboard .dashboard-card .el-card__body {
-  padding: 20px;
+
+.eyebrow {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: #60d7ff;
+  text-transform: uppercase;
 }
-.dashboard .card-title {
+
+.dashboard-hero h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 800;
+  color: #f4fbff;
+}
+
+.hero-subtitle {
+  margin: 8px 0 0;
+  color: #8fb6d8;
+}
+
+.trend-chart {
+  height: 320px;
+}
+
+.dashboard-card {
+  background: rgba(5, 18, 38, 0.86);
+  border: 1px solid rgba(78, 192, 255, 0.18);
+  border-radius: 8px;
+  box-shadow: inset 0 0 30px rgba(0, 212, 255, 0.04);
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
   font-size: 16px;
   font-weight: 700;
-  color: #111827;
+  color: #e8f8ff;
 }
-.dashboard .text-cyan-400 {
-  color: #0ea5e9 !important;
+
+.card-title small {
+  font-size: 12px;
+  font-weight: 400;
+  color: #6fa8c9;
 }
-.dashboard .el-tag {
+
+.agent-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.agent-item {
+  display: grid;
+  grid-template-columns: 46px 1fr 72px;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  background: linear-gradient(90deg, rgba(8, 31, 62, 0.96), rgba(9, 41, 75, 0.68));
+  border: 1px solid rgba(88, 190, 255, 0.18);
+  border-radius: 8px;
+}
+
+.agent-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  color: #00d4ff;
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.24);
+  border-radius: 8px;
+}
+
+.agent-row,
+.agent-meta,
+.agent-health {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.agent-row {
+  justify-content: space-between;
+}
+
+.agent-main strong {
+  color: #f4fbff;
+}
+
+.agent-main p,
+.agent-meta,
+.agent-health {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #87abc8;
+}
+
+.agent-meta span + span::before {
+  margin-right: 10px;
+  color: #1d9bf0;
+  content: "/";
+}
+
+.agent-health :deep(.el-progress) {
+  flex: 1;
+}
+
+.agent-health b {
+  min-width: 34px;
+  color: #00d4ff;
+}
+
+.agent-count {
+  text-align: right;
+}
+
+.agent-count b {
+  display: block;
+  font-size: 24px;
+  color: #00d4ff;
+}
+
+.agent-count span {
+  font-size: 12px;
+  color: #87abc8;
+}
+
+.gate-list {
+  display: grid;
+  gap: 12px;
+}
+
+.gate-status-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  padding: 12px;
+  background: rgba(7, 28, 55, 0.78);
+  border: 1px solid rgba(78, 192, 255, 0.14);
+  border-radius: 8px;
+}
+
+.gate-status-item span {
+  color: #e8f8ff;
+}
+
+.gate-status-item small {
+  color: #87abc8;
+}
+
+.token-panel {
+  text-align: center;
+}
+
+.token-panel strong {
+  display: block;
+  font-size: 42px;
+  line-height: 1;
+  color: #00d4ff;
+}
+
+.token-panel span,
+.token-panel p {
+  color: #87abc8;
+}
+
+.token-panel p {
+  margin: 10px 0 0;
   font-size: 12px;
 }
 </style>

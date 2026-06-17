@@ -41,6 +41,12 @@ defineProps<{
 <style scoped>
 .stat-card {
   cursor: default;
+  background:
+    linear-gradient(135deg, rgb(0 212 255 / 9%), transparent 42%),
+    rgba(5, 18, 38, 0.9);
+  border: 1px solid rgb(78 192 255 / 18%);
+  border-radius: 8px;
+  box-shadow: inset 0 0 28px rgb(0 212 255 / 4%);
 }
 
 .stat-card__header {
@@ -52,20 +58,21 @@ defineProps<{
 
 .stat-card__title {
   font-size: 14px;
-  color: var(--el-text-color-secondary);
+  color: #8fb6d8;
 }
 
 .stat-card__value {
   font-size: 28px;
   font-weight: 700;
   line-height: 1.2;
+  text-shadow: 0 0 18px rgb(0 212 255 / 18%);
 }
 
 .stat-card__suffix {
   font-size: 14px;
   font-weight: 400;
   margin-left: 4px;
-  color: var(--el-text-color-secondary);
+  color: #8fb6d8;
 }
 
 .stat-card__trend {
