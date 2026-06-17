@@ -151,15 +151,35 @@ function renderMetricsChart() {
   }
 
   chartInstance.setOption({
-    title: { text: "告警趋势 / Alert Trend", left: "center" },
-    tooltip: { trigger: "axis" },
-    legend: { data: ["告警数 / Alerts", "拦截数 / Blocks"], bottom: 0 },
+    title: {
+      text: "告警趋势 / Alert Trend",
+      left: "center",
+      textStyle: { color: "#e8f8ff", fontWeight: 700 }
+    },
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: "rgba(4, 18, 38, 0.94)",
+      borderColor: "#1d9bf0",
+      textStyle: { color: "#d9f4ff" }
+    },
+    legend: {
+      data: ["告警数 / Alerts", "拦截数 / Blocks"],
+      bottom: 0,
+      textStyle: { color: "#b7dfff", fontWeight: 600 }
+    },
     xAxis: {
       type: "category",
       data: summaries.value.map(s => s.run_id.substring(0, 10) + "..."),
-      axisLabel: { rotate: 30, fontSize: 10 }
+      axisLine: { lineStyle: { color: "rgba(159, 223, 255, 0.52)" } },
+      axisLabel: { rotate: 30, fontSize: 10, color: "#b7dfff", fontWeight: 600 }
     },
-    yAxis: { type: "value", name: "数量 / Count" },
+    yAxis: {
+      type: "value",
+      name: "数量 / Count",
+      nameTextStyle: { color: "#b7dfff", fontWeight: 600 },
+      axisLabel: { color: "#b7dfff", fontWeight: 600 },
+      splitLine: { lineStyle: { color: "rgba(159, 223, 255, 0.18)" } }
+    },
     series: [
       {
         name: "告警数 / Alerts",
@@ -196,9 +216,23 @@ function renderLatencyChart() {
     : [{ name: "暂无数据", value: 1 }];
 
   latencyChartInstance.setOption({
-    title: { text: "攻击类型 ASR 分布 / Attack Type ASR Distribution", left: "center" },
-    tooltip: { trigger: "item", formatter: "{a} <br/>{b}: {c}% ({d}%)" },
-    legend: { orient: "vertical", left: "left" },
+    title: {
+      text: "攻击类型 ASR 分布 / Attack Type ASR Distribution",
+      left: "center",
+      textStyle: { color: "#e8f8ff", fontWeight: 700 }
+    },
+    tooltip: {
+      trigger: "item",
+      formatter: "{a} <br/>{b}: {c}% ({d}%)",
+      backgroundColor: "rgba(4, 18, 38, 0.94)",
+      borderColor: "#1d9bf0",
+      textStyle: { color: "#d9f4ff" }
+    },
+    legend: {
+      orient: "vertical",
+      left: "left",
+      textStyle: { color: "#b7dfff", fontWeight: 600 }
+    },
     series: [
       {
         name: "攻击类型",
@@ -308,16 +342,29 @@ function renderRankingChart() {
     : [{ name: "暂无数据", alerts: 0 }];
 
   rankingChartInstance.setOption({
-    title: { text: '测试用例排行 / Test Case Ranking', left: 'center' },
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    title: {
+      text: '测试用例排行 / Test Case Ranking',
+      left: 'center',
+      textStyle: { color: "#e8f8ff", fontWeight: 700 }
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      backgroundColor: "rgba(4, 18, 38, 0.94)",
+      borderColor: "#1d9bf0",
+      textStyle: { color: "#d9f4ff" }
+    },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: {
       type: 'value',
-      boundaryGap: [0, 0.01]
+      boundaryGap: [0, 0.01],
+      axisLabel: { color: "#b7dfff", fontWeight: 600 },
+      splitLine: { lineStyle: { color: "rgba(159, 223, 255, 0.18)" } }
     },
     yAxis: {
       type: 'category',
-      data: rankingData.map(item => item.name)
+      data: rankingData.map(item => item.name),
+      axisLabel: { color: "#b7dfff", fontWeight: 600 }
     },
     series: [
       {

@@ -145,9 +145,22 @@ function renderAlertTypeChart() {
     : [{ name: "暂无数据", value: 1 }];
 
   alertTypeChart.setOption({
-    title: { text: "告警类型分布 / Alert Type Distribution", left: "center" },
-    tooltip: { trigger: "item" },
-    legend: { orient: "vertical", left: "left" },
+    title: {
+      text: "告警类型分布 / Alert Type Distribution",
+      left: "center",
+      textStyle: { color: "#e8f8ff", fontWeight: 700 }
+    },
+    tooltip: {
+      trigger: "item",
+      backgroundColor: "rgba(4, 18, 38, 0.94)",
+      borderColor: "#1d9bf0",
+      textStyle: { color: "#d9f4ff" }
+    },
+    legend: {
+      orient: "vertical",
+      left: "left",
+      textStyle: { color: "#b7dfff", fontWeight: 600 }
+    },
     series: [
       {
         name: "告警类型",
@@ -157,6 +170,8 @@ function renderAlertTypeChart() {
           value: item.value,
           name: item.name
         })),
+        label: { color: "#d9f4ff", fontWeight: 600 },
+        labelLine: { lineStyle: { color: "#8fb6d8" } },
         emphasis: {
           itemStyle: {
             shadowBlur: 10,
@@ -179,14 +194,34 @@ function renderAlertTrendChart() {
     : [{ time: "暂无", high: 0, medium: 0, low: 0 }];
 
   alertTrendChart.setOption({
-    title: { text: "告警时间趋势 / Alert Time Trend", left: "center" },
-    tooltip: { trigger: "axis" },
-    legend: { data: ["高风险", "中风险", "低风险"], bottom: 0 },
+    title: {
+      text: "告警时间趋势 / Alert Time Trend",
+      left: "center",
+      textStyle: { color: "#e8f8ff", fontWeight: 700 }
+    },
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: "rgba(4, 18, 38, 0.94)",
+      borderColor: "#1d9bf0",
+      textStyle: { color: "#d9f4ff" }
+    },
+    legend: {
+      data: ["高风险", "中风险", "低风险"],
+      bottom: 0,
+      textStyle: { color: "#b7dfff", fontWeight: 600 }
+    },
     xAxis: {
       type: "category",
-      data: data.map(d => d.time)
+      data: data.map(d => d.time),
+      axisLine: { lineStyle: { color: "rgba(159, 223, 255, 0.52)" } },
+      axisLabel: { color: "#b7dfff", fontWeight: 600 }
     },
-    yAxis: { type: "value" },
+    yAxis: {
+      type: "value",
+      axisLine: { lineStyle: { color: "rgba(159, 223, 255, 0.52)" } },
+      axisLabel: { color: "#b7dfff", fontWeight: 600 },
+      splitLine: { lineStyle: { color: "rgba(159, 223, 255, 0.18)" } }
+    },
     series: [
       {
         name: "高风险",

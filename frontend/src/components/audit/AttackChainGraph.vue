@@ -58,6 +58,8 @@ function buildGraphData(events: AuditEvent[]) {
       label: {
         show: true,
         fontSize: 10,
+        color: "#e8f8ff",
+        fontWeight: 700,
         formatter: eventTypeLabels[event.event_type] || event.event_type
       },
       // 保存原始数据用于 tooltip
@@ -119,7 +121,7 @@ function renderChart() {
               <div>风险分数: <span style="color: ${(event.risk_score || 0) >= 60 ? '#ef4444' : '#22c55e'}">${event.risk_score || 0}</span></div>
               <div>决策: <span style="color: ${event.decision === 'Allow' ? '#22c55e' : '#ef4444'}">${event.decision}</span></div>
               <div>时间: ${new Date(event.timestamp).toLocaleTimeString()}</div>
-              <div style="margin-top: 4px; color: #666; max-width: 200px; white-space: normal;">${event.description || ''}</div>
+              <div style="margin-top: 4px; color: #b7dfff; max-width: 200px; white-space: normal;">${event.description || ''}</div>
             </div>
           `;
         }

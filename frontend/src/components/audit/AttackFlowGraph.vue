@@ -84,11 +84,11 @@ function buildFlowData(steps: AttackStep[]) {
         name: {
           fontSize: 12,
           fontWeight: "bold",
-          color: "#333"
+          color: "#e8f8ff"
         },
         type: {
           fontSize: 10,
-          color: "#666"
+          color: "#b7dfff"
         }
       }
     },
@@ -115,7 +115,7 @@ function buildFlowData(steps: AttackStep[]) {
         formatter: "已阻断",
         fontSize: 10,
         color: "#ef4444",
-        backgroundColor: "#fef2f2",
+        backgroundColor: "rgba(255, 77, 125, 0.14)",
         padding: [2, 6],
         borderRadius: 4
       },
@@ -166,7 +166,7 @@ function renderChart() {
               <div style="margin-bottom: 4px;">
                 决策: <span style="color: ${step.decision === 'Allow' ? '#22c55e' : '#ef4444'}; font-weight: bold;">${step.decision}</span>
               </div>
-              <div style="margin-bottom: 8px; color: #666;">${step.description}</div>
+              <div style="margin-bottom: 8px; color: #b7dfff;">${step.description}</div>
               ${features.length ? `<div style="border-top: 1px solid rgba(78,192,255,.22); padding-top: 8px; margin-top: 8px;">${features.map(f => `<div style="font-size: 12px; margin-bottom: 2px;">${f}</div>`).join('')}</div>` : ''}
               ${step.reason ? `<div style="border-top: 1px solid rgba(78,192,255,.22); padding-top: 8px; margin-top: 8px; color: #ff4d7d; font-size: 12px;">原因: ${step.reason}</div>` : ''}
             </div>

@@ -336,15 +336,6 @@ function renderRiskTrendChart() {
     </el-row>
 
     <el-row :gutter="16" class="mb-4">
-      <el-col :xs="24" :lg="7">
-        <el-card shadow="never" class="dashboard-card h-full">
-          <template #header>
-            <div class="card-title">风险趋势</div>
-          </template>
-          <div ref="riskTrendChartRef" class="trend-chart" />
-        </el-card>
-      </el-col>
-
       <el-col :xs="24" :lg="12">
         <el-card shadow="never" class="dashboard-card h-full agent-card">
           <template #header>
@@ -380,6 +371,15 @@ function renderRiskTrendChart() {
               </div>
             </div>
           </div>
+        </el-card>
+      </el-col>
+
+      <el-col :xs="24" :lg="7">
+        <el-card shadow="never" class="dashboard-card h-full">
+          <template #header>
+            <div class="card-title">风险趋势</div>
+          </template>
+          <div ref="riskTrendChartRef" class="trend-chart" />
         </el-card>
       </el-col>
 
