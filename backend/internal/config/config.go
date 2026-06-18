@@ -4,22 +4,26 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/subosito/gotenv"
 )
 
 type Config struct {
-	RootDir           string
-	BackendDir        string
-	FrontendDir       string
-	AuditFile         string
-	UserDBPath        string
-	Port              string
-	LangGraphChatURL  string
-	AssistantAPIBase  string
-	AssistantAPIKey   string
-	AssistantModel    string
-	SigningPrivateKey string
-	UserTokenSecret   string
-	TokenMode         string
+	RootDir                  string
+	BackendDir               string
+	FrontendDir              string
+	AuditFile                string
+	UserDBPath               string
+	Port                     string
+	LangGraphChatURL         string
+	AssistantAPIBase         string
+	AssistantAPIKey          string
+	AssistantModel           string
+	AssistantReasoningEffort string
+	AssistantThinkingType    string
+	SigningPrivateKey        string
+	UserTokenSecret          string
+	TokenMode                string
 
 	GatewayConfigPath string
 	LogLevel          string
@@ -55,6 +59,8 @@ func resolveRootDir() string {
 
 func Load() Config {
 	rootDir := resolveRootDir()
+	_ = gotenv.Load(filepath.Join(rootDir, ".env"))
+
 	backendDir := filepath.Join(rootDir, "backend")
 
 	port := getEnv("PORT", "8090")
@@ -62,6 +68,8 @@ func Load() Config {
 	assistantAPIBase := getEnv("AEGIS_ASSISTANT_API_BASE", "https://api.siliconflow.cn/v1")
 	assistantAPIKey := getEnv("AEGIS_ASSISTANT_API_KEY", "")
 	assistantModel := getEnv("AEGIS_ASSISTANT_MODEL", "Qwen/Qwen3.5-9B")
+	assistantReasoningEffort := getEnv("AEGIS_ASSISTANT_REASONING_EFFORT", "")
+	assistantThinkingType := getEnv("AEGIS_ASSISTANT_THINKING_TYPE", "")
 	auditFile := getEnv("AEGIS_AUDIT_FILE", filepath.Join(backendDir, "data", "audit-store.jsonl"))
 	userDBPath := getEnv("AEGIS_USER_DB_PATH", filepath.Join(backendDir, "data", "aegisguard-users.db"))
 	gatewayConfigPath := getEnv("AEGIS_GATEWAY_CONFIG", filepath.Join(backendDir, "config", "gateway.yaml"))
@@ -76,27 +84,29 @@ func Load() Config {
 	sqliteWALMode := strings.EqualFold(getEnv("AEGIS_SQLITE_WAL_MODE", "true"), "true")
 
 	return Config{
-		RootDir:           rootDir,
-		BackendDir:        backendDir,
-		FrontendDir:       filepath.Join(rootDir, "frontend"),
-		AuditFile:         auditFile,
-		UserDBPath:        userDBPath,
-		Port:              port,
-		LangGraphChatURL:  langGraphChatURL,
-		AssistantAPIBase:  strings.TrimRight(assistantAPIBase, "/"),
-		AssistantAPIKey:   assistantAPIKey,
-		AssistantModel:    assistantModel,
-		SigningPrivateKey: getEnv("AEGIS_SIGNING_PRIVATE_KEY", ""),
-		UserTokenSecret:   getEnv("AEGIS_USER_TOKEN_SECRET", "aegisguard-dev-user-secret"),
-		TokenMode:         tokenMode,
-		GatewayConfigPath: gatewayConfigPath,
-		LogLevel:          logLevel,
-		LogEncoding:       logEncoding,
-		PolicyMode:        policyMode,
-		DevMode:           devMode,
-		AuditStorageMode:  auditStorageMode,
-		AuditDBPath:       auditDBPath,
-		SQLiteWALMode:     sqliteWALMode,
+		RootDir:                  rootDir,
+		BackendDir:               backendDir,
+		FrontendDir:              filepath.Join(rootDir, "frontend"),
+		AuditFile:                auditFile,
+		UserDBPath:               userDBPath,
+		Port:                     port,
+		LangGraphChatURL:         langGraphChatURL,
+		AssistantAPIBase:         strings.TrimRight(assistantAPIBase, "/"),
+		AssistantAPIKey:          assistantAPIKey,
+		AssistantModel:           assistantModel,
+		AssistantReasoningEffort: assistantReasoningEffort,
+		AssistantThinkingType:    assistantThinkingType,
+		SigningPrivateKey:        getEnv("AEGIS_SIGNING_PRIVATE_KEY", ""),
+		UserTokenSecret:          getEnv("AEGIS_USER_TOKEN_SECRET", "aegisguard-dev-user-secret"),
+		TokenMode:                tokenMode,
+		GatewayConfigPath:        gatewayConfigPath,
+		LogLevel:                 logLevel,
+		LogEncoding:              logEncoding,
+		PolicyMode:               policyMode,
+		DevMode:                  devMode,
+		AuditStorageMode:         auditStorageMode,
+		AuditDBPath:              auditDBPath,
+		SQLiteWALMode:            sqliteWALMode,
 	}
 }
 

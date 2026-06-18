@@ -23,6 +23,7 @@ export const chatWithAssistant = (data: {
   return http.request<ApiResult<AssistantChatResponse>>(
     "post",
     "/api/assistant/chat",
-    { data }
+    { data },
+    { timeout: 60000 }
   );
 };

@@ -79,6 +79,13 @@ var Agents = []Agent{
 
 var AttackFamilies = []AttackFamily{
 	{
+		ID:       "clean",
+		Name:     "Clean Baseline",
+		Target:   "Normal agent task execution without injected attack content",
+		Variants: []string{"ASB clean config"},
+		Gate:     "Message Gate",
+	},
+	{
 		ID:       "dpi",
 		Name:     "Direct Prompt Injection",
 		Target:   "User query and instruction hierarchy",

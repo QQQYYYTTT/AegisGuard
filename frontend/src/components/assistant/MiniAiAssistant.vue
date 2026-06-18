@@ -101,16 +101,25 @@ async function askAssistant(displayText: string, modelPrompt: string) {
     const res = await chatWithAssistant({ message: modelPrompt, messages: history });
     const reply = res?.data?.message || res?.message || getLocalReply(modelPrompt);
     messages.value.push({ role: "assistant", content: reply });
-  } catch {
+  } catch (error: any) {
+    const reason = getAssistantErrorReason(error);
     messages.value.push({
       role: "assistant",
-      content: `${getLocalReply(modelPrompt)}\n\n提示：在线模型暂未返回，已使用本地规则和页面数据兜底。请确认后端进程配置了 AEGIS_ASSISTANT_API_KEY。`
+      content: `${getLocalReply(modelPrompt)}\n\n提示：在线模型调用失败，已使用本地规则和页面数据兜底。原因：${reason}`
     });
   } finally {
     sending.value = false;
     statusText.value = "";
     nextTick(scrollToBottom);
   }
+}
+
+function getAssistantErrorReason(error: any) {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    "unknown error"
+  );
 }
 
 function buildHistory(): AssistantMessage[] {

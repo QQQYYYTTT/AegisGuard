@@ -29,10 +29,17 @@ type assistantChatResponse struct {
 }
 
 type openAIChatRequest struct {
-	Model       string             `json:"model"`
-	Messages    []assistantMessage `json:"messages"`
-	Temperature float64            `json:"temperature"`
-	MaxTokens   int                `json:"max_tokens"`
+	Model           string             `json:"model"`
+	Messages        []assistantMessage `json:"messages"`
+	Stream          bool               `json:"stream"`
+	Temperature     float64            `json:"temperature"`
+	MaxTokens       int                `json:"max_tokens"`
+	ReasoningEffort string             `json:"reasoning_effort,omitempty"`
+	Thinking        *assistantThinking `json:"thinking,omitempty"`
+}
+
+type assistantThinking struct {
+	Type string `json:"type"`
 }
 
 type openAIChatResponse struct {
@@ -115,8 +122,15 @@ func (r *Router) callAssistantAPI(c *gin.Context, messages []assistantMessage) (
 	payload := openAIChatRequest{
 		Model:       r.cfg.AssistantModel,
 		Messages:    messages,
+		Stream:      false,
 		Temperature: 0.2,
 		MaxTokens:   512,
+	}
+	if reasoningEffort := strings.TrimSpace(r.cfg.AssistantReasoningEffort); reasoningEffort != "" {
+		payload.ReasoningEffort = reasoningEffort
+	}
+	if thinkingType := strings.TrimSpace(r.cfg.AssistantThinkingType); thinkingType != "" {
+		payload.Thinking = &assistantThinking{Type: thinkingType}
 	}
 
 	body, err := json.Marshal(payload)
@@ -133,7 +147,7 @@ func (r *Router) callAssistantAPI(c *gin.Context, messages []assistantMessage) (
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
