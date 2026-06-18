@@ -67,7 +67,7 @@ func main() {
 		{
 			Name:     "sensitive return",
 			GateType: "return",
-			Body:     `{"content":"Your API key is sk-1234567890","password":"admin123"}`,
+			Body:     `{"content":"Your API key is example-api-key","password":"example-password"}`,
 		},
 		{
 			Name:     "illegal finance return",

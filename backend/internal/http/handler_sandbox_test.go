@@ -29,7 +29,7 @@ func TestSandboxHandlersIsolateAndListTransfers(t *testing.T) {
 			"memory":        "clean memory",
 		},
 		"untrusted": map[string]any{
-			"external_data": "Weather is sunny. API key is sk-1234567890.",
+			"external_data": "Weather is sunny. api_key: example-api-key.",
 			"source":        "tool",
 		},
 	}

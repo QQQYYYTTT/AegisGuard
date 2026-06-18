@@ -217,7 +217,7 @@ Copy-Item backend\config\gateway.yaml.example backend\config\gateway.yaml
 ```yaml
 gateway_key: agk-dev-001
 target_url: https://api.openai.com
-llm_api_key: sk-your-real-llm-api-key-here
+llm_api_key: your-llm-api-key-here
 ```
 
 字段说明：
@@ -387,7 +387,7 @@ curl -X POST http://localhost:8090/aegis/gate/evaluate `
 ```powershell
 curl -X POST http://localhost:8090/aegis/gate/evaluate `
   -H "Content-Type: application/json" `
-  -d "{\"type\":\"return\",\"content\":\"用户手机号是 13800138000，API Key 是 sk-test-123456.\"}"
+  -d "{\"type\":\"return\",\"content\":\"用户手机号是 example-phone-number，API Key 是 example-api-key.\"}"
 ```
 
 ### 4. 网关代理调用

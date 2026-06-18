@@ -130,7 +130,7 @@ var ScenarioTemplates = map[string]ScenarioTemplate{
 		ToolName:       "experiments/asb/run_asb.py",
 		Scope:          "benchmark.run",
 		RequestedScope: "benchmark.run",
-		RawResult:      "python .\\experiments\\asb\\run_asb.py --asb-root F:\\2026信安赛\\ASB --attack opi --run-id asb-opi-v1",
+		RawResult:      "python .\\experiments\\asb\\run_asb.py --asb-root ..\\ASB --attack opi --run-id asb-opi-v1",
 	},
 	"asb-convert": {
 		UserGoal:       "Convert ASB output files into the AegisGuard evaluation schema.",
@@ -139,7 +139,7 @@ var ScenarioTemplates = map[string]ScenarioTemplate{
 		ToolName:       "experiments/asb/collect_results.py",
 		Scope:          "benchmark.convert",
 		RequestedScope: "benchmark.convert",
-		RawResult:      "python .\\experiments\\asb\\collect_results.py --input F:\\2026信安赛\\ASB\\logs --attack opi --run-id asb-opi-v1",
+		RawResult:      "python .\\experiments\\asb\\collect_results.py --input ..\\ASB\\logs --attack opi --run-id asb-opi-v1",
 	},
 }
 

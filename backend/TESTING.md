@@ -195,7 +195,7 @@ backend/config/gateway.yaml
 ```yaml
 gateway_key: agk-demo-key
 target_url: https://your-model-endpoint.example/v1
-llm_api_key: sk-your-real-key
+llm_api_key: your-llm-api-key
 ```
 
 ### 4.2 启动服务
@@ -244,7 +244,7 @@ curl -X POST http://localhost:8090/aegis/gate/evaluate `
 ```powershell
 curl -X POST http://localhost:8090/aegis/gate/evaluate `
   -H "Content-Type: application/json" `
-  -d '{"type":"return","content":"API key is sk-12345678901234567890"}'
+  -d '{"type":"return","content":"API key is example-api-key"}'
 ```
 
 ### 5.4 查看统计与历史
@@ -300,7 +300,7 @@ API_BASE=http://localhost:8090/aegis bash test-gates-api.sh all
 ```yaml
 gateway_key: agk-demo-key
 target_url: https://your-model-endpoint.example/v1
-llm_api_key: sk-your-real-key
+llm_api_key: your-llm-api-key
 ```
 
 ### 2. 启动服务

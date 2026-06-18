@@ -11,7 +11,7 @@ $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUTF8 = "1"
 
 # 项目根目录
-$ProjectRoot = "f:\2026信安赛\AegisGuard"
+$ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ProjectRoot
 
 # 日志输出根目录

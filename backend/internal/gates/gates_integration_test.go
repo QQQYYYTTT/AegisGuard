@@ -179,8 +179,8 @@ func TestReturnGateFiltering(t *testing.T) {
 	gate := NewReturnGate()
 
 	sensitiveResponse := []byte(`{
-		"content": "Your API key is sk-1234567890",
-		"password": "admin123"
+		"content": "api_key: example-api-key",
+		"password": "example-password"
 	}`)
 
 	result := gate.Evaluate(sensitiveResponse)
@@ -194,10 +194,10 @@ func TestReturnGateFiltering(t *testing.T) {
 	t.Logf("Filtered: %s", string(filtered))
 
 	// 验证敏感信息被替换
-	if bytes.Contains(filtered, []byte("sk-1234567890")) {
+	if bytes.Contains(filtered, []byte("example-api-key")) {
 		t.Error("API key should be redacted")
 	}
-	if bytes.Contains(filtered, []byte("admin123")) {
+	if bytes.Contains(filtered, []byte("example-password")) {
 		t.Error("Password should be redacted")
 	}
 }
