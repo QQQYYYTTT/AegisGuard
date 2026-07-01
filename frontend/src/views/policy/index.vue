@@ -265,7 +265,7 @@ const ruleFormRules = {
                   size="small"
                   link
                   type="danger"
-                  :disabled="row.id.startsWith('rule-') && !row.id.startsWith('rule-custom-')"
+                  :disabled="!row.id.startsWith('rule-custom-')"
                   @click="handleDelete(row)"
                 >
                   删除

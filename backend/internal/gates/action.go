@@ -31,6 +31,10 @@ func NewActionGate(logger *zap.Logger) *ActionGate {
 }
 
 func NewActionGateWithMode(logger *zap.Logger, tokenMode string) *ActionGate {
+	return NewActionGateWithRuntime(logger, tokenMode, nil)
+}
+
+func NewActionGateWithRuntime(logger *zap.Logger, tokenMode string, runtime *PolicyRuntime) *ActionGate {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -38,7 +42,7 @@ func NewActionGateWithMode(logger *zap.Logger, tokenMode string) *ActionGate {
 		verifier:     auth.NewVerifier(),
 		enableBatch:  false,
 		logger:       logger,
-		policyEngine: NewPolicyEngine(),
+		policyEngine: NewPolicyEngineWithRuntime(runtime),
 		tokenMode:    normalizeTokenMode(tokenMode),
 	}
 }
@@ -93,10 +97,11 @@ func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, h
 	contentSummary := ag.extractContentSummary(params)
 	var score int
 	var rules []string
+	var ruleAction Decision
 	if ag.dynamicRuleRouting {
-		score, rules = ag.policyEngine.ScoreForTool(toolName, toolName+"\n"+contentSummary)
+		score, rules, ruleAction = ag.policyEngine.ScoreForGateAndTool("action", toolName, toolName+"\n"+contentSummary, true)
 	} else {
-		score, rules = ag.policyEngine.Score(toolName + "\n" + contentSummary)
+		score, rules, ruleAction = ag.policyEngine.ScoreForGateAndTool("action", toolName, toolName+"\n"+contentSummary, false)
 	}
 	if hasRuleFromList(rules, "memory_poisoning") {
 		ag.logger.Warn("action blocked: memory poisoning detected",
@@ -121,6 +126,12 @@ func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, h
 			zap.Strings("rules", rules),
 		)
 		return makeEvaluateResult(Deny, "action combines prompt-injection markers with privileged or sensitive operation", score, rules)
+	}
+	if ruleAction == Deny && ag.policyEngine.ShouldHumanReview(score) {
+		return makeEvaluateResult(Deny, "action denied by policy rule", score, rules)
+	}
+	if ruleAction == Block && ag.policyEngine.ShouldHumanReview(score) {
+		return makeEvaluateResult(Block, "action blocked by policy rule", score, rules)
 	}
 	if hasRuleFromList(rules, "high_impact_action") || ag.policyEngine.ShouldHumanReview(score) {
 		ag.logger.Info("action requires human approval",

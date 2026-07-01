@@ -14,21 +14,31 @@ type ReturnGate struct {
 
 // NewReturnGate 创建返回门控
 func NewReturnGate() *ReturnGate {
+	return NewReturnGateWithRuntime(nil)
+}
+
+func NewReturnGateWithRuntime(runtime *PolicyRuntime) *ReturnGate {
 	return &ReturnGate{
-		policyEngine: NewPolicyEngine(),
+		policyEngine: NewPolicyEngineWithRuntime(runtime),
 	}
 }
 
 // Evaluate 评估返回结果
 func (g *ReturnGate) Evaluate(body []byte) interfaces.EvaluateResult {
 	text := extractJSONText(body, "content", "text", "message", "output", "tool_calls", "function_call")
-	score, rules := g.policyEngine.Score(text)
+	score, rules, ruleAction := g.policyEngine.ScoreForGate("return", text)
 
 	if hasRuleFromList(rules, "memory_poisoning") {
 		return makeEvaluateResult(Block, "return contains memory or instruction contamination", score, rules)
 	}
 	if hasRuleFromList(rules, "illegal_finance") {
 		return makeEvaluateResult(Deny, "return contains prohibited financial misconduct content", score, rules)
+	}
+	if ruleAction == Deny && g.policyEngine.ShouldHumanReview(score) {
+		return makeEvaluateResult(Deny, "return denied by policy rule", score, rules)
+	}
+	if ruleAction == Block && g.policyEngine.ShouldHumanReview(score) {
+		return makeEvaluateResult(Block, "return blocked by policy rule", score, rules)
 	}
 	if hasRuleFromList(rules, "sensitive_access") || hasRuleFromList(rules, "prompt_injection") {
 		return makeEvaluateResult(Degrade, "return contains sensitive or contaminated content and must be sanitized", score, rules)

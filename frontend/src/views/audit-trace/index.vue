@@ -204,7 +204,7 @@ function selectEvent(event: AuditEvent) {
 
 onMounted(() => {
   Promise.all([loadLogs(), loadChains(), loadStats()]).then(() => {
-    const chainParam = route.query.chain as string;
+    const chainParam = (route.query.chain || route.query.request_id) as string;
     if (chainParam) {
       const found = displayAttackChains.value.find(
         c => c.chain_id === chainParam || c.events.some(e => e.request_id === chainParam)

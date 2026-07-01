@@ -61,6 +61,10 @@ type AegisProxy struct {
 }
 
 func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIssuer, tokenMode string, dynamicRuleRouting bool, tdgSettings gates.TDGSettings, provenanceSettings gates.ProvenanceSettings, purificationEnabled bool, logger *zap.Logger) (*AegisProxy, error) {
+	return NewAegisProxyWithPolicyRuntime(targetURL, vkeyMgr, tokenIssuer, tokenMode, dynamicRuleRouting, tdgSettings, provenanceSettings, purificationEnabled, logger, nil)
+}
+
+func NewAegisProxyWithPolicyRuntime(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIssuer, tokenMode string, dynamicRuleRouting bool, tdgSettings gates.TDGSettings, provenanceSettings gates.ProvenanceSettings, purificationEnabled bool, logger *zap.Logger, policyRuntime *gates.PolicyRuntime) (*AegisProxy, error) {
 	target, err := url.Parse(targetURL)
 	if err != nil {
 		return nil, err
@@ -69,16 +73,16 @@ func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIss
 		logger = zap.NewNop()
 	}
 
-	actionGate := gates.NewActionGateWithMode(logger, tokenMode)
+	actionGate := gates.NewActionGateWithRuntime(logger, tokenMode, policyRuntime)
 	actionGate.SetDynamicRuleRouting(dynamicRuleRouting)
 	actionGate.SetTDG(tdgSettings)
 
 	ap := &AegisProxy{
 		target:            target,
 		vkeyMgr:           vkeyMgr,
-		messageGate:       gates.NewMessageGate(),
+		messageGate:       gates.NewMessageGateWithRuntime(policyRuntime),
 		actionGate:        actionGate,
-		returnGate:        gates.NewReturnGate(),
+		returnGate:        gates.NewReturnGateWithRuntime(policyRuntime),
 		tokenIssuer:       tokenIssuer,
 		decisionStore:     gates.NewDecisionStore(1000),
 		tokenMode:         normalizeGatewayTokenMode(tokenMode),
@@ -144,11 +148,30 @@ func (ap *AegisProxy) isChatCompletion(path string) bool {
 func (ap *AegisProxy) isToolCall(path string, body []byte) bool {
 	var req struct {
 		Messages []struct {
+			Role      string        `json:"role"`
 			ToolCalls []interface{} `json:"tool_calls"`
 		} `json:"messages"`
 	}
 	_ = json.Unmarshal(body, &req)
-	return strings.Contains(path, "/tools") || hasToolCalls(req.Messages)
+	return strings.Contains(path, "/tools") || hasPendingToolCalls(req.Messages)
+}
+
+func hasPendingToolCalls(messages []struct {
+	Role      string        `json:"role"`
+	ToolCalls []interface{} `json:"tool_calls"`
+}) bool {
+	for i := len(messages) - 1; i >= 0; i-- {
+		message := messages[i]
+		if len(message.ToolCalls) > 0 {
+			if strings.EqualFold(strings.TrimSpace(message.Role), "assistant") || strings.TrimSpace(message.Role) == "" {
+				return true
+			}
+		}
+		if strings.EqualFold(strings.TrimSpace(message.Role), "tool") {
+			return false
+		}
+	}
+	return false
 }
 
 func hasToolCalls(messages []struct {
@@ -635,15 +658,17 @@ func (ap *AegisProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = io.NopCloser(bytes.NewBuffer(body))
 
-	if ap.isChatCompletion(r.URL.Path) {
-		result, ok := ap.handleChatRequest(r, body)
+	if ap.isToolCall(r.URL.Path, body) {
+		result, ok := ap.handleToolCall(r, body)
 		setGateHeaders(w.Header(), result)
 		if !ok {
 			ap.writeGateResponse(w, result)
 			return
 		}
-	} else if ap.isToolCall(r.URL.Path, body) {
-		result, ok := ap.handleToolCall(r, body)
+	}
+
+	if ap.isChatCompletion(r.URL.Path) {
+		result, ok := ap.handleChatRequest(r, body)
 		setGateHeaders(w.Header(), result)
 		if !ok {
 			ap.writeGateResponse(w, result)

@@ -267,7 +267,7 @@ async function loadData() {
 
 function goToAlertDetail(row: { requestId?: string }) {
   if (row.requestId) {
-    router.push({ path: "/audit-trace/index", query: { request_id: row.requestId } });
+    router.push({ path: "/audit-trace/index", query: { chain: row.requestId } });
   } else {
     router.push({ path: "/gate-control/index" });
   }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -46,6 +47,7 @@ type Router struct {
 	tokenStore    *auth.TokenStore
 	verifier      *auth.Verifier
 	userService   *user.Service
+	policyRuntime *gates.PolicyRuntime
 	gateQuery     contract.GateQuery
 	gateEvaluator contract.GateEvaluator
 	sandboxMgr    contract.SandboxManager
@@ -120,6 +122,10 @@ func NewRouter(cfg config.Config) (*Router, error) {
 	userService := user.NewService(userRepo, cfg.UserTokenSecret)
 
 	sandboxMgr := memorysandbox.NewManager(logger)
+	policyRuntime, err := gates.NewPolicyRuntime(filepath.Join(cfg.BackendDir, "data", "policy-config.json"))
+	if err != nil {
+		return nil, err
+	}
 
 	tdgSettings := gates.TDGSettings{
 		Enabled:   cfg.TDGEnabled,
@@ -137,7 +143,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 	// 的具体生效方式，proxy 只需要知道"要不要在 Allow 分支也调用纯化"这一个布尔开关。
 	sandboxMgr.SetPurification(cfg.PurificationEnabled, cfg.PurificationMode)
 
-	proxy, err := gateway.NewAegisProxy(vkeyMgr.GetTargetURL(), vkeyMgr, tokenStore, cfg.TokenMode, cfg.DynamicRuleRoutingEnabled, tdgSettings, provenanceSettings, cfg.PurificationEnabled, logger)
+	proxy, err := gateway.NewAegisProxyWithPolicyRuntime(vkeyMgr.GetTargetURL(), vkeyMgr, tokenStore, cfg.TokenMode, cfg.DynamicRuleRoutingEnabled, tdgSettings, provenanceSettings, cfg.PurificationEnabled, logger, policyRuntime)
 	if err != nil {
 		return nil, err
 	}
@@ -145,13 +151,13 @@ func NewRouter(cfg config.Config) (*Router, error) {
 
 	decisionStore := proxy.GetDecisionStore()
 	gateQuery := gates.NewGateQuery(decisionStore)
-	actionGate := gates.NewActionGateWithMode(logger, cfg.TokenMode)
+	actionGate := gates.NewActionGateWithRuntime(logger, cfg.TokenMode, policyRuntime)
 	actionGate.SetDynamicRuleRouting(cfg.DynamicRuleRoutingEnabled)
 	actionGate.SetTDG(tdgSettings)
 	gateEvaluator := gates.NewGateEvaluator(
-		gates.NewMessageGate(),
+		gates.NewMessageGateWithRuntime(policyRuntime),
 		actionGate,
-		gates.NewReturnGate(),
+		gates.NewReturnGateWithRuntime(policyRuntime),
 		decisionStore,
 	)
 
@@ -164,6 +170,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 		tokenStore:    tokenStore,
 		verifier:      verifier,
 		userService:   userService,
+		policyRuntime: policyRuntime,
 		gateQuery:     gateQuery,
 		gateEvaluator: gateEvaluator,
 		sandboxMgr:    sandboxMgr,

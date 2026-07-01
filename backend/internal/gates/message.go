@@ -14,15 +14,19 @@ type MessageGate struct {
 
 // NewMessageGate 创建消息门控
 func NewMessageGate() *MessageGate {
+	return NewMessageGateWithRuntime(nil)
+}
+
+func NewMessageGateWithRuntime(runtime *PolicyRuntime) *MessageGate {
 	return &MessageGate{
-		policyEngine: NewPolicyEngine(),
+		policyEngine: NewPolicyEngineWithRuntime(runtime),
 	}
 }
 
 // Evaluate 评估消息
 func (g *MessageGate) Evaluate(body []byte) interfaces.EvaluateResult {
 	text := extractJSONText(body, "content", "role", "name", "tool_choice")
-	score, rules := g.policyEngine.Score(text)
+	score, rules, ruleAction := g.policyEngine.ScoreForGate("message", text)
 
 	if hasRuleFromList(rules, "memory_poisoning") {
 		if messageBlockMode() == "degrade" {
@@ -41,6 +45,18 @@ func (g *MessageGate) Evaluate(body []byte) interfaces.EvaluateResult {
 			return makeEvaluateResult(Degrade, "message combines prompt-injection markers with privileged or sensitive intent; degraded by policy", score, rules)
 		}
 		return makeEvaluateResult(Block, "message combines prompt-injection markers with privileged or sensitive intent", score, rules)
+	}
+	if ruleAction == Block && g.policyEngine.ShouldBlock(score) {
+		if messageBlockMode() == "degrade" {
+			return makeEvaluateResult(Degrade, "message risk exceeds block threshold; degraded by policy", score, rules)
+		}
+		return makeEvaluateResult(Block, "message risk exceeds block threshold", score, rules)
+	}
+	if ruleAction == Deny && g.policyEngine.ShouldBlock(score) {
+		return makeEvaluateResult(Deny, "message risk exceeds deny threshold", score, rules)
+	}
+	if ruleAction == HumanApproval && g.policyEngine.ShouldHumanReview(score) {
+		return makeEvaluateResult(Degrade, "message requires degraded execution before approval", score, rules)
 	}
 	if g.policyEngine.ShouldBlock(score) {
 		if messageBlockMode() == "degrade" {
