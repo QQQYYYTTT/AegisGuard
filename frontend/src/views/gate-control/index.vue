@@ -16,90 +16,15 @@ const gateStore = useGateStoreHook();
 const auditStore = useAuditStoreHook();
 const router = useRouter();
 
-const demoBaseTime = Date.now();
-const demoGateDecisions: GateDecision[] = [
-  {
-    request_id: "demo-dpi-message-001",
-    timestamp: new Date(demoBaseTime - 8 * 60_000).toISOString(),
-    gate_type: "message",
-    decision: "Block",
-    risk_score: 100,
-    risk_level: "critical",
-    matched_rules: ["DPI_DIRECT_PROMPT_INJECTION", "SYSTEM_OVERRIDE"],
-    reason: "DPI 直接提示注入，试图覆盖系统策略并请求敏感操作。",
-    agent_id: "openclaw"
-  },
-  {
-    request_id: "demo-pot-action-002",
-    timestamp: new Date(demoBaseTime - 18 * 60_000).toISOString(),
-    gate_type: "action",
-    decision: "HumanApproval",
-    risk_score: 97,
-    risk_level: "critical",
-    matched_rules: ["POT_PRIVILEGED_TOOL", "MISSING_TOKEN"],
-    reason: "POT 权限工具诱导，缺少可信授权令牌。",
-    tool_name: "AdminTransferTool",
-    agent_id: "openclaw",
-    token_status: "missing"
-  },
-  {
-    request_id: "demo-opi-return-003",
-    timestamp: new Date(demoBaseTime - 34 * 60_000).toISOString(),
-    gate_type: "return",
-    decision: "Degrade",
-    risk_score: 65,
-    risk_level: "high",
-    matched_rules: ["OPI_EXTERNAL_CONTENT", "RETURN_GATE_SANITIZE"],
-    reason: "OPI 外部观察结果夹带隐藏指令，已降级净化。",
-    agent_id: "openclaw"
-  },
-  {
-    request_id: "demo-mp-return-004",
-    timestamp: new Date(demoBaseTime - 52 * 60_000).toISOString(),
-    gate_type: "return",
-    decision: "Block",
-    risk_score: 75,
-    risk_level: "high",
-    matched_rules: ["MP_MEMORY_POISONING", "SANDBOX_ISOLATION"],
-    reason: "MP 记忆投毒候选内容，已进入沙箱隔离。",
-    agent_id: "openclaw"
-  }
-];
-
-const demoAuditEvents: AuditEvent[] = demoGateDecisions.map((decision, index) => ({
-  id: `demo-audit-${index + 1}`,
-  request_id: decision.request_id,
-  timestamp: decision.timestamp,
-  method: "POST",
-  path: "/aegis/gate/evaluate",
-  status_code: decision.decision === "Block" ? 403 : 200,
-  status: decision.decision === "Block" ? 403 : 200,
-  duration_ms: 42 + index * 11,
-  decision: decision.decision,
-  risk_score: decision.risk_score,
-  risk_level: decision.risk_level,
-  gate_type: decision.gate_type,
-  reason: decision.reason,
-  token_status: decision.token_status || "valid",
-  auth_mode: "strict",
-  unauthorized_allow: false,
-  agent_id: decision.agent_id || "openclaw",
-  session_id: "demo-session-openclaw",
-  tool_name: decision.tool_name || "",
-  body_hash: `demo-hash-${index + 1}`,
-  event_type: index === 1 ? "authorization" : index === 3 ? "sandbox" : "gate",
-  description: decision.reason
-}));
-
 const activeTab = ref("overview");
-const timeRange = ref("24h");
 const selectedGateType = ref("all");
 
-const gateDecisions = computed(() =>
-  gateStore.decisions?.length ? gateStore.decisions : demoGateDecisions
-);
-const auditEvents = computed(() =>
-  auditStore.events?.length ? auditStore.events : demoAuditEvents
+const gateDecisions = computed(() => gateStore.decisions || []);
+const auditEvents = computed(() => auditStore.events || []);
+const hasDecisionData = computed(() => gateDecisions.value.length > 0);
+const hasAuditData = computed(() => auditEvents.value.length > 0);
+const hasLiveData = computed(
+  () => hasDecisionData.value || hasAuditData.value
 );
 
 const disposalStats = computed(() => {
@@ -182,7 +107,13 @@ const filteredDecisions = computed(() => {
 const authDenialRecords = computed(() => {
   const list = auditEvents.value || [];
   return list
-    .filter(e => e.event_type === "authorization" && (e.decision === "Deny" || e.decision === "Block"))
+    .filter(
+      e =>
+        (e.event_type === "authorization" ||
+          e.path.includes("/aegis/auth/verify") ||
+          e.path.includes("/aegis/auth/token")) &&
+        (e.decision === "Deny" || e.decision === "Block")
+    )
     .slice(0, 20)
     .map(e => ({
       timestamp: e.timestamp,
@@ -198,7 +129,14 @@ const authDenialRecords = computed(() => {
 const sandboxIsolationRecords = computed(() => {
   const list = auditEvents.value || [];
   return list
-    .filter(e => e.event_type === "sandbox")
+    .filter(
+      e =>
+        e.event_type === "sandbox" ||
+        e.path.includes("/aegis/sandbox/isolate") ||
+        (e.path.includes("/aegis/gate/evaluate") &&
+          e.gate_type === "return" &&
+          (e.decision === "Block" || e.decision === "Deny"))
+    )
     .slice(0, 20)
     .map(e => ({
       timestamp: e.timestamp,
@@ -235,11 +173,6 @@ onUnmounted(() => {
     refreshTimer = null;
   }
 });
-
-function viewAlertDetail(alert: any) {
-  // TODO: 实现告警详情查看
-  console.log('View alert detail:', alert);
-}
 </script>
 
 <template>
@@ -261,6 +194,15 @@ function viewAlertDetail(alert: any) {
       </el-col>
     </el-row>
 
+    <el-alert
+      v-if="!hasLiveData"
+      title="当前没有真实处置数据"
+      type="info"
+      :closable="false"
+      class="mb-4"
+      description="请先运行答辩演示脚本，或手动调用 /aegis/gate/evaluate、/aegis/auth/verify、/aegis/sandbox/isolate 生成真实数据。"
+    />
+
     <el-card shadow="hover" class="mb-4">
       <template #header>
         <div class="flex items-center justify-between">
@@ -279,7 +221,8 @@ function viewAlertDetail(alert: any) {
           <template #header>
             <span class="font-semibold text-sm">处置流程拓扑 / Disposal Flow Topology</span>
           </template>
-          <DisposalFlowGraph :stats="disposalStats" />
+          <DisposalFlowGraph v-if="hasLiveData" :stats="disposalStats" />
+          <el-empty v-else description="暂无真实处置流程数据" :image-size="80" />
         </el-card>
 
         <el-row :gutter="16" class="mb-4">
@@ -401,7 +344,14 @@ function viewAlertDetail(alert: any) {
           </el-radio-group>
         </div>
 
-        <el-table :data="filteredDecisions" stripe size="small" max-height="600" @row-click="(row) => router.push({ path: '/audit-trace', query: { chain: row.request_id } })">
+        <el-table
+          v-if="filteredDecisions.length"
+          :data="filteredDecisions"
+          stripe
+          size="small"
+          max-height="600"
+          @row-click="(row) => router.push({ path: '/audit-trace', query: { chain: row.request_id } })"
+        >
           <el-table-column prop="timestamp" label="时间 / Time" width="180">
             <template #default="{ row }">
               {{ new Date(row.timestamp).toLocaleString() }}
@@ -427,6 +377,7 @@ function viewAlertDetail(alert: any) {
           <el-table-column prop="agent_id" label="Agent" width="120" />
           <el-table-column prop="reason" label="原因 / Reason" min-width="200" show-overflow-tooltip />
         </el-table>
+        <el-empty v-else description="暂无真实闸门决策数据" :image-size="80" />
       </div>
 
       <div v-show="activeTab === 'auth'">
@@ -437,7 +388,7 @@ function viewAlertDetail(alert: any) {
           :closable="false"
           class="mb-4"
         />
-        <el-table :data="authDenialRecords" stripe size="small" max-height="600">
+        <el-table v-if="authDenialRecords.length" :data="authDenialRecords" stripe size="small" max-height="600">
           <el-table-column prop="timestamp" label="时间 / Time" width="180">
             <template #default="{ row }">
               {{ new Date(row.timestamp).toLocaleString() }}
@@ -462,6 +413,7 @@ function viewAlertDetail(alert: any) {
           </el-table-column>
           <el-table-column prop="reason" label="拒绝原因 / Reason" min-width="200" show-overflow-tooltip />
         </el-table>
+        <el-empty v-else description="暂无真实授权拒绝记录" :image-size="80" />
       </div>
 
       <div v-show="activeTab === 'sandbox'">
@@ -472,7 +424,7 @@ function viewAlertDetail(alert: any) {
           :closable="false"
           class="mb-4"
         />
-        <el-table :data="sandboxIsolationRecords" stripe size="small" max-height="600">
+        <el-table v-if="sandboxIsolationRecords.length" :data="sandboxIsolationRecords" stripe size="small" max-height="600">
           <el-table-column prop="timestamp" label="时间 / Time" width="180">
             <template #default="{ row }">
               {{ new Date(row.timestamp).toLocaleString() }}
@@ -493,6 +445,7 @@ function viewAlertDetail(alert: any) {
           </el-table-column>
           <el-table-column prop="description" label="描述 / Description" min-width="200" show-overflow-tooltip />
         </el-table>
+        <el-empty v-else description="暂无真实沙箱隔离记录" :image-size="80" />
       </div>
     </el-card>
   </div>
@@ -527,8 +480,8 @@ function viewAlertDetail(alert: any) {
 }
 
 .auto-disposal-center :deep(.el-descriptions__label) {
-  color: #9fdfff !important;
   font-weight: 700;
+  color: #9fdfff !important;
 }
 
 .auto-disposal-center :deep(.border) {

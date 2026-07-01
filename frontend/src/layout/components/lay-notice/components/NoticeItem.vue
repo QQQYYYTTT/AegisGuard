@@ -118,13 +118,13 @@ function hoverDescription(event, description) {
   align-items: flex-start;
   justify-content: space-between;
   padding: 12px 0;
-  border-bottom: 1px solid rgba(78, 192, 255, 0.14);
+  border-bottom: 1px solid rgb(78 192 255 / 14%);
 
   // border-bottom: 1px solid #f0f0f0;
 
   .notice-container-avatar {
     margin-right: 16px;
-    background: rgba(0, 212, 255, 0.1);
+    background: rgb(0 212 255 / 10%);
   }
 
   .notice-container-text {
@@ -139,8 +139,8 @@ function hoverDescription(event, description) {
       font-size: 14px;
       font-weight: 400;
       line-height: 1.5715;
-      cursor: pointer;
       color: #d9f4ff;
+      cursor: pointer;
 
       .notice-title-content {
         flex: 1;

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -428,6 +429,7 @@ func (r *Router) handleGateEvaluate(c *gin.Context) {
 		Body     json.RawMessage        `json:"body,omitempty"`
 		Content  string                 `json:"content,omitempty"`
 		ToolName string                 `json:"tool_name,omitempty"`
+		AgentID  string                 `json:"agent_id,omitempty"`
 		Params   map[string]interface{} `json:"params,omitempty"`
 		Headers  map[string]string      `json:"headers,omitempty"`
 	}
@@ -439,22 +441,41 @@ func (r *Router) handleGateEvaluate(c *gin.Context) {
 
 	var result interfaces.EvaluateResult
 	evalRequestID := uuid.New().String()
+	start := time.Now()
 
 	switch req.Type {
 	case "message":
-		result = r.gateEvaluator.EvaluateMessage(evalRequestID, buildEvaluationBody(req.Body, req.Content))
+		result = r.gateEvaluator.EvaluateMessage(evalRequestID, buildEvaluationBody(req.Body, req.Content), req.AgentID)
 	case "action":
 		httpHeaders := make(http.Header)
 		for k, v := range req.Headers {
 			httpHeaders.Set(k, v)
 		}
-		result = r.gateEvaluator.EvaluateAction(evalRequestID, req.ToolName, req.Params, httpHeaders)
+		result = r.gateEvaluator.EvaluateAction(evalRequestID, req.ToolName, req.Params, httpHeaders, req.AgentID)
 	case "return":
-		result = r.gateEvaluator.EvaluateReturn(evalRequestID, buildEvaluationBody(req.Body, req.Content))
+		result = r.gateEvaluator.EvaluateReturn(evalRequestID, buildEvaluationBody(req.Body, req.Content), req.AgentID)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid gate type"})
 		return
 	}
+
+	r.auditor.LogRequest(audit.LogInput{
+		RequestID: evalRequestID,
+		Method:    c.Request.Method,
+		Path:      c.Request.URL.Path,
+		Body:      buildEvaluationBody(req.Body, req.Content),
+		ClientIP:  c.ClientIP(),
+	})
+	r.auditor.LogResponse(evalRequestID, audit.LogResponseInput{
+		StatusCode:   httpStatusForDecision(result.Decision.String()),
+		Duration:     time.Since(start),
+		Decision:     result.Decision.String(),
+		Reason:       result.Reason,
+		GateType:     req.Type,
+		RiskScore:    result.RiskScore,
+		RiskLevel:    result.RiskLevel,
+		MatchedRules: result.MatchedRules,
+	})
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -468,6 +489,7 @@ func (r *Router) handleGateEvaluate(c *gin.Context) {
 			MatchedRules: result.MatchedRules,
 			Reason:       result.Reason,
 			ToolName:     req.ToolName,
+			AgentID:      req.AgentID,
 		},
 	})
 }
@@ -535,6 +557,7 @@ func (r *Router) handleAuditStats(c *gin.Context) {
 
 	today := time.Now().Format("2006-01-02")
 	decisionDistribution := map[string]int{}
+	agentCounts := map[string]int{}
 	totalDuration := int64(0)
 	todayEvents := 0
 	for _, event := range events {
@@ -543,6 +566,9 @@ func (r *Router) handleAuditStats(c *gin.Context) {
 		}
 		decision := firstNonEmpty(event.Decision, "unknown")
 		decisionDistribution[decision]++
+		if agentID := firstNonEmpty(event.GatewayKey, ""); agentID != "" {
+			agentCounts[agentID]++
+		}
 		totalDuration += event.DurationMs
 	}
 
@@ -555,8 +581,45 @@ func (r *Router) handleAuditStats(c *gin.Context) {
 	stats["attack_chains"] = audit.CountAttackChains(events)
 	stats["avg_duration_ms"] = avgDuration
 	stats["decision_distribution"] = decisionDistribution
+	stats["top_agents"] = buildTopAgentStats(agentCounts, 6)
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": stats})
+}
+
+func buildTopAgentStats(agentCounts map[string]int, limit int) []gin.H {
+	if len(agentCounts) == 0 || limit <= 0 {
+		return []gin.H{}
+	}
+
+	type agentCount struct {
+		agentID string
+		count   int
+	}
+
+	list := make([]agentCount, 0, len(agentCounts))
+	for agentID, count := range agentCounts {
+		list = append(list, agentCount{agentID: agentID, count: count})
+	}
+
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].count == list[j].count {
+			return list[i].agentID < list[j].agentID
+		}
+		return list[i].count > list[j].count
+	})
+
+	if len(list) > limit {
+		list = list[:limit]
+	}
+
+	result := make([]gin.H, 0, len(list))
+	for _, item := range list {
+		result = append(result, gin.H{
+			"agent_id": item.agentID,
+			"count":    item.count,
+		})
+	}
+	return result
 }
 
 func (r *Router) handleThreatMap(c *gin.Context) {

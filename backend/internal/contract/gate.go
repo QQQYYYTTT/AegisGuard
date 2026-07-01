@@ -23,9 +23,9 @@ type GateQuery interface {
 // 执行平面暴露给控制平面的能力：手动触发门控评估，返回决策。
 // 前端对应：gate.ts evaluateGate() -> POST /aegis/gate/evaluate
 type GateEvaluator interface {
-	EvaluateMessage(requestID string, body []byte) interfaces.EvaluateResult
-	EvaluateAction(requestID string, toolName string, params map[string]interface{}, headers http.Header) interfaces.EvaluateResult
-	EvaluateReturn(requestID string, body []byte) interfaces.EvaluateResult
+	EvaluateMessage(requestID string, body []byte, agentID string) interfaces.EvaluateResult
+	EvaluateAction(requestID string, toolName string, params map[string]interface{}, headers http.Header, agentID string) interfaces.EvaluateResult
+	EvaluateReturn(requestID string, body []byte, agentID string) interfaces.EvaluateResult
 }
 
 // GateOverview [分工3] 三门概览统计数据

@@ -395,30 +395,30 @@ onUnmounted(() => {
   min-width: 100%;
   height: 320px;
   min-height: 320px;
-  border: 1px solid rgba(78, 192, 255, 0.18);
-  border-radius: 8px;
   background:
     linear-gradient(rgb(0 212 255 / 4%) 1px, transparent 1px),
     linear-gradient(90deg, rgb(0 212 255 / 4%) 1px, transparent 1px),
-    rgba(5, 18, 38, 0.82);
+    rgb(5 18 38 / 82%);
   background-size: 24px 24px;
+  border: 1px solid rgb(78 192 255 / 18%);
+  border-radius: 8px;
 }
 
 .flow-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
-  margin-top: 12px;
   padding: 8px;
-  background: rgba(7, 28, 55, 0.82);
-  border: 1px solid rgba(78, 192, 255, 0.14);
+  margin-top: 12px;
+  background: rgb(7 28 55 / 82%);
+  border: 1px solid rgb(78 192 255 / 14%);
   border-radius: 6px;
 }
 
 .legend-item {
   display: flex;
-  align-items: center;
   gap: 6px;
+  align-items: center;
   font-size: 12px;
   color: #8fb6d8;
 }

@@ -270,8 +270,8 @@ onUnmounted(() => {
 
 .legend-item {
   display: flex;
-  align-items: center;
   gap: 4px;
+  align-items: center;
 }
 
 .dot {
@@ -285,14 +285,14 @@ onUnmounted(() => {
   min-width: 100%;
   height: 450px;
   min-height: 400px;
-  border: 1px solid rgba(78, 192, 255, 0.18);
-  border-radius: 8px;
   overflow: hidden;
   background:
     linear-gradient(rgb(0 212 255 / 4%) 1px, transparent 1px),
     linear-gradient(90deg, rgb(0 212 255 / 4%) 1px, transparent 1px),
-    rgba(5, 18, 38, 0.82);
+    rgb(5 18 38 / 82%);
   background-size: 24px 24px;
+  border: 1px solid rgb(78 192 255 / 18%);
+  border-radius: 8px;
 }
 
 .graph-footer {

@@ -336,24 +336,24 @@ function getLocalReply(text: string) {
 }
 
 .mini-ai__fab {
-  align-self: center;
   display: flex;
   flex-direction: column;
   gap: 5px;
   align-items: center;
+  align-self: center;
   justify-content: center;
   width: 48px;
   min-height: 126px;
   padding: 10px 6px;
-  color: #031126;
   font-weight: 800;
+  color: #031126;
   letter-spacing: 0;
-  writing-mode: vertical-rl;
   cursor: pointer;
   background: linear-gradient(135deg, #00d4ff, #37f6a4);
   border: 0;
   border-radius: 14px 0 0 14px;
   box-shadow: 0 0 26px rgb(0 212 255 / 42%);
+  writing-mode: vertical-rl;
 }
 
 .mini-ai__fab.is-open {
@@ -388,8 +388,8 @@ function getLocalReply(text: string) {
 
 .mini-ai__header strong {
   display: block;
-  color: #f4fbff;
   font-size: 15px;
+  color: #f4fbff;
 }
 
 .mini-ai__header span {
@@ -408,9 +408,9 @@ function getLocalReply(text: string) {
   align-items: center;
   height: 22px;
   padding: 0 8px;
-  color: #37f6a4 !important;
   font-size: 11px !important;
   font-weight: 800;
+  color: #37f6a4 !important;
   background: rgb(55 246 164 / 10%);
   border: 1px solid rgb(55 246 164 / 26%);
   border-radius: 999px;
@@ -452,14 +452,14 @@ function getLocalReply(text: string) {
 .mini-ai__actions strong {
   display: block;
   margin-bottom: 5px;
-  color: #f4fbff;
   font-size: 13px;
+  color: #f4fbff;
 }
 
 .mini-ai__actions span {
-  color: #8fb6d8;
   font-size: 12px;
   line-height: 1.45;
+  color: #8fb6d8;
 }
 
 .mini-ai__messages {
@@ -475,10 +475,10 @@ function getLocalReply(text: string) {
 .mini-ai__message {
   max-width: 92%;
   padding: 10px 12px;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
   font-size: 13px;
   line-height: 1.65;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
   border-radius: 8px;
 }
 
@@ -490,8 +490,8 @@ function getLocalReply(text: string) {
 
 .mini-ai__message.is-user {
   align-self: flex-end;
-  color: #031126;
   font-weight: 700;
+  color: #031126;
   background: linear-gradient(135deg, #00d4ff, #37f6a4);
 }
 
@@ -537,7 +537,7 @@ function getLocalReply(text: string) {
   transform: translateX(16px);
 }
 
-@media (max-width: 640px) {
+@media (width <= 640px) {
   .mini-ai {
     top: 72px;
     right: 10px;

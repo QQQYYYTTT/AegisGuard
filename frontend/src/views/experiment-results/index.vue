@@ -30,43 +30,8 @@ let rankingChartInstance: echarts.ECharts | null = null;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let handleResize: (() => void) | null = null;
 
-const demoSummaries: SummaryLike[] = [
-  {
-    run_id: "aegisguard-demo-dpi-openclaw",
-    benchmark: "ASB",
-    attack: "dpi",
-    metrics: { total: 50, asr: 0, rr: 1, average_latency_ms: 60450 }
-  },
-  {
-    run_id: "aegisguard-demo-opi-openclaw",
-    benchmark: "ASB",
-    attack: "opi",
-    metrics: { total: 10, asr: 0, rr: 1, average_latency_ms: 61200 }
-  },
-  {
-    run_id: "aegisguard-demo-mixed-openclaw",
-    benchmark: "ASB",
-    attack: "mixed",
-    metrics: { total: 20, asr: 0.05, rr: 0.95, average_latency_ms: 68800 }
-  },
-  {
-    run_id: "aegisguard-demo-mp-openclaw",
-    benchmark: "ASB",
-    attack: "mp",
-    metrics: { total: 8, asr: 0, rr: 1, average_latency_ms: 65100 }
-  },
-  {
-    run_id: "aegisguard-demo-pot-openclaw",
-    benchmark: "ASB",
-    attack: "pot",
-    metrics: { total: 12, asr: 0, rr: 1, average_latency_ms: 75200 }
-  }
-];
-
 const hasLiveSummaries = computed(() => (experimentStore.summaries || []).length > 0);
-const summaries = computed(() =>
-  experimentStore.summaries?.length ? experimentStore.summaries : demoSummaries
-);
+const summaries = computed(() => experimentStore.summaries || []);
 const records = computed(() => experimentStore.records || []);
 const currentSummary = computed(() => experimentStore.currentSummary);
 const attackFamilyStats = computed(() => experimentStore.attackFamilyStats || []);
@@ -393,13 +358,13 @@ function renderRankingChart() {
         <StatCard title="总告警数 / Total Alerts" :value="totalCases" icon="ep:warning-filled" color="var(--aegis-danger)" />
       </el-col>
       <el-col :span="6">
-        <StatCard title="总拦截数 / Total Blocks" :value="summaries.length * 10" icon="ep:switch-button" color="var(--aegis-success)" />
+        <StatCard title="总拦截数 / Total Blocks" :value="Math.round(totalCases * (avgRR / 100))" icon="ep:switch-button" color="var(--aegis-success)" />
       </el-col>
       <el-col :span="6">
         <StatCard title="平均拦截率 / Avg Block Rate" :value="+avgRR.toFixed(1)" suffix="%" icon="ep:circle-check-filled" color="var(--aegis-warning)" />
       </el-col>
       <el-col :span="6">
-        <StatCard title="高风险对象 / High Risk Objects" :value="Math.floor(totalCases * 0.1)" icon="ep:user-filled" color="var(--aegis-danger)" />
+        <StatCard title="高风险对象 / High Risk Objects" :value="Math.round(totalCases * (avgASR / 100))" icon="ep:user-filled" color="var(--aegis-danger)" />
       </el-col>
     </el-row>
 
@@ -593,7 +558,7 @@ function renderRankingChart() {
     </el-tabs>
     </template>
     <div v-else class="flex flex-col items-center justify-center py-20">
-      <el-empty description="后端未返回数据，请确保后端服务已启动" />
+      <el-empty description="后端未返回真实实验结果，请先运行实验并确保 DevMode 已开启" />
     </div>
   </div>
 </template>
@@ -614,8 +579,8 @@ function renderRankingChart() {
 
 .chart-panel {
   height: 300px;
-  background: rgba(5, 18, 38, 0.82);
-  border: 1px solid rgba(78, 192, 255, 0.18);
+  background: rgb(5 18 38 / 82%);
+  border: 1px solid rgb(78 192 255 / 18%);
   border-radius: 8px;
 }
 </style>

@@ -7,7 +7,6 @@ import RiskBadge from "@/components/common/RiskBadge.vue";
 import { useGateStoreHook } from "@/store/modules/gate";
 import { useAuditStoreHook } from "@/store/modules/audit";
 import * as echarts from "echarts";
-import type { GateDecision } from "@/api/gate";
 
 defineOptions({ name: "AuthCenterIndex" });
 
@@ -17,46 +16,8 @@ const router = useRouter();
 
 const loading = ref(false);
 
-const demoAlertDecisions: GateDecision[] = [
-  {
-    request_id: "demo-alert-dpi-001",
-    timestamp: new Date(Date.now() - 12 * 60_000).toISOString(),
-    gate_type: "message",
-    decision: "Block",
-    risk_score: 100,
-    risk_level: "critical",
-    matched_rules: ["DPI_DIRECT_PROMPT_INJECTION", "SYSTEM_OVERRIDE"],
-    reason: "DPI 直接提示注入，试图覆盖系统策略。",
-    agent_id: "openclaw"
-  },
-  {
-    request_id: "demo-alert-opi-002",
-    timestamp: new Date(Date.now() - 28 * 60_000).toISOString(),
-    gate_type: "return",
-    decision: "Degrade",
-    risk_score: 65,
-    risk_level: "high",
-    matched_rules: ["OPI_EXTERNAL_CONTENT", "RETURN_GATE_SANITIZE"],
-    reason: "OPI 外部观察结果夹带隐藏指令。",
-    agent_id: "openclaw"
-  },
-  {
-    request_id: "demo-alert-pot-003",
-    timestamp: new Date(Date.now() - 45 * 60_000).toISOString(),
-    gate_type: "action",
-    decision: "HumanApproval",
-    risk_score: 97,
-    risk_level: "critical",
-    matched_rules: ["POT_PRIVILEGED_TOOL", "MISSING_TOKEN"],
-    reason: "POT 权限工具诱导，缺少可信授权令牌。",
-    tool_name: "AdminTransferTool",
-    agent_id: "openclaw"
-  }
-];
-
-const alertDecisions = computed(() =>
-  gateStore.decisions?.length ? gateStore.decisions : demoAlertDecisions
-);
+const alertDecisions = computed(() => gateStore.decisions || []);
+const hasAlertData = computed(() => alertDecisions.value.length > 0);
 
 const highRiskCount = computed(() => {
   const list = alertDecisions.value;
@@ -140,9 +101,7 @@ function renderAlertTypeChart() {
   if (!alertTypeChart) {
     alertTypeChart = echarts.init(alertTypeChartRef.value);
   }
-  const data = alertTypeData.value.length > 0
-    ? alertTypeData.value
-    : [{ name: "暂无数据", value: 1 }];
+  const data = alertTypeData.value;
 
   alertTypeChart.setOption({
     title: {
@@ -189,9 +148,7 @@ function renderAlertTrendChart() {
   if (!alertTrendChart) {
     alertTrendChart = echarts.init(alertTrendChartRef.value);
   }
-  const data = alertTrendData.value.length > 0
-    ? alertTrendData.value
-    : [{ time: "暂无", high: 0, medium: 0, low: 0 }];
+  const data = alertTrendData.value;
 
   alertTrendChart.setOption({
     title: {
@@ -261,8 +218,13 @@ async function loadData() {
     loading.value = false;
   }
   await nextTick();
-  renderAlertTypeChart();
-  renderAlertTrendChart();
+  if (hasAlertData.value) {
+    renderAlertTypeChart();
+    renderAlertTrendChart();
+  } else {
+    alertTypeChart?.clear();
+    alertTrendChart?.clear();
+  }
 }
 
 function goToAlertDetail(row: { requestId?: string }) {
@@ -328,12 +290,22 @@ onUnmounted(() => {
     <el-row :gutter="16" class="mb-6">
       <el-col :span="12">
         <el-card shadow="hover">
-          <div v-loading="loading" ref="alertTypeChartRef" style="height: 300px;"></div>
+          <div v-if="hasAlertData" v-loading="loading" ref="alertTypeChartRef" style="height: 300px;"></div>
+          <el-empty
+            v-else
+            description="暂无真实告警类型分布，请先运行演示脚本或调用闸门接口。"
+            :image-size="90"
+          />
         </el-card>
       </el-col>
       <el-col :span="12">
         <el-card shadow="hover">
-          <div v-loading="loading" ref="alertTrendChartRef" style="height: 300px;"></div>
+          <div v-if="hasAlertData" v-loading="loading" ref="alertTrendChartRef" style="height: 300px;"></div>
+          <el-empty
+            v-else
+            description="暂无真实告警趋势数据，请先生成真实决策记录。"
+            :image-size="90"
+          />
         </el-card>
       </el-col>
     </el-row>
@@ -347,7 +319,14 @@ onUnmounted(() => {
           </el-button>
         </div>
       </template>
-      <el-table :data="alertListData" stripe size="small" @row-click="goToAlertDetail" style="cursor: pointer;">
+      <el-table
+        v-if="alertListData.length"
+        :data="alertListData"
+        stripe
+        size="small"
+        @row-click="goToAlertDetail"
+        style="cursor: pointer;"
+      >
         <el-table-column prop="time" label="时间 / Time" width="160">
           <template #default="{ row }">
             {{ new Date(row.time).toLocaleString() }}
@@ -378,9 +357,11 @@ onUnmounted(() => {
         </el-table-column>
         <el-table-column prop="reason" label="描述 / Description" show-overflow-tooltip />
       </el-table>
-      <div v-if="alertListData.length === 0" class="py-8 text-center text-gray-400">
-        暂无告警数据
-      </div>
+      <el-empty
+        v-else
+        description="暂无真实告警数据，请先运行 backend/scripts/seed-demo-data.ps1。"
+        :image-size="90"
+      />
     </el-card>
   </div>
 </template>

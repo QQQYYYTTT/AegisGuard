@@ -43,7 +43,7 @@ defineProps<{
   cursor: default;
   background:
     linear-gradient(135deg, rgb(0 212 255 / 9%), transparent 42%),
-    rgba(5, 18, 38, 0.9);
+    rgb(5 18 38 / 90%);
   border: 1px solid rgb(78 192 255 / 18%);
   border-radius: 8px;
   box-shadow: inset 0 0 28px rgb(0 212 255 / 4%);
@@ -51,8 +51,8 @@ defineProps<{
 
 .stat-card__header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   margin-bottom: 8px;
 }
 
@@ -69,9 +69,9 @@ defineProps<{
 }
 
 .stat-card__suffix {
+  margin-left: 4px;
   font-size: 14px;
   font-weight: 400;
-  margin-left: 4px;
   color: #8fb6d8;
 }
 

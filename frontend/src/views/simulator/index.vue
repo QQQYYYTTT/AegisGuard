@@ -467,10 +467,10 @@ function goToSandbox() {
 
 .simulator :deep(.el-card) {
   color: #d9f4ff;
-  background: rgba(5, 18, 38, 0.88);
-  border: 1px solid rgba(78, 192, 255, 0.18);
+  background: rgb(5 18 38 / 88%);
+  border: 1px solid rgb(78 192 255 / 18%);
   border-radius: 8px;
-  box-shadow: inset 0 0 30px rgba(0, 212, 255, 0.04);
+  box-shadow: inset 0 0 30px rgb(0 212 255 / 4%);
 }
 
 .simulator :deep(.el-form-item__label),
@@ -482,8 +482,8 @@ function goToSandbox() {
 .simulator :deep(.el-textarea__inner),
 .simulator :deep(.el-select__wrapper) {
   color: #d9f4ff;
-  background: rgba(3, 11, 24, 0.7);
-  border: 1px solid rgba(78, 192, 255, 0.2);
+  background: rgb(3 11 24 / 70%);
+  border: 1px solid rgb(78 192 255 / 20%);
   box-shadow: none;
 }
 
@@ -498,6 +498,6 @@ function goToSandbox() {
 }
 
 .simulator .bg-gray-50 {
-  background: rgba(7, 28, 55, 0.88) !important;
+  background: rgb(7 28 55 / 88%) !important;
 }
 </style>

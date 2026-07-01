@@ -30,6 +30,16 @@ const { sm2Status, sm3Status, sm4Status, activeTokens } = useCryptoStatus();
 const riskTrendChartRef = ref<HTMLElement>();
 let riskTrendChart: echarts.ECharts | null = null;
 
+type ConnectedAgent = {
+  id: string;
+  name: string;
+  domain: string;
+  scope: string;
+  status: string;
+  count: number;
+  health: number;
+};
+
 const requestTotal = computed(() => {
   if (!overview.value) return 0;
   return (
@@ -50,10 +60,9 @@ const blockCount = computed(() => {
 
 const activeAgentCount = computed(() => {
   const ids = new Set<string>();
-  ids.add("openclaw");
   decisions.value.forEach(item => item.agent_id && ids.add(item.agent_id));
   stats.value?.top_agents?.forEach(item => item.agent_id && ids.add(item.agent_id));
-  return ids.size || connectedAgents.value.length;
+  return ids.size;
 });
 
 const highRiskEvents = computed(() => {
@@ -119,15 +128,6 @@ const riskTrendData = computed(() => {
   return Object.entries(buckets).map(([time, value]) => ({ time, ...value }));
 });
 
-const fallbackAgents = [
-  { agent_id: "openclaw", count: 128 },
-  { agent_id: "financial_analyst_agent", count: 86 },
-  { agent_id: "legal_consultant_agent", count: 72 },
-  { agent_id: "workflow_agent", count: 58 },
-  { agent_id: "customer_service_agent", count: 44 },
-  { agent_id: "research_agent", count: 31 }
-];
-
 const agentProfiles: Record<string, { name: string; domain: string; scope: string; status: string }> = {
   openclaw: {
     name: "OpenClaw Agent",
@@ -167,14 +167,26 @@ const agentProfiles: Record<string, { name: string; domain: string; scope: strin
   }
 };
 
-const connectedAgents = computed(() => {
-  const source = stats.value?.top_agents?.length ? [...stats.value.top_agents] : [...fallbackAgents];
-  if (!source.some(item => item.agent_id.toLowerCase() === "openclaw")) {
-    source.unshift(fallbackAgents[0]);
-  }
-  return source.slice(0, 6).map((item, index) => {
-    const profile = agentProfiles[item.agent_id] || {
-      name: item.agent_id,
+const connectedAgents = computed<ConnectedAgent[]>(() => {
+  const counts = new Map<string, number>();
+
+  decisions.value.forEach(item => {
+    if (!item.agent_id) return;
+    counts.set(item.agent_id, (counts.get(item.agent_id) || 0) + 1);
+  });
+
+  stats.value?.top_agents?.forEach(item => {
+    if (!item.agent_id) return;
+    counts.set(item.agent_id, Math.max(counts.get(item.agent_id) || 0, item.count || 0));
+  });
+
+  const source = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 6);
+
+  return source.map(([agentId, count], index) => {
+    const profile = agentProfiles[agentId] || {
+      name: agentId,
       domain: "业务 Agent",
       scope: "gateway:proxy",
       status: "在线"
@@ -182,15 +194,15 @@ const connectedAgents = computed(() => {
 
     return {
       ...profile,
-      id: item.agent_id,
-      count: item.count,
+      id: agentId,
+      count,
       health: Math.max(72, 98 - index * 6)
     };
   });
 });
 
 const latestAlerts = computed(() => {
-  const list = decisions.value.slice(0, 10).map(item => ({
+  return decisions.value.slice(0, 10).map(item => ({
     time: item.timestamp,
     level:
       item.risk_level === "critical"
@@ -209,19 +221,26 @@ const latestAlerts = computed(() => {
     source: item.agent_id || item.request_id?.slice(0, 12) || "unknown",
     description: item.reason || `${item.gate_type} gate ${item.decision}`
   }));
-
-  return list.length
-    ? list
-    : [
-        {
-          time: "暂无数据",
-          level: "低",
-          type: "系统",
-          source: "-",
-          description: "网关已启动，等待 Agent 流量接入"
-        }
-      ];
 });
+
+const chartHasData = computed(() =>
+  riskTrendData.value.some(item => item.alerts > 0 || item.blocks > 0)
+);
+
+const hasOverview = computed(() => {
+  return Boolean(overview.value && requestTotal.value > 0);
+});
+
+watch(
+  chartHasData,
+  hasData => {
+    if (!hasData) {
+      riskTrendChart?.clear();
+      return;
+    }
+    renderRiskTrendChart();
+  }
+);
 
 onMounted(() => {
   Promise.all([loadOverview(), loadStats(), loadLogs()]).then(() => {
@@ -238,7 +257,15 @@ onUnmounted(() => {
   riskTrendChart = null;
 });
 
-watch(riskTrendData, () => renderRiskTrendChart(), { deep: true });
+watch(
+  riskTrendData,
+  () => {
+    if (chartHasData.value) {
+      renderRiskTrendChart();
+    }
+  },
+  { deep: true }
+);
 
 function renderRiskTrendChart() {
   if (!riskTrendChartRef.value) return;
@@ -344,7 +371,7 @@ function renderRiskTrendChart() {
               <small>{{ activeAgentCount }} 个实例受网关保护</small>
             </div>
           </template>
-          <div class="agent-grid">
+          <div v-if="connectedAgents.length" class="agent-grid">
             <div v-for="agent in connectedAgents" :key="agent.id" class="agent-item">
               <div class="agent-icon">
                 <el-icon><Cpu /></el-icon>
@@ -371,6 +398,11 @@ function renderRiskTrendChart() {
               </div>
             </div>
           </div>
+          <el-empty
+            v-else
+            description="暂无真实 Agent 接入数据，请先运行演示脚本生成带 agent_id 的请求。"
+            :image-size="90"
+          />
         </el-card>
       </el-col>
 
@@ -379,7 +411,12 @@ function renderRiskTrendChart() {
           <template #header>
             <div class="card-title">风险趋势</div>
           </template>
-          <div ref="riskTrendChartRef" class="trend-chart" />
+          <div v-if="chartHasData" ref="riskTrendChartRef" class="trend-chart" />
+          <el-empty
+            v-else
+            description="暂无真实风险趋势数据，请先运行演示脚本或调用闸门接口。"
+            :image-size="90"
+          />
         </el-card>
       </el-col>
 
@@ -388,7 +425,7 @@ function renderRiskTrendChart() {
           <template #header>
             <div class="card-title">闸门状态</div>
           </template>
-          <div v-if="overview" class="gate-list">
+          <div v-if="hasOverview" class="gate-list">
             <div class="gate-status-item">
               <span>消息闸门</span>
               <el-tag type="success" size="small">{{ overview.message_gate.status }}</el-tag>
@@ -405,6 +442,11 @@ function renderRiskTrendChart() {
               <small>{{ overview.return_gate.block_count }} 次拦截</small>
             </div>
           </div>
+          <el-empty
+            v-else
+            description="暂无真实闸门统计，请先运行演示脚本。"
+            :image-size="80"
+          />
         </el-card>
 
         <el-card shadow="never" class="dashboard-card">
@@ -424,7 +466,7 @@ function renderRiskTrendChart() {
       <template #header>
         <div class="card-title">最新告警</div>
       </template>
-      <el-table :data="latestAlerts" stripe size="small" max-height="250">
+      <el-table v-if="latestAlerts.length" :data="latestAlerts" stripe size="small" max-height="250">
         <el-table-column prop="time" label="时间" width="170" />
         <el-table-column prop="level" label="级别" width="90">
           <template #default="{ row }">
@@ -437,6 +479,11 @@ function renderRiskTrendChart() {
         <el-table-column prop="source" label="来源 Agent" width="180" />
         <el-table-column prop="description" label="描述" show-overflow-tooltip />
       </el-table>
+      <el-empty
+        v-else
+        description="暂无真实告警数据，请先运行 backend/scripts/seed-demo-data.ps1。"
+        :image-size="90"
+      />
     </el-card>
   </div>
 </template>
@@ -453,19 +500,19 @@ function renderRiskTrendChart() {
   justify-content: space-between;
   padding: 22px 24px;
   background:
-    linear-gradient(120deg, rgba(0, 212, 255, 0.14), rgba(25, 82, 255, 0.06)),
-    rgba(5, 18, 38, 0.86);
-  border: 1px solid rgba(78, 192, 255, 0.24);
+    linear-gradient(120deg, rgb(0 212 255 / 14%), rgb(25 82 255 / 6%)),
+    rgb(5 18 38 / 86%);
+  border: 1px solid rgb(78 192 255 / 24%);
   border-radius: 10px;
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 18px 45px rgb(0 0 0 / 28%);
 }
 
 .eyebrow {
   margin: 0 0 6px;
   font-size: 12px;
-  letter-spacing: 0.18em;
   color: #60d7ff;
   text-transform: uppercase;
+  letter-spacing: 0.18em;
 }
 
 .dashboard-hero h1 {
@@ -485,10 +532,10 @@ function renderRiskTrendChart() {
 }
 
 .dashboard-card {
-  background: rgba(5, 18, 38, 0.86);
-  border: 1px solid rgba(78, 192, 255, 0.18);
+  background: rgb(5 18 38 / 86%);
+  border: 1px solid rgb(78 192 255 / 18%);
   border-radius: 8px;
-  box-shadow: inset 0 0 30px rgba(0, 212, 255, 0.04);
+  box-shadow: inset 0 0 30px rgb(0 212 255 / 4%);
 }
 
 .card-title {
@@ -518,19 +565,19 @@ function renderRiskTrendChart() {
   gap: 14px;
   align-items: center;
   padding: 14px;
-  background: linear-gradient(90deg, rgba(8, 31, 62, 0.96), rgba(9, 41, 75, 0.68));
-  border: 1px solid rgba(88, 190, 255, 0.18);
+  background: linear-gradient(90deg, rgb(8 31 62 / 96%), rgb(9 41 75 / 68%));
+  border: 1px solid rgb(88 190 255 / 18%);
   border-radius: 8px;
 }
 
 .agent-icon {
   display: grid;
+  place-items: center;
   width: 46px;
   height: 46px;
-  place-items: center;
   color: #00d4ff;
-  background: rgba(0, 212, 255, 0.1);
-  border: 1px solid rgba(0, 212, 255, 0.24);
+  background: rgb(0 212 255 / 10%);
+  border: 1px solid rgb(0 212 255 / 24%);
   border-radius: 8px;
 }
 
@@ -538,8 +585,8 @@ function renderRiskTrendChart() {
 .agent-meta,
 .agent-health {
   display: flex;
-  align-items: center;
   gap: 10px;
+  align-items: center;
 }
 
 .agent-row {
@@ -598,8 +645,8 @@ function renderRiskTrendChart() {
   grid-template-columns: 1fr auto;
   gap: 4px 10px;
   padding: 12px;
-  background: rgba(7, 28, 55, 0.78);
-  border: 1px solid rgba(78, 192, 255, 0.14);
+  background: rgb(7 28 55 / 78%);
+  border: 1px solid rgb(78 192 255 / 14%);
   border-radius: 8px;
 }
 

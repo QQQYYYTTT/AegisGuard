@@ -308,13 +308,13 @@ onUnmounted(() => {
   min-width: 100%;
   height: 350px;
   min-height: 350px;
-  border: 1px solid rgba(78, 192, 255, 0.18);
-  border-radius: 8px;
   background:
     linear-gradient(rgb(0 212 255 / 4%) 1px, transparent 1px),
     linear-gradient(90deg, rgb(0 212 255 / 4%) 1px, transparent 1px),
-    rgba(5, 18, 38, 0.82);
+    rgb(5 18 38 / 82%);
   background-size: 24px 24px;
+  border: 1px solid rgb(78 192 255 / 18%);
+  border-radius: 8px;
 }
 
 .flow-footer {
@@ -330,8 +330,8 @@ onUnmounted(() => {
 
 .legend-item {
   display: flex;
-  align-items: center;
   gap: 6px;
+  align-items: center;
 }
 
 .line {
@@ -345,14 +345,14 @@ onUnmounted(() => {
 }
 
 .line.blocked {
+  height: 3px;
   background: repeating-linear-gradient(
     to right,
-    #ef4444 0px,
+    #ef4444 0,
     #ef4444 5px,
     transparent 5px,
     transparent 10px
   );
-  height: 3px;
 }
 
 .node {

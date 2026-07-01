@@ -73,14 +73,21 @@ async function saveRule() {
     return;
   }
 
-  if (isEditMode.value && editingRule.value.id) {
-    await policyStore.updateRule(editingRule.value as PolicyRule);
-    ElMessage.success("规则已更新");
-  } else {
-    await policyStore.createRule(editingRule.value as CreateRulePayload);
-    ElMessage.success("规则已创建");
+  try {
+    if (isEditMode.value && editingRule.value.id) {
+      await policyStore.updateRule(editingRule.value as PolicyRule);
+      ElMessage.success("规则已更新");
+    } else {
+      await policyStore.createRule(editingRule.value as CreateRulePayload);
+      ElMessage.success("规则已创建");
+    }
+    dialogVisible.value = false;
+  } catch (error) {
+    ElMessage.error(
+      policyStore.lastError ||
+        (error instanceof Error ? error.message : "保存规则失败")
+    );
   }
-  dialogVisible.value = false;
 }
 
 async function handleDelete(rule: PolicyRule) {
@@ -92,13 +99,26 @@ async function handleDelete(rule: PolicyRule) {
     );
     await policyStore.removeRule(rule.id);
     ElMessage.success("规则已删除");
-  } catch {
+  } catch (error) {
+    if (policyStore.lastError) {
+      ElMessage.error(policyStore.lastError);
+    } else if (error instanceof Error && error.message !== "cancel") {
+      ElMessage.error(error.message);
+    }
   }
 }
 
 async function toggleEnabled(rule: PolicyRule) {
-  await policyStore.toggleRule(rule.id);
-  ElMessage.success(rule.enabled ? "规则已启用" : "规则已禁用");
+  try {
+    const nextEnabled = !rule.enabled;
+    await policyStore.toggleRule(rule.id);
+    ElMessage.success(nextEnabled ? "规则已启用" : "规则已禁用");
+  } catch (error) {
+    ElMessage.error(
+      policyStore.lastError ||
+        (error instanceof Error ? error.message : "切换规则状态失败")
+    );
+  }
 }
 
 async function movePriority(rule: PolicyRule, direction: "up" | "down") {
@@ -109,7 +129,15 @@ async function movePriority(rule: PolicyRule, direction: "up" | "down") {
 
   const swapIdx = direction === "up" ? idx - 1 : idx + 1;
   [sorted[idx], sorted[swapIdx]] = [sorted[swapIdx], sorted[idx]];
-  await policyStore.reorder(sorted.map((r) => r.id));
+  try {
+    await policyStore.reorder(sorted.map((r) => r.id));
+    ElMessage.success("规则优先级已更新");
+  } catch (error) {
+    ElMessage.error(
+      policyStore.lastError ||
+        (error instanceof Error ? error.message : "更新规则优先级失败")
+    );
+  }
 }
 
 const editWeights = ref({ alpha: 0.35, beta: 0.40, gamma: 0.25 });
@@ -129,11 +157,18 @@ async function saveWeights() {
     ElMessage.warning("权重之和必须为 1.0");
     return;
   }
-  await policyStore.saveConfig({
-    risk_weights: { ...editWeights.value },
-    global_threshold: editThreshold.value,
-  });
-  ElMessage.success("配置已保存");
+  try {
+    await policyStore.saveConfig({
+      risk_weights: { ...editWeights.value },
+      global_threshold: editThreshold.value,
+    });
+    ElMessage.success("配置已保存");
+  } catch (error) {
+    ElMessage.error(
+      policyStore.lastError ||
+        (error instanceof Error ? error.message : "保存配置失败")
+    );
+  }
 }
 
 const conditionSyntaxTips = `
@@ -178,6 +213,14 @@ const ruleFormRules = {
     </el-row>
 
     <el-card shadow="hover">
+      <el-alert
+        v-if="policyStore.lastError"
+        :title="policyStore.lastError"
+        type="warning"
+        :closable="false"
+        class="mb-4"
+        description="当前页面未使用本地 mock 规则，请确认后端策略接口可用。"
+      />
       <el-tabs v-model="activeTab">
         <el-tab-pane label="规则列表 / Rules" name="rules">
           <div class="mb-3 flex items-center justify-between">

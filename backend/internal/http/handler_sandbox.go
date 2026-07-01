@@ -74,9 +74,11 @@ func (r *Router) handleSandboxIsolate(c *gin.Context) {
 		Untrusted interfaces.UntrustedContent `json:"untrusted"`
 		Promote   bool                        `json:"promote"`
 	}
+	requestID, start := r.auditManualRequest(c, req)
 
 	if c.Request.Body != nil {
 		if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+			r.auditManualResponse(requestID, start, http.StatusBadRequest, "Block", "invalid request body", "return", 0, "low", nil, "", "")
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid request body"})
 			return
 		}
@@ -92,6 +94,7 @@ func (r *Router) handleSandboxIsolate(c *gin.Context) {
 	ctx, err := r.sandboxMgr.CreateContext(req.Trusted, req.Untrusted)
 	if err != nil {
 		sandboxLogger(r).Error("create sandbox context failed", zap.Error(err))
+		r.auditManualResponse(requestID, start, http.StatusInternalServerError, "Block", "create sandbox context failed", "return", 0, "low", nil, "", "")
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "create sandbox context failed"})
 		return
 	}
@@ -117,6 +120,21 @@ func (r *Router) handleSandboxIsolate(c *gin.Context) {
 			ctx = refreshed
 		}
 	}
+
+	decision := "Allow"
+	reason := "sandbox context isolated"
+	riskScore := ctx.RiskScore
+	riskLevel := ctx.RiskLevel
+	if transfer != nil && !transfer.Approved {
+		decision = "Block"
+		reason = firstNonEmpty(transfer.Reason, "sandbox content remains isolated")
+		riskScore = transfer.RiskScore
+		riskLevel = transfer.RiskLevel
+	} else if ctx.Status == "quarantined" {
+		decision = "Block"
+		reason = "sandbox context quarantined"
+	}
+	r.auditManualResponse(requestID, start, http.StatusOK, decision, reason, "return", riskScore, riskLevel, nil, "", "")
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":  true,

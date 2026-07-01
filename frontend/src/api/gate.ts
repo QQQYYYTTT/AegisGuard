@@ -44,11 +44,13 @@ export type GateSummary = {
 export type GateEvaluateRequest =
   | {
       type: "message" | "return";
+      agent_id?: string;
       body?: Record<string, unknown>;
       content?: string;
     }
   | {
       type: "action";
+      agent_id?: string;
       tool_name: string;
       params?: Record<string, unknown>;
       headers?: Record<string, string>;

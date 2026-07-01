@@ -90,8 +90,8 @@ async function openProfile() {
 
 .el-dropdown-link {
   display: flex;
-  align-items: center;
   gap: 10px;
+  align-items: center;
   height: 48px;
   padding: 0 10px;
   color: #d9f4ff;
@@ -105,14 +105,14 @@ async function openProfile() {
 }
 
 .user-avatar {
+  display: block;
+  flex: 0 0 28px;
   width: 28px;
   height: 28px;
-  flex: 0 0 28px;
-  display: block;
-  border-radius: 9999px;
-  object-fit: cover;
   overflow: hidden;
-  border: 1px solid rgba(0, 212, 255, 0.24);
+  object-fit: cover;
+  border: 1px solid rgb(0 212 255 / 24%);
+  border-radius: 9999px;
 }
 
 .logout {

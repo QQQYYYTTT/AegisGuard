@@ -24,7 +24,7 @@ func NewGateEvaluator(messageGate *MessageGate, actionGate *ActionGate, returnGa
 	}
 }
 
-func (ge *GateEvaluatorImpl) EvaluateMessage(requestID string, body []byte) interfaces.EvaluateResult {
+func (ge *GateEvaluatorImpl) EvaluateMessage(requestID string, body []byte, agentID string) interfaces.EvaluateResult {
 	result := ge.messageGate.Evaluate(body)
 	ge.store.Add(interfaces.GateDecision{
 		RequestID:    requestID,
@@ -35,11 +35,12 @@ func (ge *GateEvaluatorImpl) EvaluateMessage(requestID string, body []byte) inte
 		RiskLevel:    result.RiskLevel,
 		MatchedRules: result.MatchedRules,
 		Reason:       result.Reason,
+		AgentID:      agentID,
 	})
 	return result
 }
 
-func (ge *GateEvaluatorImpl) EvaluateAction(requestID string, toolName string, params map[string]interface{}, headers http.Header) interfaces.EvaluateResult {
+func (ge *GateEvaluatorImpl) EvaluateAction(requestID string, toolName string, params map[string]interface{}, headers http.Header, agentID string) interfaces.EvaluateResult {
 	result := ge.actionGate.Evaluate(toolName, params, headers)
 	ge.store.Add(interfaces.GateDecision{
 		RequestID:    requestID,
@@ -51,11 +52,12 @@ func (ge *GateEvaluatorImpl) EvaluateAction(requestID string, toolName string, p
 		MatchedRules: result.MatchedRules,
 		Reason:       result.Reason,
 		ToolName:     toolName,
+		AgentID:      agentID,
 	})
 	return result
 }
 
-func (ge *GateEvaluatorImpl) EvaluateReturn(requestID string, body []byte) interfaces.EvaluateResult {
+func (ge *GateEvaluatorImpl) EvaluateReturn(requestID string, body []byte, agentID string) interfaces.EvaluateResult {
 	result := ge.returnGate.Evaluate(body)
 	ge.store.Add(interfaces.GateDecision{
 		RequestID:    requestID,
@@ -66,6 +68,7 @@ func (ge *GateEvaluatorImpl) EvaluateReturn(requestID string, body []byte) inter
 		RiskLevel:    result.RiskLevel,
 		MatchedRules: result.MatchedRules,
 		Reason:       result.Reason,
+		AgentID:      agentID,
 	})
 	return result
 }

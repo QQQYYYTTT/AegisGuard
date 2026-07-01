@@ -85,8 +85,10 @@ func (r *Router) handleIssueToken(c *gin.Context) {
 		TTLSeconds: 300,
 		MaxCalls:   1,
 	}
+	requestID, start := r.auditManualRequest(c, req)
 	if c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {
+			r.auditManualResponse(requestID, start, http.StatusBadRequest, "Block", "invalid request body", "action", 0, "low", nil, "invalid", r.cfg.TokenMode)
 			c.JSON(http.StatusBadRequest, gin.H{
 				"success": false,
 				"error":   "invalid request body",
@@ -124,6 +126,7 @@ func (r *Router) handleIssueToken(c *gin.Context) {
 		req.MaxCalls,
 	)
 	if err != nil {
+		r.auditManualResponse(requestID, start, http.StatusInternalServerError, "Block", err.Error(), "action", 0, "low", nil, "issue_failed", r.cfg.TokenMode)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   err.Error(),
@@ -131,6 +134,7 @@ func (r *Router) handleIssueToken(c *gin.Context) {
 		return
 	}
 
+	r.auditManualResponse(requestID, start, http.StatusOK, "Allow", "require token issued", "action", 20, "low", nil, "issued", r.cfg.TokenMode)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    r.buildTokenInfo(token),
@@ -139,8 +143,10 @@ func (r *Router) handleIssueToken(c *gin.Context) {
 
 func (r *Router) handleVerifyToken(c *gin.Context) {
 	var req verifyTokenRequest
+	requestID, start := r.auditManualRequest(c, req)
 	if c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {
+			r.auditManualResponse(requestID, start, http.StatusBadRequest, "Block", "invalid request body", "action", 0, "low", nil, "invalid", r.cfg.TokenMode)
 			c.JSON(http.StatusBadRequest, gin.H{
 				"success": false,
 				"error":   "invalid request body",
@@ -157,6 +163,7 @@ func (r *Router) handleVerifyToken(c *gin.Context) {
 		token, err = r.tokenStore.GetLatest()
 	}
 	if err != nil {
+		r.auditManualResponse(requestID, start, http.StatusOK, "Block", "require token not found", "action", 90, "high", nil, "missing", r.cfg.TokenMode)
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
 			"data": gin.H{
@@ -172,11 +179,36 @@ func (r *Router) handleVerifyToken(c *gin.Context) {
 	checkMap["schema_hash_match"] = true
 	checkMap["scope_match"] = true
 	checkMap["risk_level_ok"] = true
+	valid := checks.IsValid()
+	decision := boolDecision(valid)
+	reason := "require token verified"
+	if !valid {
+		reason = "require token verification failed"
+	}
+	riskScore := 15
+	riskLevel := "low"
+	if !valid {
+		riskScore = 95
+		riskLevel = "critical"
+	}
+	r.auditManualResponse(
+		requestID,
+		start,
+		http.StatusOK,
+		decision,
+		reason,
+		"action",
+		riskScore,
+		riskLevel,
+		nil,
+		statusFromBool(valid, "valid", "invalid"),
+		r.cfg.TokenMode,
+	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"valid":  checks.IsValid(),
+			"valid":  valid,
 			"checks": checkMap,
 		},
 	})
