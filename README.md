@@ -55,23 +55,30 @@ AegisGuard 实现了三层 Gate：
 | Action Gate  | 工具调用/动作执行前 | 校验 RequireToken、工具 scope、调用预算、高风险动作和授权状态 |
 | Return Gate  | 模型或工具返回后    | 检测返回内容中的敏感信息、注入污染，并执行过滤或隔离          |
 
+三道 Gate 共用同一套正则规则引擎 `PolicyEngine`（`backend/internal/gates/policy.go`），规则覆盖 `prompt_injection`/`privileged_scope`/`sensitive_access`/`high_impact_action`/`memory_poisoning`/`illegal_finance` 六类，按命中规则加权打分并映射为 `risk_level`。
+
+Action Gate 支持**动态规则路由**（按工具名只匹配相关规则子集，而非每次全量扫描六类规则）：内置 `read`/`search`/`get`/`list`/`write`/`update`/`create`/`delete`/`exec`/`send`/`transfer` 等工具类别前缀映射表，未命中映射表的工具名自动回退到全量规则，保证行为与关闭该开关时一致。默认关闭，通过环境变量 `AEGIS_DYNAMIC_RULE_ROUTING=true` 开启。
+
 关键代码：
 
 - `backend/internal/gates/message.go`
 - `backend/internal/gates/action.go`
 - `backend/internal/gates/return.go`
+- `backend/internal/gates/policy.go`
 - `backend/internal/gates/gate_evaluator.go`
+- `backend/internal/sanitize/sanitize.go`（Return Gate 黑名单脱敏引擎）
 
 ### 3. RequireToken 可信授权
 
-系统实现了最小可运行的可信授权机制：
+系统实现了基于国密 SM2/SM3 算法的可信授权机制：
 
-- token 签发与校验
+- token 签发与 SM2 数字签名（`backend/pkg/smcrypto/`，`github.com/emmansun/gmsm` 实现）
 - 过期时间检查
-- nonce 防重放
-- scope 校验
-- 工具名绑定
-- 调用预算检查
+- nonce 防重放（内存态，24 小时过期自动清理）
+- 工具 Schema 指纹（SM3 哈希）防参数篡改
+- scope 校验、工具名绑定
+- 调用预算检查（`max_calls`/`call_count`，防 DoS 式滥用）
+- 验证结果按签名消息缓存 5 分钟，降低重复验签开销
 
 接口：
 
@@ -87,6 +94,7 @@ GET  /aegis/auth/status
 - `backend/internal/auth/token.go`
 - `backend/internal/auth/store.go`
 - `backend/internal/auth/verifier.go`
+- `backend/pkg/smcrypto/`（SM2/SM3/SM4/SM9 国密算法实现）
 
 ### 4. 记忆沙箱
 
@@ -151,17 +159,23 @@ AegisGuard/
 │  ├─ cmd/gates-demo/                # 三道闸门命令行演示
 │  ├─ config/                        # 网关配置模板
 │  ├─ internal/
-│  │  ├─ auth/                       # RequireToken 签发、校验、防重放
+│  │  ├─ auth/                       # RequireToken 签发、校验、防重放（SM2/SM3）
 │  │  ├─ audit/                      # 审计日志、攻击链构建、SQLite/JSONL 存储
 │  │  ├─ config/                     # 环境变量和配置加载
+│  │  ├─ contract/                   # 控制平面/执行平面通信契约接口（组合根依赖此包装配实现）
 │  │  ├─ db/                         # SQLite 初始化
 │  │  ├─ demo/                       # 实验结果读取
-│  │  ├─ gates/                      # 三道安全闸门
+│  │  ├─ gates/                      # 三道安全闸门 + PolicyEngine 规则引擎
 │  │  ├─ gateway/                    # 反向代理与运行时拦截
 │  │  ├─ http/                       # HTTP 路由和 Handler
+│  │  ├─ interfaces/                 # 跨包共享的公共 DTO 类型
+│  │  ├─ rules/                      # 实验/攻击目录元数据（ASB Agent、攻击族等展示数据）
+│  │  ├─ runtime/                    # 预留包（当前为空）
 │  │  ├─ sandbox/                    # 记忆沙箱
+│  │  ├─ sanitize/                   # 返回内容黑名单脱敏引擎（Return Gate 使用）
 │  │  ├─ user/                       # 用户注册、登录、token 刷新
 │  │  └─ vkey/                       # 网关 key、目标模型地址、模型 key 管理
+│  ├─ pkg/smcrypto/                  # 国密 SM2/SM3/SM4/SM9 算法实现
 │  └─ scripts/                       # 后端接口测试脚本
 ├─ frontend/                         # Vue 前端
 │  ├─ src/api/                       # 前端接口封装
@@ -252,6 +266,7 @@ $env:AEGIS_GATEWAY_CONFIG="backend\config\gateway.yaml"
 | `AEGIS_AUDIT_STORAGE_MODE` | `sqlite`                           | 审计存储，可选 `sqlite`、`jsonl`                     |
 | `AEGIS_AUDIT_DB_PATH`      | `backend/data/audit-store.db`      | SQLite 审计库路径                                        |
 | `AEGIS_USER_DB_PATH`       | `backend/data/aegisguard-users.db` | 用户系统 SQLite 路径                                     |
+| `AEGIS_DYNAMIC_RULE_ROUTING` | `false`                           | Action Gate 是否按工具名动态路由规则子集（关闭时全量扫描六类规则） |
 
 ### 4. 启动后端
 

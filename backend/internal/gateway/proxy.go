@@ -3,6 +3,7 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -16,6 +17,7 @@ import (
 	"aegisguard/internal/gates"
 	"aegisguard/internal/interfaces"
 	"aegisguard/internal/vkey"
+	"aegisguard/pkg/smcrypto"
 
 	"go.uber.org/zap"
 )
@@ -47,9 +49,18 @@ type AegisProxy struct {
 	contentFilter contract.ContentFilter
 	tokenMode     string
 	logger        *zap.Logger
+
+	provenanceEnabled bool
+	provenanceMode    string
+
+	// purificationEnabled 决定 modifyResponse 是否在 Allow 分支也调用 contentFilter
+	// 三态纯化（Phase 4，借鉴 Structured Purification 思想）。默认关闭时 Allow 分支
+	// 保持逐字节透传，与 Phase 4 之前完全一致；具体的 log-only/enforce 行为由
+	// contentFilter（sandbox.Manager）自身的开关决定，此处只负责"要不要调用"。
+	purificationEnabled bool
 }
 
-func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIssuer, tokenMode string, logger *zap.Logger) (*AegisProxy, error) {
+func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIssuer, tokenMode string, dynamicRuleRouting bool, tdgSettings gates.TDGSettings, provenanceSettings gates.ProvenanceSettings, purificationEnabled bool, logger *zap.Logger) (*AegisProxy, error) {
 	target, err := url.Parse(targetURL)
 	if err != nil {
 		return nil, err
@@ -58,16 +69,24 @@ func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIss
 		logger = zap.NewNop()
 	}
 
+	actionGate := gates.NewActionGateWithMode(logger, tokenMode)
+	actionGate.SetDynamicRuleRouting(dynamicRuleRouting)
+	actionGate.SetTDG(tdgSettings)
+
 	ap := &AegisProxy{
-		target:        target,
-		vkeyMgr:       vkeyMgr,
-		messageGate:   gates.NewMessageGate(),
-		actionGate:    gates.NewActionGateWithMode(logger, tokenMode),
-		returnGate:    gates.NewReturnGate(),
-		tokenIssuer:   tokenIssuer,
-		decisionStore: gates.NewDecisionStore(1000),
-		tokenMode:     normalizeGatewayTokenMode(tokenMode),
-		logger:        logger,
+		target:            target,
+		vkeyMgr:           vkeyMgr,
+		messageGate:       gates.NewMessageGate(),
+		actionGate:        actionGate,
+		returnGate:        gates.NewReturnGate(),
+		tokenIssuer:       tokenIssuer,
+		decisionStore:     gates.NewDecisionStore(1000),
+		tokenMode:         normalizeGatewayTokenMode(tokenMode),
+		logger:            logger,
+		provenanceEnabled: provenanceSettings.Enabled,
+		provenanceMode:    gates.NormalizeProvenanceMode(provenanceSettings.Mode),
+
+		purificationEnabled: purificationEnabled,
 	}
 
 	ap.proxy = httputil.NewSingleHostReverseProxy(target)
@@ -181,11 +200,40 @@ func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) (gateResult
 		ap.logger.Error("failed to issue or inject RequireToken", zap.String("tool", toolName), zap.Error(err))
 		req.Header.Set("X-Aegis-Token-Status", "error")
 	}
+
+	if traceID := computeTraceID(body); traceID != "" {
+		req.Header.Set("X-Aegis-Trace-ID", traceID)
+	}
+	// X-Aegis-Tool-Name 供 modifyResponse 在响应阶段读回工具名，供 Phase 4 三态纯化引擎
+	// 按工具名分表匹配白名单——响应阶段本身不携带工具名信息，只能靠请求阶段这样透传。
+	req.Header.Set("X-Aegis-Tool-Name", toolName)
+
 	result := ap.actionGate.Evaluate(toolName, params, req.Header)
 	gr := ap.newGateResult("action", result, http.StatusOK)
 	gr.TokenStatus = firstTokenStatus(req.Header)
 	gr.AuthMode = ap.tokenMode
 	gr.UnauthorizedAllow = result.Decision == gates.Allow && req.Header.Get("X-Aegis-Token") == "" && ap.tokenMode != "strict"
+
+	// 溯源校验与其它信号并行运行、不受它们先前结论限制：即便 PolicyEngine/TDG 已经判定
+	// HumanApproval/Degrade，一旦确认某个高危参数无法溯源（即最直接的注入证据），enforce
+	// 模式下也应直接升级为 Deny，而不是停留在"等待人工审批"这类更弱的处置上。
+	if ap.provenanceEnabled {
+		if violations := gates.CheckProvenance(toolName, params, body); len(violations) > 0 {
+			reason := provenanceViolationReason(violations)
+			ap.logger.Warn("provenance violation",
+				zap.String("tool", toolName),
+				zap.String("mode", ap.provenanceMode),
+				zap.String("reason", reason),
+			)
+			if ap.provenanceMode == "enforce" {
+				result.Decision = gates.Deny
+				result.Reason = reason
+				gr.Decision = result.Decision
+				gr.Reason = result.Reason
+			}
+		}
+	}
+
 	ap.recordDecision(req, gr, toolName, "")
 
 	switch result.Decision {
@@ -209,6 +257,15 @@ func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) (gateResult
 		)
 	}
 	return gr, true
+}
+
+// provenanceViolationReason 将参数溯源校验失败的明细拼接成人类可读的 Deny 原因。
+func provenanceViolationReason(violations []gates.ProvenanceViolation) string {
+	parts := make([]string, 0, len(violations))
+	for _, v := range violations {
+		parts = append(parts, fmt.Sprintf("param %q of tool %q has no valid provenance: %s", v.Param, v.ToolName, v.Reason))
+	}
+	return strings.Join(parts, "; ")
 }
 
 func (ap *AegisProxy) newGateResult(gateType string, er interfaces.EvaluateResult, statusCode int) gateResult {
@@ -353,6 +410,15 @@ func (ap *AegisProxy) injectToken(req *http.Request, toolName string, params map
 	return nil
 }
 
+// extractToolCall 从请求体里取出"当前待处理"的工具调用。
+//
+// 工程审计发现的既有缺陷（在实现 Phase 3 参数溯源时暴露，非本次改动引入）：
+// /v1/chat/completions 每轮请求都会携带该任务此前全部历史消息，一旦某个任务已经完成过
+// 一次工具调用（历史里已经有一条 assistant tool_calls 消息 + 对应的 tool 回执），
+// 再次发起新的工具调用时，请求体里会同时存在"已执行的历史调用"和"本次待评估的新调用"两条
+// tool_calls 消息。原实现遍历时命中第一条就直接返回，等于永远只评估任务的第一次工具调用，
+// 后续调用全部被误判/绕过风控。修正为返回消息数组中**最后一条**带 tool_calls 的消息——
+// 即时间上最新、且后面没有对应 tool 回执跟随的那一条，这才是真正等待网关放行的调用。
 func (ap *AegisProxy) extractToolCall(body []byte) (string, map[string]interface{}) {
 	var req struct {
 		Messages []struct {
@@ -366,27 +432,67 @@ func (ap *AegisProxy) extractToolCall(body []byte) (string, map[string]interface
 	}
 	_ = json.Unmarshal(body, &req)
 
+	var toolName string
+	var params map[string]interface{}
 	for _, message := range req.Messages {
 		if len(message.ToolCalls) == 0 {
 			continue
 		}
 		tc := message.ToolCalls[0]
-		params := map[string]interface{}{}
+		candidate := map[string]interface{}{}
 		if len(tc.Function.Arguments) > 0 {
-			if err := json.Unmarshal(tc.Function.Arguments, &params); err != nil {
+			if err := json.Unmarshal(tc.Function.Arguments, &candidate); err != nil {
 				var argString string
 				if stringErr := json.Unmarshal(tc.Function.Arguments, &argString); stringErr == nil {
-					if mapErr := json.Unmarshal([]byte(argString), &params); mapErr != nil {
-						params["raw_arguments"] = argString
+					if mapErr := json.Unmarshal([]byte(argString), &candidate); mapErr != nil {
+						candidate["raw_arguments"] = argString
 					}
 				} else {
-					params["raw_arguments"] = string(tc.Function.Arguments)
+					candidate["raw_arguments"] = string(tc.Function.Arguments)
 				}
 			}
 		}
-		return tc.Function.Name, params
+		toolName, params = tc.Function.Name, candidate
 	}
-	return "", nil
+	return toolName, params
+}
+
+// computeTraceID 从请求体中提取稳定的会话指纹，作为 Phase 2 TDG 校验使用的 Trace 标识。
+//
+// /v1/chat/completions 是无状态协议：Agent 每发起一次工具调用，都会把此前的完整对话历史
+// （包括之前的工具调用与返回结果）重新放进 messages 数组一并发送。这意味着不能用逐请求
+// 生成的 request_id 作为 Trace（那样每次工具调用都会落入独立的拓扑图，TDG 形同虚设），
+// 也无法要求上游 Agent 框架配合透传自定义 Header（网关对其无控制权）。
+//
+// 因此改为取该对话首条 user 消息内容的 SM3 指纹：该内容在同一任务的多轮工具调用过程中
+// 保持不变，是网关能够纯被动、无侵入地观测到的最稳定的会话锚点。
+// 已知局限：若两个并发任务的首条用户消息完全相同，会被视为同一条 Trace；
+// 这是用零侵入方式换取的工程折衷，不影响拓扑校验"防止单个任务内调用异常发散"的核心目标。
+func computeTraceID(body []byte) string {
+	var req struct {
+		Messages []struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil || len(req.Messages) == 0 {
+		return ""
+	}
+
+	var anchor json.RawMessage
+	for _, m := range req.Messages {
+		if m.Role == "user" {
+			anchor = m.Content
+			break
+		}
+	}
+	if len(anchor) == 0 {
+		anchor = req.Messages[0].Content
+	}
+	if len(anchor) == 0 {
+		return ""
+	}
+	return smcrypto.SM3Hex(anchor)
 }
 
 func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
@@ -409,6 +515,8 @@ func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
 	ap.recordDecision(resp.Request, gr, "", "")
 	setGateHeaders(resp.Header, gr)
 
+	toolName := resp.Request.Header.Get("X-Aegis-Tool-Name")
+
 	switch result.Decision {
 	case gates.Block, gates.Deny:
 		ap.logger.Warn("response blocked by return gate", zap.String("reason", result.Reason))
@@ -420,7 +528,7 @@ func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
 		ap.logger.Info("response filtered by return gate", zap.String("reason", result.Reason))
 		ap.captureSandboxResponse(resp, body, gr, true)
 		if ap.contentFilter != nil {
-			filtered, removed := ap.contentFilter.FilterToolResponse(body)
+			filtered, removed := ap.contentFilter.FilterToolResponse(body, toolName)
 			body = filtered
 			if len(removed) > 0 {
 				resp.Header.Set("X-Aegis-Filtered-Fields", strings.Join(removed, ","))
@@ -429,8 +537,22 @@ func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
 			body = ap.returnGate.Filter(body)
 		}
 		resp.Header.Set("X-Aegis-Filtered", "true")
-	default:
+	case gates.Allow:
 		ap.logger.Debug("return gate allow", zap.String("reason", result.Reason))
+		// Phase 4 复核结论：三态纯化不能只在 Degrade 之后才生效，否则真正需要它兜底的场景——
+		// "PolicyEngine 评分没抓到异常，但某个字段本不该出现"——永远走不到这里。因此 Allow
+		// 分支也要跑一遍纯化引擎；purificationEnabled 关闭时完全跳过，保持与 Phase 4 之前
+		// 逐字节一致的透传行为。log-only/enforce 的具体生效与否由 contentFilter 自身决定。
+		if ap.purificationEnabled && ap.contentFilter != nil {
+			filtered, removed := ap.contentFilter.FilterToolResponse(body, toolName)
+			body = filtered
+			if len(removed) > 0 {
+				resp.Header.Set("X-Aegis-Filtered-Fields", strings.Join(removed, ","))
+				resp.Header.Set("X-Aegis-Filtered", "true")
+			}
+		}
+	default:
+		ap.logger.Debug("return gate decision not handled by filter pipeline", zap.String("decision", result.Decision.String()), zap.String("reason", result.Reason))
 	}
 
 	resp.Body = io.NopCloser(bytes.NewBuffer(body))

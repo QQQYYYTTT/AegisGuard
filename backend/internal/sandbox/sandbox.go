@@ -33,6 +33,10 @@ type Manager struct {
 	ttl             time.Duration
 	maxContentBytes int
 	logger          *zap.Logger
+
+	purificationEnabled bool
+	purificationMode    string
+	purificationConfig  sanitize.PurificationConfig
 }
 
 func NewManager(logger *zap.Logger) *Manager {
@@ -40,12 +44,40 @@ func NewManager(logger *zap.Logger) *Manager {
 		logger = zap.NewNop()
 	}
 	return &Manager{
-		contexts:        make(map[string]*interfaces.SandboxContext),
-		records:         make(map[string][]interfaces.TransferRecord),
-		ttl:             defaultContextTTL,
-		maxContentBytes: defaultMaxBytes,
-		logger:          logger,
+		contexts:           make(map[string]*interfaces.SandboxContext),
+		records:            make(map[string][]interfaces.TransferRecord),
+		ttl:                defaultContextTTL,
+		maxContentBytes:    defaultMaxBytes,
+		logger:             logger,
+		purificationMode:   "log-only",
+		purificationConfig: sanitize.DefaultPurificationConfig(),
 	}
+}
+
+// SetPurification 开启/关闭 Phase 4 三态纯化引擎（借鉴 Structured Purification 思想）。
+// 默认关闭；关闭时 FilterToolResponse 完全回退到既有的 sanitize.JSON 黑名单扫描行为。
+// log-only 模式下仍会执行三态分类并记录处置决定，但不修改返回给 Agent 的 JSON；
+// enforce 模式下才会真正应用白名单直通/黑名单抹除/未知字段 log_and_strip。
+func (m *Manager) SetPurification(enabled bool, mode string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.purificationEnabled = enabled
+	m.purificationMode = normalizePurificationMode(mode)
+}
+
+// SetPurificationConfig 替换三态纯化引擎使用的白名单/黑名单/隔离区配置。
+// 未调用时使用 sanitize.DefaultPurificationConfig() 的通用安全字段表。
+func (m *Manager) SetPurificationConfig(cfg sanitize.PurificationConfig) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.purificationConfig = cfg
+}
+
+func normalizePurificationMode(mode string) string {
+	if strings.TrimSpace(strings.ToLower(mode)) == "enforce" {
+		return "enforce"
+	}
+	return "log-only"
 }
 
 func (m *Manager) CreateContext(trusted interfaces.TrustedContent, untrusted interfaces.UntrustedContent) (*interfaces.SandboxContext, error) {
@@ -311,21 +343,84 @@ func (m *Manager) ExtractSafeSummary(content string) string {
 	return sanitized
 }
 
-func (m *Manager) FilterToolResponse(rawResponse []byte) ([]byte, []string) {
+// FilterToolResponse 过滤工具回执 JSON。
+//
+// toolName 为 Phase 4 三态纯化引擎（借鉴 Structured Purification 思想）按工具名匹配白名单使用；
+// 关闭 Phase 4 时（默认状态）完全忽略 toolName，行为与 Phase 4 之前逐字节一致：仅做
+// sanitize.JSON 的黑名单敏感 Key 扫描 + 字符串内容策略正则匹配，不做任何白名单/隔离判定。
+func (m *Manager) FilterToolResponse(rawResponse []byte, toolName string) ([]byte, []string) {
+	m.mu.RLock()
+	enabled := m.purificationEnabled
+	mode := m.purificationMode
+	cfg := m.purificationConfig
+	m.mu.RUnlock()
+
+	if !enabled {
+		var payload any
+		if err := json.Unmarshal(rawResponse, &payload); err != nil {
+			filtered, removed := sanitize.Text(string(rawResponse))
+			return []byte(filtered), removed
+		}
+
+		removed := sanitize.JSON(&payload, "")
+		filtered, err := json.Marshal(payload)
+		if err != nil {
+			text, textRemoved := sanitize.Text(string(rawResponse))
+			removed = append(removed, textRemoved...)
+			return []byte(text), uniqueStrings(removed)
+		}
+		return filtered, uniqueStrings(removed)
+	}
+
 	var payload any
 	if err := json.Unmarshal(rawResponse, &payload); err != nil {
 		filtered, removed := sanitize.Text(string(rawResponse))
 		return []byte(filtered), removed
 	}
 
-	removed := sanitize.JSON(&payload, "")
-	filtered, err := json.Marshal(payload)
+	purified, records := sanitize.PurifyJSON(payload, toolName, cfg)
+	removed := m.logPurificationRecords(toolName, records)
+
+	if mode != "enforce" {
+		// log-only：三态分类结果只记录不生效，返回体保持原样，遵循
+		// "先 log-only 后 enforce" 的分阶段上线原则。
+		return rawResponse, nil
+	}
+
+	filtered, err := json.Marshal(purified)
 	if err != nil {
 		text, textRemoved := sanitize.Text(string(rawResponse))
-		removed = append(removed, textRemoved...)
-		return []byte(text), uniqueStrings(removed)
+		return []byte(text), uniqueStrings(append(removed, textRemoved...))
 	}
 	return filtered, uniqueStrings(removed)
+}
+
+// logPurificationRecords 把 PurifyJSON 的逐字段处置记录转换为响应头可用的标记列表，
+// 并把 Quarantine（log_and_strip）字段的原始值旁路写入审计日志——这些值被从返回给
+// Agent 的 JSON 中移除，唯一的留痕就是这条日志。
+func (m *Manager) logPurificationRecords(toolName string, records []sanitize.FieldRecord) []string {
+	if len(records) == 0 {
+		return nil
+	}
+	removed := make([]string, 0, len(records))
+	for _, record := range records {
+		switch record.Action {
+		case "pass":
+			continue
+		case "redact":
+			removed = append(removed, record.Key+":purification_redacted")
+		case "strip":
+			removed = append(removed, record.Key+":purification_stripped")
+		case "quarantine":
+			removed = append(removed, record.Key+":purification_quarantined")
+			m.logger.Warn("purification quarantine (log_and_strip)",
+				zap.String("tool", toolName),
+				zap.String("field", record.Key),
+				zap.Any("value", record.Value),
+			)
+		}
+	}
+	return removed
 }
 
 func (m *Manager) normalizeUntrusted(content interfaces.UntrustedContent) interfaces.UntrustedContent {
@@ -475,7 +570,6 @@ func firstNonEmpty(values ...string) string {
 	}
 	return ""
 }
-
 
 func uniqueStrings(values []string) []string {
 	if len(values) == 0 {

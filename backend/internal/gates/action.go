@@ -14,12 +14,16 @@ import (
 )
 
 type ActionGate struct {
-	verifier     *auth.Verifier
-	batchJudge   *BatchWindowJudge
-	enableBatch  bool
-	logger       *zap.Logger
-	policyEngine *PolicyEngine
-	tokenMode    string
+	verifier           *auth.Verifier
+	batchJudge         *BatchWindowJudge
+	enableBatch        bool
+	logger             *zap.Logger
+	policyEngine       *PolicyEngine
+	tokenMode          string
+	dynamicRuleRouting bool
+	tdgRegistry        *TDGRegistry
+	tdgEnabled         bool
+	tdgMode            string
 }
 
 func NewActionGate(logger *zap.Logger) *ActionGate {
@@ -53,9 +57,47 @@ func NewActionGateWithBatch(windowSize, maxEvents int, judgeInterval time.Durati
 	}
 }
 
+// SetDynamicRuleRouting 开启/关闭 Phase 1 动态规则路由（按工具名路由规则子集）。
+// 默认关闭；关闭时 Evaluate 完全回退到 PolicyEngine.Score 的全量扫描行为。
+func (ag *ActionGate) SetDynamicRuleRouting(enabled bool) {
+	ag.dynamicRuleRouting = enabled
+}
+
+// SetTDG 开启/关闭 Phase 2 工具调用拓扑校验（借鉴 IPIGuard TDG 思想）。
+// 默认关闭；log-only 模式下仅记录违规不阻断，enforce 模式下拒绝违规调用。
+// 关闭后已创建的 TDGRegistry 会被保留（不销毁已积累的拓扑数据），Evaluate 内部通过
+// tdgEnabled 开关短路校验逻辑，行为等价于未开启 Phase 2。
+func (ag *ActionGate) SetTDG(settings TDGSettings) {
+	ag.tdgEnabled = settings.Enabled
+	ag.tdgMode = normalizeTDGMode(settings.Mode)
+	if settings.Enabled && ag.tdgRegistry == nil {
+		ag.tdgRegistry = NewTDGRegistry(settings.MaxNodes, settings.MaxRepeat, settings.TTL)
+	}
+}
+
+// extractTraceID 从请求头中提取 Phase 2 TDG 校验使用的 Trace 标识。
+// 该值由网关层（gateway/proxy.go 的 computeTraceID）在转发前注入，取对话首条用户消息的
+// SM3 指纹——/v1/chat/completions 是无状态协议，每轮工具调用都会重发完整 messages 数组，
+// 若改用逐请求生成的 request_id 作为 Trace，每次工具调用都会落入独立的拓扑图，TDG 形同虚设。
+func extractTraceID(headers http.Header) string {
+	if headers == nil {
+		return "unknown"
+	}
+	if id := strings.TrimSpace(headers.Get("X-Aegis-Trace-ID")); id != "" {
+		return id
+	}
+	return "unknown"
+}
+
 func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, headers http.Header) interfaces.EvaluateResult {
 	contentSummary := ag.extractContentSummary(params)
-	score, rules := ag.policyEngine.Score(toolName + "\n" + contentSummary)
+	var score int
+	var rules []string
+	if ag.dynamicRuleRouting {
+		score, rules = ag.policyEngine.ScoreForTool(toolName, toolName+"\n"+contentSummary)
+	} else {
+		score, rules = ag.policyEngine.Score(toolName + "\n" + contentSummary)
+	}
 	if hasRuleFromList(rules, "memory_poisoning") {
 		ag.logger.Warn("action blocked: memory poisoning detected",
 			zap.String("tool", toolName),
@@ -87,6 +129,24 @@ func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, h
 			zap.Strings("rules", rules),
 		)
 		return makeEvaluateResult(HumanApproval, "action requires human approval due to semantic risk", score, rules)
+	}
+
+	if ag.tdgEnabled && ag.tdgRegistry != nil {
+		traceID := extractTraceID(headers)
+		tdg := ag.tdgRegistry.GetOrCreate(traceID)
+		allowed, violation := tdg.ValidateCall(toolName)
+		tdg.RecordCall(toolName)
+		if !allowed {
+			ag.logger.Warn("tdg topology violation",
+				zap.String("tool", toolName),
+				zap.String("trace_id", traceID),
+				zap.String("mode", ag.tdgMode),
+				zap.String("reason", violation),
+			)
+			if ag.tdgMode == "enforce" {
+				return makeEvaluateResult(Deny, "tool call topology violation: "+violation, score, rules)
+			}
+		}
 	}
 
 	tokenStr := headers.Get("X-Aegis-Token")
@@ -243,6 +303,9 @@ func (ag *ActionGate) extractContentSummary(params map[string]interface{}) strin
 func (ag *ActionGate) Close() {
 	if ag.batchJudge != nil {
 		ag.batchJudge.Close()
+	}
+	if ag.tdgRegistry != nil {
+		ag.tdgRegistry.Close()
 	}
 }
 

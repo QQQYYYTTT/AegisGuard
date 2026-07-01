@@ -121,7 +121,23 @@ func NewRouter(cfg config.Config) (*Router, error) {
 
 	sandboxMgr := memorysandbox.NewManager(logger)
 
-	proxy, err := gateway.NewAegisProxy(vkeyMgr.GetTargetURL(), vkeyMgr, tokenStore, cfg.TokenMode, logger)
+	tdgSettings := gates.TDGSettings{
+		Enabled:   cfg.TDGEnabled,
+		Mode:      cfg.TDGMode,
+		MaxNodes:  cfg.TDGMaxNodes,
+		MaxRepeat: cfg.TDGMaxRepeat,
+		TTL:       cfg.TDGTTL,
+	}
+	provenanceSettings := gates.ProvenanceSettings{
+		Enabled: cfg.ProvenanceEnabled,
+		Mode:    cfg.ProvenanceMode,
+	}
+
+	// Phase 4（三态纯化引擎）：sandboxMgr 自身持有白名单/黑名单表并决定 log-only/enforce
+	// 的具体生效方式，proxy 只需要知道"要不要在 Allow 分支也调用纯化"这一个布尔开关。
+	sandboxMgr.SetPurification(cfg.PurificationEnabled, cfg.PurificationMode)
+
+	proxy, err := gateway.NewAegisProxy(vkeyMgr.GetTargetURL(), vkeyMgr, tokenStore, cfg.TokenMode, cfg.DynamicRuleRoutingEnabled, tdgSettings, provenanceSettings, cfg.PurificationEnabled, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -129,9 +145,12 @@ func NewRouter(cfg config.Config) (*Router, error) {
 
 	decisionStore := proxy.GetDecisionStore()
 	gateQuery := gates.NewGateQuery(decisionStore)
+	actionGate := gates.NewActionGateWithMode(logger, cfg.TokenMode)
+	actionGate.SetDynamicRuleRouting(cfg.DynamicRuleRoutingEnabled)
+	actionGate.SetTDG(tdgSettings)
 	gateEvaluator := gates.NewGateEvaluator(
 		gates.NewMessageGate(),
-		gates.NewActionGateWithMode(logger, cfg.TokenMode),
+		actionGate,
 		gates.NewReturnGate(),
 		decisionStore,
 	)

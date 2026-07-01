@@ -33,5 +33,8 @@ type TransferManager interface {
 // 当前实现状态：完全未定义
 type ContentFilter interface {
 	ExtractSafeSummary(content string) string
-	FilterToolResponse(rawResponse []byte) ([]byte, []string)
+	// FilterToolResponse 过滤工具回执 JSON。toolName 用于 Phase 4 三态纯化引擎按工具名
+	// 分表匹配白名单（借鉴 Structured Purification 思想，详见 PLAN.md Phase 4）；
+	// 未开启三态纯化时该参数不影响行为，仅回退到既有的黑名单敏感字段扫描。
+	FilterToolResponse(rawResponse []byte, toolName string) ([]byte, []string)
 }
