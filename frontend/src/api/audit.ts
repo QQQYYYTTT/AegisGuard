@@ -50,6 +50,32 @@ export type AuditStats = {
   decision_distribution: Record<string, number>;
 };
 
+export type ThreatMapData = {
+  target: { name: string; coord: [number, number] };
+  stats: {
+    total: number;
+    critical: number;
+    high: number;
+    sources: number;
+    provinces: number;
+  };
+  provinces: Array<{ name: string; value: number; critical: number }>;
+  cities: Array<{
+    name: string;
+    coord: [number, number];
+    value: number;
+    level: "high" | "critical";
+  }>;
+  lines: Array<{
+    from: [number, number];
+    to: [number, number];
+    count: number;
+    level: "high" | "critical";
+    latest: string;
+  }>;
+  generatedAt: string;
+};
+
 type ApiResult<T> = { success: boolean; data: T };
 
 export const getAuditLogs = (params?: object) => {
@@ -68,4 +94,12 @@ export const getAttackChains = (params?: object) => {
 
 export const getAuditStats = () => {
   return http.request<ApiResult<AuditStats>>("get", "/aegis/audit/stats");
+};
+
+export const getThreatMap = (params?: { window?: string }) => {
+  return http.request<ApiResult<ThreatMapData>>(
+    "get",
+    "/aegis/audit/threat-map",
+    { params }
+  );
 };

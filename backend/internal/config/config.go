@@ -50,6 +50,9 @@ type Config struct {
 	AuditStorageMode string
 	AuditDBPath      string
 	SQLiteWALMode    bool
+
+	ThreatMapTarget      string
+	ThreatMapTargetCoord [2]float64
 }
 
 func resolveRootDir() string {
@@ -118,6 +121,8 @@ func Load() Config {
 	auditDBPath := getEnv("AEGIS_AUDIT_DB_PATH", filepath.Join(backendDir, "data", "audit-store.db"))
 	sqliteWALMode := strings.EqualFold(getEnv("AEGIS_SQLITE_WAL_MODE", "true"), "true")
 
+	threatMapTarget, threatMapCoord := parseThreatMapTarget(getEnv("AEGIS_THREAT_MAP_TARGET", ""))
+
 	return Config{
 		RootDir:                   rootDir,
 		BackendDir:                backendDir,
@@ -152,7 +157,27 @@ func Load() Config {
 		AuditStorageMode:          auditStorageMode,
 		AuditDBPath:               auditDBPath,
 		SQLiteWALMode:             sqliteWALMode,
+		ThreatMapTarget:           threatMapTarget,
+		ThreatMapTargetCoord:      threatMapCoord,
 	}
+}
+
+func parseThreatMapTarget(raw string) (string, [2]float64) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		// 空值表示让程序根据服务器网卡 IP 自动推断
+		return "", [2]float64{0, 0}
+	}
+	parts := strings.Split(raw, ",")
+	if len(parts) != 3 {
+		return "", [2]float64{0, 0}
+	}
+	lon, err1 := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+	lat, err2 := strconv.ParseFloat(strings.TrimSpace(parts[2]), 64)
+	if err1 != nil || err2 != nil || lon < -180 || lon > 180 || lat < -90 || lat > 90 {
+		return "", [2]float64{0, 0}
+	}
+	return strings.TrimSpace(parts[0]), [2]float64{lon, lat}
 }
 
 func getEnv(key, defaultValue string) string {

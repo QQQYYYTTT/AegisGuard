@@ -3,9 +3,11 @@ package audit
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -114,6 +116,30 @@ func (s *Store) QuerySince(since time.Time) ([]AuditEvent, error) {
 	return filtered, nil
 }
 
+// AggregateThreatSources 从 JSONL 中聚合高危/阻断事件的源 IP（jsonl 兜底实现）
+func (s *Store) AggregateThreatSources(since time.Time) ([]ThreatSourceRow, error) {
+	all, err := s.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+	var rows []ThreatSourceRow
+	for _, ev := range all {
+		if ev.Timestamp.Before(since) {
+			continue
+		}
+		if !isThreatSourceEvent(ev) {
+			continue
+		}
+		rows = append(rows, ThreatSourceRow{
+			ClientIP:  ev.ClientIP,
+			RiskLevel: ev.RiskLevel,
+			Decision:  ev.Decision,
+			Timestamp: ev.Timestamp,
+		})
+	}
+	return rows, nil
+}
+
 // Close 关闭审计文件句柄
 func (s *Store) Close() error {
 	s.mu.Lock()
@@ -151,4 +177,24 @@ func sortEventsByTimestampDesc(events []AuditEvent) {
 	sort.Slice(events, func(i, j int) bool {
 		return events[j].Timestamp.Before(events[i].Timestamp)
 	})
+}
+
+func isThreatSourceEvent(ev AuditEvent) bool {
+	level := strings.ToLower(strings.TrimSpace(ev.RiskLevel))
+	if level != "high" && level != "critical" {
+		return false
+	}
+	decision := strings.ToLower(strings.TrimSpace(ev.Decision))
+	if decision != "block" && decision != "deny" {
+		return false
+	}
+	return ev.ClientIP != "" && !isPrivateIP(ev.ClientIP)
+}
+
+func isPrivateIP(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return true
+	}
+	return ip.IsPrivate() || ip.IsLoopback()
 }

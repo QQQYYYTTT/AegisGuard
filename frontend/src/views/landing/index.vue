@@ -5,25 +5,15 @@ import * as echarts from "echarts";
 import { useGateDecision } from "@/hooks/useGateDecision";
 import { useAuditStream } from "@/hooks/useAuditStream";
 import { useCryptoStatus } from "@/hooks/useCryptoStatus";
+import { useAuditStoreHook } from "@/store/modules/audit";
 import Cookies from "js-cookie";
 import { multipleTabsKey } from "@/utils/auth";
+
+import { debounce } from "@pureadmin/utils";
 
 defineOptions({
   name: "LandingScreen"
 });
-
-type Particle = {
-  top: string;
-  left: string;
-  size: string;
-  delay: string;
-  duration: string;
-};
-
-type RegionHeat = {
-  name: string;
-  value: number;
-};
 
 type GateKey = "message" | "action" | "return";
 
@@ -39,113 +29,28 @@ function enterSystem() {
 }
 
 const mapChartRef = ref<HTMLElement | null>(null);
-const trendChartRef = ref<HTMLElement | null>(null);
-const decisionChartRef = ref<HTMLElement | null>(null);
-const funnelChartRef = ref<HTMLElement | null>(null);
-const radarChartRef = ref<HTMLElement | null>(null);
-const healthChartRef = ref<HTMLElement | null>(null);
-
 let mapChart: echarts.ECharts | null = null;
-let trendChart: echarts.ECharts | null = null;
-let decisionChart: echarts.ECharts | null = null;
-let funnelChart: echarts.ECharts | null = null;
-let radarChart: echarts.ECharts | null = null;
-let healthChart: echarts.ECharts | null = null;
 let chinaMapLoaded = false;
-let animationTimer: ReturnType<typeof setInterval> | null = null;
 let isActive = true;
 
-const particles: Particle[] = [
-  { top: "10%", left: "8%", size: "5px", delay: "0s", duration: "10s" },
-  { top: "32%", left: "10%", size: "10px", delay: "2s", duration: "15s" },
-  { top: "40%", left: "22%", size: "7px", delay: "1.5s", duration: "9s" },
-  { top: "58%", left: "6%", size: "6px", delay: "5s", duration: "14s" },
-  { top: "67%", left: "28%", size: "9px", delay: "1.2s", duration: "12s" },
-  { top: "52%", left: "92%", size: "8px", delay: "3.5s", duration: "10s" }
-];
+const auditStore = useAuditStoreHook();
+const threatMap = computed(() => auditStore.threatMap);
 
-const nationalHeatData = ref<RegionHeat[]>([
-  { name: "北京", value: 91 },
-  { name: "上海", value: 88 },
-  { name: "广东", value: 97 },
-  { name: "河北", value: 82 },
-  { name: "江苏", value: 79 },
-  { name: "山东", value: 74 },
-  { name: "四川", value: 68 },
-  { name: "湖北", value: 65 },
-  { name: "陕西", value: 59 },
-  { name: "福建", value: 70 },
-  { name: "河南", value: 62 },
-  { name: "天津", value: 57 },
-  { name: "重庆", value: 54 },
-  { name: "辽宁", value: 50 }
-]);
-
-const cityScatterData = ref([
-  { name: "北京", value: [116.4, 39.9, 91] },
-  { name: "上海", value: [121.47, 31.23, 88] },
-  { name: "深圳", value: [114.05, 22.55, 97] },
-  { name: "石家庄", value: [114.48, 38.03, 82] },
-  { name: "南京", value: [118.78, 32.04, 79] },
-  { name: "武汉", value: [114.3, 30.59, 65] },
-  { name: "成都", value: [104.06, 30.67, 68] },
-  { name: "西安", value: [108.94, 34.34, 59] }
-]);
-
-const trendHours = ref(["00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "24:00"]);
-const trendAlerts = ref([18, 28, 46, 63, 75, 58, 34]);
-const trendBlocks = ref([8, 16, 30, 43, 57, 46, 22]);
-
-const stageData = ref([
-  { name: "诱导探测", value: 182 },
-  { name: "Prompt 注入", value: 127 },
-  { name: "越权调用", value: 91 },
-  { name: "敏感外发", value: 54 },
-  { name: "自动阻断", value: 39 }
-]);
-
-const radarValues = ref([92, 86, 89, 84, 95, 78]);
-
-const healthServices = ["Auth", "Token", "Message", "Action", "Return", "Audit"];
-const healthMetrics = ["签名", "延迟", "拦截", "链路", "恢复", "可信"];
-const healthMatrix = ref([
-  [0, 0, 96],
-  [0, 1, 85],
-  [0, 2, 91],
-  [0, 3, 88],
-  [0, 4, 84],
-  [0, 5, 93],
-  [1, 0, 94],
-  [1, 1, 82],
-  [1, 2, 90],
-  [1, 3, 86],
-  [1, 4, 80],
-  [1, 5, 92],
-  [2, 0, 97],
-  [2, 1, 89],
-  [2, 2, 95],
-  [2, 3, 93],
-  [2, 4, 88],
-  [2, 5, 94],
-  [3, 0, 95],
-  [3, 1, 84],
-  [3, 2, 92],
-  [3, 3, 90],
-  [3, 4, 83],
-  [3, 5, 89],
-  [4, 0, 93],
-  [4, 1, 80],
-  [4, 2, 88],
-  [4, 3, 87],
-  [4, 4, 81],
-  [4, 5, 86],
-  [5, 0, 96],
-  [5, 1, 87],
-  [5, 2, 90],
-  [5, 3, 92],
-  [5, 4, 89],
-  [5, 5, 97]
-]);
+const nationalHeatData = computed(() =>
+  threatMap.value?.provinces?.map(p => ({ name: p.name, value: p.value })) ?? []
+);
+const cityScatterData = computed(() =>
+  threatMap.value?.cities?.map(c => ({
+    name: c.name,
+    value: [c.coord[0], c.coord[1], c.value],
+    itemStyle: { color: c.level === "critical" ? "#ff5f9f" : "#f8ba4a" }
+  })) ?? []
+);
+const attackChainLines = computed(() =>
+  threatMap.value?.lines?.map(l => ({
+    coords: [l.from, l.to] as [number, number][]
+  })) ?? []
+);
 
 const rotatingSignals = ref([
   "链路扫描: 华东区域授权校验正常",
@@ -160,12 +65,8 @@ const {
   startPolling: startGatePolling,
   stopPolling: stopGatePolling
 } = useGateDecision();
-const {
-  stats,
-  loadStats,
-  startPolling: startAuditPolling,
-  stopPolling: stopAuditPolling
-} = useAuditStream();
+const { stats, loadStats, startPolling: startAuditPolling, stopPolling: stopAuditPolling } =
+  useAuditStream();
 const {
   sm2Status,
   sm3Status,
@@ -202,76 +103,40 @@ const interceptionRate = computed(() => {
 const avgResponseMs = computed(() => `${Math.round(stats.value?.avg_duration_ms || 168)}ms`);
 
 const systemMetrics = computed(() => [
-  {
-    label: "今日判定流量",
-    value: `${totalGateToday.value || 1248}`,
-    unit: "次",
-    accent: "cyan"
-  },
-  {
-    label: "审计事件总量",
-    value: `${stats.value?.today_events || 362}`,
-    unit: "条",
-    accent: "blue"
-  },
-  {
-    label: "活跃可信令牌",
-    value: `${activeTokens.value || 36}`,
-    unit: "枚",
-    accent: "emerald"
-  },
-  {
-    label: "拦截处置率",
-    value: interceptionRate.value,
-    unit: "",
-    accent: "magenta"
-  },
-  {
-    label: "平均响应时延",
-    value: avgResponseMs.value,
-    unit: "",
-    accent: "blue"
-  },
-  {
-    label: "攻击链识别",
-    value: `${stats.value?.attack_chains || 28}`,
-    unit: "条",
-    accent: "cyan"
-  }
+  { label: "今日判定流量", value: `${totalGateToday.value || 1248}`, unit: "次", accent: "cyan" },
+  { label: "审计事件总量", value: `${stats.value?.today_events || 362}`, unit: "条", accent: "blue" },
+  { label: "活跃可信令牌", value: `${activeTokens.value || 36}`, unit: "枚", accent: "emerald" },
+  { label: "拦截处置率", value: interceptionRate.value, unit: "", accent: "magenta" },
+  { label: "平均响应时延", value: avgResponseMs.value, unit: "", accent: "blue" },
+  { label: "攻击链识别", value: `${stats.value?.attack_chains || 28}`, unit: "条", accent: "cyan" }
 ]);
 
 const gateStatusCards = computed(() => {
-  const fallback: Array<{
-    key: GateKey;
-    title: string;
-    status: string;
-    total: number;
-    blocked: number;
-  }> = [
-    { key: "message", title: "消息门", status: "online", total: 328, blocked: 18 },
-    { key: "action", title: "动作门", status: "online", total: 274, blocked: 12 },
-    { key: "return", title: "返回门", status: "online", total: 196, blocked: 9 }
+  const fallback = [
+    { key: "message" as GateKey, title: "消息门", status: "online", total: 328, blocked: 18 },
+    { key: "action" as GateKey, title: "动作门", status: "online", total: 274, blocked: 12 },
+    { key: "return" as GateKey, title: "返回门", status: "online", total: 196, blocked: 9 }
   ];
 
   if (!overview.value) return fallback;
 
   return [
     {
-      key: "message" as const,
+      key: "message" as GateKey,
       title: "消息门",
       status: overview.value.message_gate.status,
       total: overview.value.message_gate.today_count,
       blocked: overview.value.message_gate.block_count
     },
     {
-      key: "action" as const,
+      key: "action" as GateKey,
       title: "动作门",
       status: overview.value.action_gate.status,
       total: overview.value.action_gate.today_count,
       blocked: overview.value.action_gate.block_count
     },
     {
-      key: "return" as const,
+      key: "return" as GateKey,
       title: "返回门",
       status: overview.value.return_gate.status,
       total: overview.value.return_gate.today_count,
@@ -280,29 +145,8 @@ const gateStatusCards = computed(() => {
   ];
 });
 
-const gatePulseMetrics = computed(() => {
-  const cards = gateStatusCards.value;
-  return cards.map(item => ({
-    ...item,
-    ratio: item.total ? Math.round((item.blocked / item.total) * 100) : 0
-  }));
-});
-
-const topAgents = computed(() => {
-  return (
-    stats.value?.top_agents?.slice(0, 6) ?? [
-      { agent_id: "finance-agent", count: 86 },
-      { agent_id: "workflow-agent", count: 74 },
-      { agent_id: "ops-agent", count: 63 },
-      { agent_id: "policy-agent", count: 51 },
-      { agent_id: "audit-agent", count: 40 },
-      { agent_id: "reasoner-agent", count: 34 }
-    ]
-  );
-});
-
 const regionRanking = computed(() => {
-  return [...nationalHeatData.value].sort((a, b) => b.value - a.value).slice(0, 6);
+  return [...nationalHeatData.value].sort((a, b) => b.value - a.value).slice(0, 8);
 });
 
 const liveAlerts = computed(() => {
@@ -318,88 +162,26 @@ const liveAlerts = computed(() => {
   }
 
   return [
-    {
-      requestId: "REQ-7A29F1",
-      gate: "action",
-      level: "critical",
-      reason: "高危工具调用链被阻断",
-      score: 96
-    },
-    {
-      requestId: "REQ-37D9CC",
-      gate: "message",
-      level: "high",
-      reason: "Prompt Injection 诱导被识别",
-      score: 88
-    },
-    {
-      requestId: "REQ-95AF20",
-      gate: "return",
-      level: "high",
-      reason: "敏感结果外发风险触发审查",
-      score: 81
-    },
-    {
-      requestId: "REQ-6C10B8",
-      gate: "action",
-      level: "medium",
-      reason: "越权访问意图被降级执行",
-      score: 67
-    },
-    {
-      requestId: "REQ-5D20AE",
-      gate: "message",
-      level: "low",
-      reason: "普通搜索任务通过上下文校验",
-      score: 18
-    }
+    { requestId: "REQ-7A29F1", gate: "action", level: "critical", reason: "高危工具调用链被阻断", score: 96 },
+    { requestId: "REQ-37D9CC", gate: "message", level: "high", reason: "Prompt Injection 诱导被识别", score: 88 },
+    { requestId: "REQ-95AF20", gate: "return", level: "high", reason: "敏感结果外发风险触发审查", score: 81 },
+    { requestId: "REQ-6C10B8", gate: "action", level: "medium", reason: "越权访问意图被降级执行", score: 67 },
+    { requestId: "REQ-5D20AE", gate: "message", level: "low", reason: "普通搜索任务通过上下文校验", score: 18 }
   ];
 });
 
 const mapSignals = computed(() => [
-  {
-    label: "联防节点",
-    value: "34",
-    note: "全国在线"
-  },
-  {
-    label: "跨域攻击链",
-    value: `${stats.value?.attack_chains || 28}`,
-    note: "实时追踪"
-  },
-  {
-    label: "审计吞吐",
-    value: `${stats.value?.total_events || 1523}`,
-    note: "总事件量"
-  },
-  {
-    label: "响应时延",
-    value: avgResponseMs.value,
-    note: "平均耗时"
-  }
+  { label: "外部攻击源", value: `${threatMap.value?.stats.sources ?? stats.value?.attack_chains ?? 0}`, note: "独立 IP" },
+  { label: "高危事件", value: `${threatMap.value?.stats.total ?? stats.value?.attack_chains ?? 0}`, note: "近 1 小时" },
+  { label: "严重事件", value: `${threatMap.value?.stats.critical ?? 0}`, note: "critical" },
+  { label: "涉及省份", value: `${threatMap.value?.stats.provinces ?? 0}`, note: "地理分布" }
 ]);
 
 const systemSignals = computed(() => [
-  {
-    label: "SM2 签名链路",
-    value: sm2Status.value ? "在线" : "离线",
-    active: sm2Status.value
-  },
-  {
-    label: "SM3 摘要校验",
-    value: sm3Status.value ? "在线" : "离线",
-    active: sm3Status.value
-  },
-  {
-    label: "SM4 加密隧道",
-    value: sm4Status.value ? "在线" : "离线",
-    active: sm4Status.value
-  },
-  {
-    label: "吊销令牌",
-    value: `${revokedTokens.value} 枚`,
-    active: revokedTokens.value === 0
-  }
+  { label: "SM2 签名链路", value: sm2Status.value ? "在线" : "离线", active: sm2Status.value },
+  { label: "SM3 摘要校验", value: sm3Status.value ? "在线" : "离线", active: sm3Status.value },
+  { label: "SM4 加密隧道", value: sm4Status.value ? "在线" : "离线", active: sm4Status.value },
+  { label: "吊销令牌", value: `${revokedTokens.value} 枚`, active: revokedTokens.value === 0 }
 ]);
 
 const defenseTimeline = computed(() => [
@@ -411,9 +193,7 @@ const defenseTimeline = computed(() => [
 ]);
 
 const footerMarquee = computed(() => {
-  const expiryText = keyExpiry.value
-    ? `密钥到期时间 ${keyExpiry.value}`
-    : "密钥轮换计划正常";
+  const expiryText = keyExpiry.value ? `密钥到期时间 ${keyExpiry.value}` : "密钥轮换计划正常";
   return [
     "AegisGuard 态势感知前置总览",
     "三闸门协同防护正在运行",
@@ -457,378 +237,10 @@ async function loadChinaMap() {
   chinaMapLoaded = true;
 }
 
-function renderTrendChart() {
-  if (!isActive) return;
-  if (!trendChartRef.value) return;
-  if (!trendChart) {
-    trendChart = echarts.init(trendChartRef.value);
-  }
-
-  trendChart.setOption({
-    animationDuration: 1200,
-    grid: {
-      left: 34,
-      right: 12,
-      top: 28,
-      bottom: 26
-    },
-    tooltip: {
-      trigger: "axis"
-    },
-    legend: {
-      top: 0,
-      right: 0,
-      textStyle: {
-        color: "#8aa7ee"
-      }
-    },
-    xAxis: {
-      type: "category",
-      data: trendHours.value,
-      axisLine: { lineStyle: { color: "rgba(118, 178, 255, 0.4)" } },
-      axisLabel: { color: "#98b6ff" }
-    },
-    yAxis: {
-      type: "value",
-      splitLine: { lineStyle: { color: "rgba(52, 84, 144, 0.18)" } },
-      axisLabel: { color: "#7e9ce8" }
-    },
-    series: [
-      {
-        name: "告警流量",
-        type: "line",
-        smooth: true,
-        symbol: "none",
-        lineStyle: {
-          width: 3,
-          color: "#39d0ff"
-        },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(57, 208, 255, 0.45)" },
-            { offset: 1, color: "rgba(57, 208, 255, 0.02)" }
-          ])
-        },
-        data: trendAlerts.value
-      },
-      {
-        name: "阻断处置",
-        type: "line",
-        smooth: true,
-        symbol: "none",
-        lineStyle: {
-          width: 2,
-          color: "#8d7dff"
-        },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(141, 125, 255, 0.28)" },
-            { offset: 1, color: "rgba(141, 125, 255, 0.02)" }
-          ])
-        },
-        data: trendBlocks.value
-      }
-    ]
-  });
-}
-
-function renderDecisionChart() {
-  if (!decisionChartRef.value) return;
-  if (!decisionChart) {
-    decisionChart = echarts.init(decisionChartRef.value);
-  }
-
-  const messageCounts = overview.value?.message_gate.decision_counts ?? {};
-  const actionCounts = overview.value?.action_gate.decision_counts ?? {};
-  const returnCounts = overview.value?.return_gate.decision_counts ?? {};
-
-  const allow =
-    (messageCounts.Allow || 0) +
-      (actionCounts.Allow || 0) +
-      (returnCounts.Allow || 0) ||
-    420;
-  const block =
-    (messageCounts.Block || 0) +
-      (messageCounts.Deny || 0) +
-      (actionCounts.Block || 0) +
-      (actionCounts.Deny || 0) +
-      (returnCounts.Block || 0) +
-      (returnCounts.Deny || 0) ||
-    89;
-  const degrade =
-    (messageCounts.Degrade || 0) +
-      (actionCounts.Degrade || 0) +
-      (returnCounts.Degrade || 0) ||
-    56;
-  const approval =
-    (messageCounts.HumanApproval || 0) +
-      (actionCounts.HumanApproval || 0) +
-      (returnCounts.HumanApproval || 0) ||
-    22;
-
-  decisionChart.setOption({
-    animation: false,
-    tooltip: {
-      trigger: "item"
-    },
-    legend: {
-      bottom: 0,
-      textStyle: { color: "#8aa7ee" }
-    },
-    series: [
-      {
-        type: "pie",
-        radius: ["56%", "78%"],
-        center: ["42%", "50%"],
-        avoidLabelOverlap: false,
-        label: {
-          show: false
-        },
-        itemStyle: {
-          borderColor: "rgba(8, 16, 44, 0.96)",
-          borderWidth: 4
-        },
-        data: [
-          { name: "允许", value: allow, itemStyle: { color: "#34d4ff" } },
-          { name: "阻断", value: block, itemStyle: { color: "#ff5f9f" } },
-          { name: "降级", value: degrade, itemStyle: { color: "#6cf7b8" } },
-          { name: "人工审批", value: approval, itemStyle: { color: "#8b7bff" } }
-        ]
-      },
-      {
-        type: "bar",
-        xAxisIndex: 0,
-        yAxisIndex: 0,
-        data: [allow, block, degrade, approval],
-        barWidth: 10,
-        itemStyle: {
-          borderRadius: 10,
-          color: (params: any) =>
-            ["#34d4ff", "#ff5f9f", "#6cf7b8", "#8b7bff"][params.dataIndex]
-        }
-      }
-    ],
-    grid: {
-      left: "58%",
-      right: 10,
-      top: 26,
-      bottom: 34
-    },
-    xAxis: [
-      {
-        type: "value",
-        show: false,
-        max: Math.max(allow, block, degrade, approval) * 1.15
-      }
-    ],
-    yAxis: [
-      {
-        type: "category",
-        inverse: true,
-        axisTick: { show: false },
-        axisLine: { show: false },
-        axisLabel: {
-          color: "#a4c2ff"
-        },
-        data: ["允许", "阻断", "降级", "审批"]
-      }
-    ]
-  });
-}
-
-function renderFunnelChart() {
-  if (!isActive) return;
-  if (!funnelChartRef.value) return;
-  if (!funnelChart) {
-    funnelChart = echarts.init(funnelChartRef.value);
-  }
-
-  funnelChart.setOption({
-    animation: false,
-    tooltip: {
-      trigger: "item"
-    },
-    series: [
-      {
-        name: "攻击阶段",
-        type: "funnel",
-        left: "6%",
-        top: 10,
-        bottom: 8,
-        width: "88%",
-        minSize: "35%",
-        maxSize: "95%",
-        sort: "descending",
-        gap: 4,
-        label: {
-          color: "#e1f4ff",
-          formatter: "{b}"
-        },
-        labelLine: {
-          length: 8,
-          lineStyle: { color: "#5e8cff" }
-        },
-        itemStyle: {
-          borderColor: "rgba(6, 18, 38, 0.92)",
-          borderWidth: 2
-        },
-        data: stageData.value.map((item, index) => ({
-          ...item,
-          itemStyle: {
-            color: ["#34d4ff", "#5f9fff", "#8b7bff", "#ff7db0", "#ffb36b"][index]
-          }
-        }))
-      }
-    ]
-  });
-}
-
-function renderRadarChart() {
-  if (!isActive) return;
-  if (!radarChartRef.value) return;
-  if (!radarChart) {
-    radarChart = echarts.init(radarChartRef.value);
-  }
-
-  radarChart.setOption({
-    animationDuration: 1200,
-    tooltip: {},
-    radar: {
-      radius: "64%",
-      alignTicks: false,
-      indicator: [
-        { name: "授权可信", max: 100 },
-        { name: "闸门阻断", max: 100 },
-        { name: "审计闭环", max: 100 },
-        { name: "链路韧性", max: 100 },
-        { name: "沙箱隔离", max: 100 },
-        { name: "策略覆盖", max: 100 }
-      ],
-      axisName: {
-        color: "#a7c4ff"
-      },
-      splitLine: {
-        lineStyle: {
-          color: "rgba(89, 146, 255, 0.2)"
-        }
-      },
-      splitArea: {
-        areaStyle: {
-          color: ["rgba(7, 20, 54, 0.18)", "rgba(7, 20, 54, 0.08)"]
-        }
-      },
-      axisLine: {
-        lineStyle: {
-          color: "rgba(89, 146, 255, 0.22)"
-        }
-      }
-    },
-    series: [
-      {
-        type: "radar",
-        symbol: "circle",
-        symbolSize: 6,
-        itemStyle: {
-          color: "#78f5ff"
-        },
-        areaStyle: {
-          color: "rgba(71, 226, 255, 0.18)"
-        },
-        lineStyle: {
-          width: 2,
-          color: "#78f5ff"
-        },
-        data: [
-          {
-            value: radarValues.value,
-            name: "联防健康度"
-          }
-        ]
-      }
-    ]
-  });
-}
-
-function renderHealthChart() {
-  if (!isActive) return;
-  if (!healthChartRef.value) return;
-  if (!healthChart) {
-    healthChart = echarts.init(healthChartRef.value);
-  }
-
-  healthChart.setOption({
-    animation: false,
-    tooltip: {
-      position: "top",
-      formatter: (params: any) => {
-        return `${healthServices[params.value[0]]} / ${healthMetrics[params.value[1]]}<br/>健康度 ${params.value[2]}`;
-      }
-    },
-    grid: {
-      left: 54,
-      right: 10,
-      top: 20,
-      bottom: 20
-    },
-    xAxis: {
-      type: "category",
-      data: healthServices,
-      splitArea: { show: false },
-      axisLabel: {
-        color: "#96b4f8"
-      },
-      axisLine: {
-        lineStyle: {
-          color: "rgba(89, 146, 255, 0.22)"
-        }
-      }
-    },
-    yAxis: {
-      type: "category",
-      data: healthMetrics,
-      splitArea: { show: false },
-      axisLabel: {
-        color: "#96b4f8"
-      },
-      axisLine: {
-        lineStyle: {
-          color: "rgba(89, 146, 255, 0.22)"
-        }
-      }
-    },
-    visualMap: {
-      min: 70,
-      max: 100,
-      show: false,
-      inRange: {
-        color: ["#173372", "#2357c7", "#2ccfff", "#77ffd8"]
-      }
-    },
-    series: [
-      {
-        type: "heatmap",
-        data: healthMatrix.value,
-        label: {
-          show: true,
-          color: "#e9fbff",
-          fontSize: 11,
-          formatter: (params: any) => params.value[2]
-        },
-        itemStyle: {
-          borderColor: "rgba(5, 18, 38, 0.8)",
-          borderWidth: 1,
-          borderRadius: 8
-        }
-      }
-    ]
-  });
-}
-
 function renderMapChart() {
-  if (!isActive) return;
-  if (!mapChartRef.value) return;
+  if (!isActive || !mapChartRef.value) return;
   if (!mapChart) {
-    mapChart = echarts.init(mapChartRef.value);
+    mapChart = echarts.init(mapChartRef.value, undefined, { renderer: "canvas" });
   }
 
   loadChinaMap().then(() => {
@@ -848,23 +260,26 @@ function renderMapChart() {
         layoutCenter: ["50%", "50%"],
         layoutSize: "92%",
         itemStyle: {
-          areaColor: (echarts as any).graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "#123a84" },
-            { offset: 0.6, color: "#0b1f4b" },
-            { offset: 1, color: "#08122c" }
-          ]),
+          areaColor: {
+            type: "linear",
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: "#123a84" },
+              { offset: 0.6, color: "#0b1f4b" },
+              { offset: 1, color: "#08122c" }
+            ]
+          },
           borderColor: "#2ecbff",
           borderWidth: 1,
-          shadowBlur: 24,
-          shadowColor: "rgba(46, 203, 255, 0.35)"
+          shadowBlur: 16,
+          shadowColor: "rgba(46, 203, 255, 0.28)"
         },
         emphasis: {
-          itemStyle: {
-            areaColor: "#1b5cb0"
-          },
-          label: {
-            color: "#fff"
-          }
+          itemStyle: { areaColor: "#1b5cb0" },
+          label: { color: "#fff" }
         }
       },
       visualMap: {
@@ -881,138 +296,110 @@ function renderMapChart() {
       },
       series: [
         {
-          name: "全国威胁热度",
+          name: "外部威胁源热度",
           type: "map",
           map: "china",
           geoIndex: 0,
           data: nationalHeatData.value
         },
         {
-          name: "威胁节点",
-          type: "effectScatter",
+          name: "攻击源城市",
+          type: "scatter",
           coordinateSystem: "geo",
-          rippleEffect: {
-            scale: 3,
-            period: 8,
-            brushType: "stroke"
-          },
-          symbolSize: (val: number[]) => Math.max(6, val[2] / 10),
-          itemStyle: {
-            color: "#75f2ff",
-            shadowBlur: 12,
-            shadowColor: "#75f2ff"
-          },
+          symbolSize: (val: number[]) => Math.max(4, Math.min(12, val[2] / 6)),
+          itemStyle: { color: "#75f2ff", opacity: 0.9 },
           data: cityScatterData.value
         },
         {
-          name: "跨域攻击链",
+          name: "攻击路径",
           type: "lines",
           coordinateSystem: "geo",
           zlevel: 2,
           effect: {
             show: true,
-            period: 6,
-            trailLength: 0.2,
+            period: 10,
+            trailLength: 0.08,
             symbol: "arrow",
-            symbolSize: 5,
+            symbolSize: 3,
             color: "#ff79bd"
           },
           lineStyle: {
             color: "#8f6bff",
-            width: 1.2,
-            opacity: 0.5,
+            width: 1,
+            opacity: 0.35,
             curveness: 0.28
           },
-          data: [
-            { coords: [[87.62, 43.82], [116.4, 39.9]] },
-            { coords: [[126.63, 45.75], [121.47, 31.23]] },
-            { coords: [[91.11, 29.97], [114.05, 22.55]] },
-            { coords: [[111.67, 40.82], [120.15, 30.28]] },
-            { coords: [[103.84, 36.06], [118.78, 32.04]] },
-            { coords: [[112.55, 37.87], [113.26, 23.13]] }
-          ]
+          data: attackChainLines.value.slice(0, 30)
+        },
+        {
+          name: "本公司网关",
+          type: "effectScatter",
+          coordinateSystem: "geo",
+          symbolSize: 16,
+          rippleEffect: { scale: 2.5, period: 6, brushType: "stroke" },
+          itemStyle: { color: "#ffd166", shadowBlur: 12, shadowColor: "#ffd166" },
+          data: threatMap.value?.target
+            ? [{ name: threatMap.value.target.name, value: [...threatMap.value.target.coord, 1] }]
+            : []
         }
       ]
     });
   });
 }
 
-function renderAllCharts() {
-  renderTrendChart();
-  renderDecisionChart();
-  renderFunnelChart();
-  renderRadarChart();
-  renderHealthChart();
-  void renderMapChart();
+function updateMapDataOnly() {
+  if (!mapChart) return;
+  mapChart.setOption({
+    series: [
+      { data: nationalHeatData.value },
+      { data: cityScatterData.value },
+      { data: attackChainLines.value.slice(0, 30) },
+      {
+        data: threatMap.value?.target
+          ? [{ name: threatMap.value.target.name, value: [...threatMap.value.target.coord, 1] }]
+          : []
+      }
+    ]
+  });
 }
 
 function rotateVisualData() {
   if (!isActive) return;
-
-  trendAlerts.value = [...trendAlerts.value.slice(1), Math.max(24, Math.min(82, trendAlerts.value[0] + 6 - Math.floor(Math.random() * 12)))];
-  trendBlocks.value = [...trendBlocks.value.slice(1), Math.max(12, Math.min(62, trendBlocks.value[0] + 4 - Math.floor(Math.random() * 8)))];
-
-  stageData.value = stageData.value.map((item, index) => ({
-    ...item,
-    value: Math.max(18, item.value + (index % 2 === 0 ? 5 : -4))
-  }));
-
-  radarValues.value = radarValues.value.map(value =>
-    Math.max(72, Math.min(99, value + (Math.random() > 0.5 ? 2 : -2)))
-  );
-
   rotatingSignals.value = [...rotatingSignals.value.slice(1), rotatingSignals.value[0]];
-
-  if (trendChart && isActive) trendChart.setOption({
-    animation: false,
-    xAxis: { data: trendHours.value },
-    series: [
-      { data: trendAlerts.value },
-      { data: trendBlocks.value }
-    ]
-  }, { notMerge: false });
-
-  if (funnelChart && isActive) {
-    const funnelColors = ["#34d4ff", "#5f9fff", "#8b7bff", "#ff7db0", "#ffb36b"];
-    funnelChart.setOption({
-      series: [{
-        data: stageData.value.map((item, index) => ({
-          ...item,
-          itemStyle: { color: funnelColors[index] }
-        }))
-      }]
-    }, { notMerge: false });
-  }
-
-  if (radarChart && isActive) {
-    radarChart.setOption({
-      animation: false,
-      series: [{ data: [{ value: radarValues.value, name: "联防健康度" }] }]
-    }, { notMerge: false });
-  }
 }
 
-function resizeCharts() {
+const resizeCharts = debounce(() => {
   if (!isActive) return;
   mapChart?.resize();
-  trendChart?.resize();
-  decisionChart?.resize();
-  funnelChart?.resize();
-  radarChart?.resize();
-  healthChart?.resize();
-}
+}, 200);
 
 async function initializeScreen() {
-  await Promise.all([loadOverview(), loadStats(), refresh()]);
+  await Promise.all([
+    loadOverview(),
+    loadStats(),
+    refresh(),
+    auditStore.fetchThreatMap({ window: "1h" })
+  ]);
   await nextTick();
-  renderAllCharts();
+  renderMapChart();
 }
+
+function pollThreatMap() {
+  if (!isActive) return;
+  auditStore.fetchThreatMap({ window: "1h" }).then(() => {
+    if (isActive) updateMapDataOnly();
+  });
+}
+
+let animationTimer: ReturnType<typeof setInterval> | null = null;
+let threatMapTimer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(async () => {
   await initializeScreen();
-  startGatePolling(10000);
-  startAuditPolling(10000);
-  animationTimer = setInterval(rotateVisualData, 10000);
+  startGatePolling(30000);
+  startAuditPolling(30000);
+  animationTimer = setInterval(rotateVisualData, 8000);
+  threatMapTimer = setInterval(pollThreatMap, 30000);
   window.addEventListener("resize", resizeCharts);
 });
 
@@ -1024,42 +411,19 @@ onUnmounted(() => {
     clearInterval(animationTimer);
     animationTimer = null;
   }
+  if (threatMapTimer) {
+    clearInterval(threatMapTimer);
+    threatMapTimer = null;
+  }
   window.removeEventListener("resize", resizeCharts);
   mapChart?.dispose();
-  trendChart?.dispose();
-  decisionChart?.dispose();
-  funnelChart?.dispose();
-  radarChart?.dispose();
-  healthChart?.dispose();
   mapChart = null;
-  trendChart = null;
-  decisionChart = null;
-  funnelChart = null;
-  radarChart = null;
-  healthChart = null;
 });
 </script>
 
 <template>
   <div class="landing-screen">
     <div class="bg-grid"></div>
-    <div class="bg-glow glow-left"></div>
-    <div class="bg-glow glow-right"></div>
-    <div class="scan-line"></div>
-
-    <div
-      v-for="(particle, index) in particles"
-      :key="index"
-      class="particle"
-      :style="{
-        top: particle.top,
-        left: particle.left,
-        width: particle.size,
-        height: particle.size,
-        animationDelay: particle.delay,
-        animationDuration: particle.duration
-      }"
-    ></div>
 
     <header class="topbar">
       <div class="brand">
@@ -1080,74 +444,35 @@ onUnmounted(() => {
       </div>
 
       <div class="topbar-actions">
-        <button class="enter-button" @click="enterSystem">
-          进入系统
-        </button>
+        <button class="enter-button" @click="enterSystem">进入系统</button>
       </div>
     </header>
 
     <main class="screen-layout">
       <section class="panel panel-left">
         <div class="panel-card metrics-card">
-          <div class="card-title">快速入口</div>
-          <div class="quick-entry-grid">
-            <div class="quick-entry-item" @click="router.push('/gate-control')">
-              <div class="qe-icon" style="background:rgba(255,95,159,0.15)">⚡</div>
-              <div>
-                <strong>自动处置中心</strong>
-                <small>Gate 控制面板</small>
-              </div>
-            </div>
-            <div class="quick-entry-item" @click="router.push('/policy')">
-              <div class="qe-icon" style="background:rgba(57,208,255,0.15)">📋</div>
-              <div>
-                <strong>策略规则管理</strong>
-                <small>CRUD / 优先级</small>
-              </div>
-            </div>
-            <div class="quick-entry-item" @click="router.push('/simulator')">
-              <div class="qe-icon" style="background:rgba(141,125,255,0.15)">▶</div>
-              <div>
-                <strong>运行时模拟器</strong>
-                <small>场景测试</small>
-              </div>
-            </div>
-            <div class="quick-entry-item" @click="router.push('/audit-trace')">
-              <div class="qe-icon" style="background:rgba(105,255,200,0.15)">🔍</div>
-              <div>
-                <strong>审计追踪</strong>
-                <small>攻击链溯源</small>
-              </div>
-            </div>
-            <div class="quick-entry-item" @click="router.push('/log-replay')">
-              <div class="qe-icon" style="background:rgba(248,186,74,0.15)">⏱</div>
-              <div>
-                <strong>日志回放</strong>
-                <small>会话重演</small>
-              </div>
-            </div>
-            <div class="quick-entry-item" @click="router.push('/dashboard')">
-              <div class="qe-icon" style="background:rgba(52,212,255,0.15)">📊</div>
-              <div>
-                <strong>安全监测总览</strong>
-                <small>图表看板</small>
-              </div>
+          <div class="card-title">核心战情指标</div>
+          <div class="metrics-grid metrics-grid-large">
+            <div v-for="item in systemMetrics" :key="item.label" class="metric-box" :class="item.accent">
+              <p>{{ item.label }}</p>
+              <strong>{{ item.value }}</strong>
+              <span>{{ item.unit }}</span>
             </div>
           </div>
         </div>
 
-        <div class="panel-card metrics-card">
-          <div class="card-title">核心战情指标</div>
-          <div class="metrics-grid metrics-grid-large">
-            <div
-              v-for="item in systemMetrics"
-              :key="item.label"
-              class="metric-box"
-              :class="item.accent"
-            >
-              <p>{{ item.label }}</p>
-              <strong>{{ item.value }}</strong>
-              <span>{{ item.unit }}</span>
+        <div class="panel-card">
+          <div class="card-title">三闸门联防状态</div>
+          <div class="gate-list">
+            <div v-for="item in gateStatusCards" :key="item.key" class="gate-item">
+              <div>
+                <p>{{ item.title }}</p>
+                <span>{{ statusText(item.status) }}</span>
+              </div>
+              <div class="gate-values">
+                <strong>{{ item.total }}</strong>
+                <small>{{ item.blocked }} 次阻断</small>
+              </div>
             </div>
           </div>
         </div>
@@ -1172,20 +497,13 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-
-        <div class="panel-card chart-card">
-          <div class="card-title">攻击阶段漏斗</div>
-          <div ref="funnelChartRef" class="chart-box chart-sm"></div>
-        </div>
-
-        <!-- 地区热度排行 已移动到联防时间线旁 -->
       </section>
 
       <section class="panel panel-center">
         <div class="hero-panel">
-            <div class="hero-caption">
-            <span>全国联防热力图</span>
-            <strong>Threat Mapping Matrix</strong>
+          <div class="hero-caption">
+            <span>外部威胁源溯源图 · 攻击汇聚至 {{ threatMap?.target?.name ?? "本公司" }}</span>
+            <strong>Threat Source Trace Map</strong>
           </div>
 
           <div class="hero-main-grid">
@@ -1197,6 +515,7 @@ onUnmounted(() => {
               </div>
               <div ref="mapChartRef" class="map-chart"></div>
             </div>
+
             <div class="hero-side-panel">
               <div class="hero-insight-rail">
                 <div class="hero-insight-card">
@@ -1229,6 +548,20 @@ onUnmounted(() => {
         </div>
 
         <div class="center-bottom-grid">
+          <div class="panel-card rank-card">
+            <div class="card-title">地区热度排行</div>
+            <div class="region-rank">
+              <div v-for="(region, index) in regionRanking" :key="region.name" class="region-row">
+                <span class="region-index">{{ index + 1 }}</span>
+                <span class="region-name">{{ region.name }}</span>
+                <div class="region-bar">
+                  <div class="region-bar-fill" :style="{ width: `${Math.min(region.value, 100)}%` }"></div>
+                </div>
+                <strong>{{ region.value }}</strong>
+              </div>
+            </div>
+          </div>
+
           <div class="panel-card timeline-card">
             <div class="card-title">联防时间线</div>
             <div class="timeline-list">
@@ -1241,69 +574,22 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-
-          <div class="panel-card chart-card waveform-card">
-            <div class="card-title">24H 威胁波形</div>
-            <div ref="trendChartRef" class="chart-box chart-sm"></div>
-          </div>
-
-          <div class="panel-card rank-card">
-            <div class="card-title">地区热度排行</div>
-            <div class="region-rank">
-              <div v-for="(region, index) in regionRanking" :key="region.name" class="region-row">
-                <span class="region-index">{{ index + 1 }}</span>
-                <span class="region-name">{{ region.name }}</span>
-                <div class="region-bar">
-                  <div class="region-bar-fill" :style="{ width: `${region.value}%` }"></div>
-                </div>
-                <strong>{{ region.value }}</strong>
-              </div>
-            </div>
-          </div>
-
-          <div class="panel-card pulse-card">
-            <div class="card-title">Gate 脉冲矩阵</div>
-            <div class="pulse-list">
-              <div v-for="item in gatePulseMetrics" :key="item.key" class="pulse-item">
-                <div class="pulse-head">
-                  <span>{{ item.title }}</span>
-                  <strong>{{ item.ratio }}%</strong>
-                </div>
-                <div class="pulse-track">
-                  <div class="pulse-fill" :style="{ width: `${item.ratio}%` }"></div>
-                </div>
-                <small>{{ item.blocked }} / {{ item.total }} 次命中</small>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
       <section class="panel panel-right">
         <div class="panel-card">
-          <div class="card-title">三闸门联防状态</div>
-          <div class="gate-list">
-            <div v-for="item in gateStatusCards" :key="item.key" class="gate-item">
-              <div>
-                <p>{{ item.title }}</p>
-                <span>{{ statusText(item.status) }}</span>
+          <div class="card-title">实时告警</div>
+          <div class="alert-list">
+            <div v-for="alert in liveAlerts" :key="alert.requestId" class="alert-item">
+              <div class="alert-head">
+                <code class="alert-id">{{ alert.requestId }}</code>
+                <span class="risk-tag" :class="alert.level">{{ riskLabel(alert.level) }}</span>
               </div>
-              <div class="gate-values">
-                <strong>{{ item.total }}</strong>
-                <small>{{ item.blocked }} 次阻断</small>
-              </div>
+              <p>{{ alert.reason }}</p>
+              <small>{{ gateLabel(alert.gate) }} · 风险分 {{ alert.score }}</small>
             </div>
           </div>
-        </div>
-
-        <div class="panel-card chart-card">
-          <div class="card-title">决策分布矩阵</div>
-          <div ref="decisionChartRef" class="chart-box chart-md"></div>
-        </div>
-
-        <div class="panel-card chart-card compact-card">
-          <div class="card-title">联防健康雷达</div>
-          <div ref="radarChartRef" class="chart-box chart-compact radar-tall"></div>
         </div>
       </section>
     </main>
@@ -1327,9 +613,8 @@ onUnmounted(() => {
   height: 100vh;
   overflow: hidden;
   background:
-    radial-gradient(circle at 15% 20%, rgba(44, 150, 255, 0.24), transparent 24%),
-    radial-gradient(circle at 80% 12%, rgba(138, 101, 255, 0.22), transparent 26%),
-    radial-gradient(circle at 50% 80%, rgba(0, 255, 205, 0.09), transparent 30%),
+    radial-gradient(circle at 15% 20%, rgba(44, 150, 255, 0.2), transparent 24%),
+    radial-gradient(circle at 80% 12%, rgba(138, 101, 255, 0.18), transparent 26%),
     linear-gradient(180deg, #040816 0%, #07102c 55%, #020611 100%);
   color: var(--text-main);
 }
@@ -1338,52 +623,11 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(75, 122, 255, 0.09) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(75, 122, 255, 0.09) 1px, transparent 1px);
+    linear-gradient(rgba(75, 122, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(75, 122, 255, 0.07) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: radial-gradient(circle at center, black 48%, transparent 100%);
-}
-
-.bg-glow {
-  position: absolute;
-  width: 32vw;
-  height: 32vw;
-  filter: blur(72px);
-  opacity: 0.3;
-}
-
-.glow-left {
-  top: -8vw;
-  left: -6vw;
-  background: rgba(61, 165, 255, 0.45);
-  animation: pulseGlow 8s ease-in-out infinite;
-}
-
-.glow-right {
-  right: -10vw;
-  bottom: -12vw;
-  background: rgba(137, 89, 255, 0.4);
-  animation: pulseGlow 10s ease-in-out infinite reverse;
-}
-
-.scan-line {
-  position: absolute;
-  inset: -20% 0 auto;
-  height: 24%;
-  background: linear-gradient(180deg, transparent, rgba(76, 222, 255, 0.12), transparent);
-  animation: scan 9s linear infinite;
-}
-
-.particle {
-  position: absolute;
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(117, 246, 255, 0.95), rgba(117, 246, 255, 0.05));
-  box-shadow: 0 0 18px rgba(117, 246, 255, 0.8);
-  animation-name: floatParticle;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
-  will-change: transform;
-  transform: translateZ(0);
+  pointer-events: none;
 }
 
 .topbar {
@@ -1481,11 +725,11 @@ onUnmounted(() => {
   box-shadow: 0 0 34px rgba(62, 220, 255, 0.32);
 }
 
-  .screen-layout {
+.screen-layout {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: 13vw minmax(760px, 1fr) 13vw;
+  grid-template-columns: 18vw minmax(760px, 1fr) 18vw;
   gap: 10px;
   height: calc(100vh - 92px);
   padding: 0 14px 12px;
@@ -1496,57 +740,45 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 10px;
   min-height: 0;
+  overflow: hidden;
 }
 
 .panel-left,
-.panel-center,
 .panel-right {
-  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.panel-left::-webkit-scrollbar,
+.panel-right::-webkit-scrollbar {
+  width: 4px;
+}
+
+.panel-left::-webkit-scrollbar-thumb,
+.panel-right::-webkit-scrollbar-thumb {
+  background: rgba(62, 220, 255, 0.2);
+  border-radius: 999px;
 }
 
 .panel-card,
 .hero-panel {
   position: relative;
   border: 1px solid var(--panel-border);
-  border-radius: 18px;
+  border-radius: 14px;
   background: linear-gradient(180deg, rgba(10, 22, 54, 0.82), rgba(3, 10, 28, 0.72));
   box-shadow:
     inset 0 0 0 1px rgba(104, 192, 255, 0.08),
     0 14px 32px rgba(2, 8, 22, 0.34);
-  backdrop-filter: blur(14px);
-}
-
-.panel-card::before,
-.hero-panel::before {
-  content: "";
-  position: absolute;
-  inset: 1px;
-  border-radius: inherit;
-  background:
-    linear-gradient(140deg, rgba(117, 246, 255, 0.1), transparent 24%, transparent 70%, rgba(141, 125, 255, 0.08)),
-    radial-gradient(circle at top right, rgba(77, 209, 255, 0.08), transparent 30%);
-  pointer-events: none;
 }
 
 .panel-card {
   padding: 12px;
-}
-
-.panel-right {
-  padding-right: 6px;
-}
-
-.panel-right .panel-card {
-  min-height: 200px;
-}
-
-.panel-right .chart-card {
-  min-height: 220px;
+  flex-shrink: 0;
 }
 
 .card-title {
   position: relative;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   padding-left: 12px;
   color: #ecf9ff;
   font-size: 13px;
@@ -1572,80 +804,48 @@ onUnmounted(() => {
   gap: 6px;
 }
 
-.metrics-grid-large {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .metric-box {
-  padding: 6px 8px;
+  padding: 8px;
   border: 1px solid rgba(97, 154, 255, 0.12);
-  border-radius: 14px;
+  border-radius: 12px;
   background: rgba(6, 16, 42, 0.72);
 }
 
 .metric-box p {
+  margin: 0 0 4px;
   font-size: 11px;
-  margin-bottom: 4px;
+  color: var(--text-soft);
 }
 
 .metric-box strong {
   display: inline-block;
-  margin-top: 2px;
   margin-right: 4px;
   font-size: 18px;
   line-height: 1.05;
 }
 
-.metric-box p,
-.signal-item span,
-.token-summary span,
-.map-kpis span,
-.gate-item span,
-.alert-item small,
-.agent-name,
-.region-name,
-.overlay-card span,
-.timeline-time,
-.pulse-item small {
-  color: var(--text-soft);
-  font-size: 12px;
+.metric-box span {
+  font-size: 11px;
+  color: #7fa3ef;
 }
 
-.metric-box strong {
-  display: inline-block;
-  margin-top: 4px;
-  margin-right: 6px;
-  font-size: 20px;
-  line-height: 1.05;
-}
-
-.metric-box.cyan strong {
-  color: var(--cyan);
-}
-
-.metric-box.blue strong {
-  color: #79a6ff;
-}
-
-.metric-box.emerald strong {
-  color: var(--emerald);
-}
-
-.metric-box.magenta strong {
-  color: #ff88d4;
-}
+.metric-box.cyan strong { color: var(--cyan); }
+.metric-box.blue strong { color: #79a6ff; }
+.metric-box.emerald strong { color: var(--emerald); }
+.metric-box.magenta strong { color: #ff88d4; }
 
 .signal-list,
+.gate-list,
+.alert-list,
 .region-rank,
-.timeline-list,
-.pulse-list {
+.timeline-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .signal-item,
 .gate-item,
-.agent-item {
+.alert-item {
   display: grid;
   align-items: center;
 }
@@ -1653,10 +853,20 @@ onUnmounted(() => {
 .signal-item {
   grid-template-columns: auto 1fr auto;
   gap: 6px;
-  padding: 5px 8px;
+  padding: 6px 8px;
   border: 1px solid rgba(100, 158, 255, 0.12);
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(4, 14, 36, 0.72);
+}
+
+.signal-item span {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.signal-item strong {
+  font-size: 12px;
+  color: #e8f8ff;
 }
 
 .signal-dot {
@@ -1672,25 +882,26 @@ onUnmounted(() => {
   box-shadow: 0 0 14px rgba(105, 255, 200, 0.7);
 }
 
-.token-summary,
-.map-kpis {
+.token-summary {
   display: grid;
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
   margin-top: 10px;
 }
 
-.token-summary {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-
 .token-summary div,
-.map-kpis div,
-.overlay-card {
+.map-kpis div {
   padding: 8px 10px;
-  border-radius: 14px;
+  border-radius: 12px;
   background: rgba(7, 17, 44, 0.78);
   border: 1px solid rgba(90, 156, 255, 0.12);
+}
+
+.token-summary span,
+.map-kpis span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-soft);
 }
 
 .token-summary strong,
@@ -1701,70 +912,61 @@ onUnmounted(() => {
   color: var(--cyan);
 }
 
-.token-summary strong + small,
-.map-kpis small {
-  margin-top: 4px;
-  display: inline-block;
-  color: #7fa3ef;
-  font-size: 12px;
+.gate-item {
+  grid-template-columns: 1fr auto;
+  padding: 10px 12px;
+  border: 1px solid rgba(110, 172, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(3, 14, 34, 0.74);
 }
 
-.chart-card {
-  min-height: 0;
+.gate-item p {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: #e8f8ff;
 }
 
-.panel-left .chart-card {
-  min-height: 230px;
+.gate-item span {
+  font-size: 11px;
+  color: var(--text-soft);
 }
 
-.chart-box {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.gate-values {
+  text-align: right;
 }
 
-.chart-sm {
-  height: 220px;
+.gate-values strong {
+  display: block;
+  font-size: 22px;
+  color: var(--cyan);
 }
 
-.chart-md {
-  height: 260px;
-}
-
-.chart-compact {
-  height: 170px;
-}
-
-.matrix-chart {
-  height: 200px;
+.gate-values small {
+  font-size: 11px;
+  color: var(--text-soft);
 }
 
 .hero-panel {
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 12px;
-  padding: 16px 16px 18px;
+  gap: 10px;
+  padding: 14px;
   overflow: hidden;
+  flex: 1;
 }
 
 .hero-main-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) 180px;
+  grid-template-columns: minmax(0, 1fr) 180px;
   gap: 10px;
-  min-height: 520px;
+  min-height: 0;
 }
 
 .hero-map-wrap {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.hero-side-panel {
-  display: grid;
-  gap: 8px;
+  min-height: 0;
 }
 
 .hero-rings {
@@ -1772,15 +974,13 @@ onUnmounted(() => {
   inset: 0;
   display: grid;
   place-items: center;
-  width: 100%;
-  height: 100%;
   pointer-events: none;
 }
 
 .ring {
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(84, 183, 255, 0.16);
+  border: 1px solid rgba(84, 183, 255, 0.14);
   border-radius: 50%;
 }
 
@@ -1797,14 +997,14 @@ onUnmounted(() => {
 
 .ring-3 {
   transform: scale(1);
-  opacity: 0.66;
+  opacity: 0.5;
   animation: pulseRing 6s ease-in-out infinite;
 }
 
 .hero-caption {
   position: absolute;
-  left: 28px;
-  top: 22px;
+  left: 24px;
+  top: 18px;
   z-index: 3;
   display: flex;
   flex-direction: column;
@@ -1813,13 +1013,21 @@ onUnmounted(() => {
 
 .hero-caption span {
   color: var(--text-soft);
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.16em;
 }
 
 .hero-caption strong {
-  font-size: 20px;
+  font-size: 18px;
   letter-spacing: 0.08em;
+}
+
+.hero-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .hero-insight-rail {
@@ -1827,15 +1035,14 @@ onUnmounted(() => {
   z-index: 3;
   display: grid;
   grid-template-columns: 1fr;
-  gap: 10px;
-  margin: 0;
+  gap: 8px;
 }
 
 .hero-insight-card {
-  min-height: 64px;
-  padding: 8px 10px;
+  min-height: 48px;
+  padding: 6px 10px;
   border: 1px solid rgba(84, 183, 255, 0.16);
-  border-radius: 16px;
+  border-radius: 12px;
   background: linear-gradient(180deg, rgba(5, 16, 42, 0.88), rgba(4, 12, 30, 0.9));
   box-shadow:
     0 10px 18px rgba(2, 8, 22, 0.28),
@@ -1844,24 +1051,24 @@ onUnmounted(() => {
 
 .hero-insight-card span {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
   color: #8fb3ff;
   font-size: 11px;
 }
 
 .hero-insight-card strong {
   display: block;
-  line-height: 1.4;
-  font-size: 13px;
+  line-height: 1.35;
+  font-size: 11px;
   color: #edfaff;
 }
 
 .map-chart {
   position: relative;
   z-index: 2;
-  min-height: 540px;
   height: 100%;
-  border-radius: 24px;
+  min-height: 420px;
+  border-radius: 20px;
   overflow: hidden;
   background: rgba(3, 10, 28, 0.78);
 }
@@ -1869,41 +1076,29 @@ onUnmounted(() => {
 .map-kpis {
   position: relative;
   z-index: 2;
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  margin-top: auto;
 }
 
 .map-kpis-dense strong {
-  font-size: 20px;
+  font-size: 18px;
+}
+
+.map-kpis small {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: #7fa3ef;
 }
 
 .center-bottom-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   align-items: start;
-}
-
-.bottom-right-wrapper {
-  display: grid;
-  gap: 10px;
-}
-
-.right-bottom-column {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-}
-
-.rank-card .region-rank {
-  max-height: 180px;
-  overflow: auto;
-  padding-right: 6px;
-}
-
-.pulse-list {
-  max-height: 180px;
-  overflow: auto;
+  flex-shrink: 0;
 }
 
 .center-bottom-grid .panel-card {
@@ -1911,51 +1106,79 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.center-bottom-grid .timeline-card {
-  min-height: 240px;
-}
-
-.center-bottom-grid .waveform-card {
-  min-height: 220px;
-}
-
-.pulse-card .pulse-list,
 .rank-card .region-rank {
-  max-height: 170px;
-}
-
-.timeline-list,
-.pulse-list {
   max-height: 200px;
   overflow-y: auto;
+  padding-right: 4px;
 }
 
-.timeline-list::-webkit-scrollbar,
-.pulse-list::-webkit-scrollbar {
-  width: 6px;
+.region-rank::-webkit-scrollbar {
+  width: 4px;
 }
 
-.timeline-list::-webkit-scrollbar-thumb,
-.pulse-list::-webkit-scrollbar-thumb {
-  background: rgba(62, 220, 255, 0.25);
+.region-rank::-webkit-scrollbar-thumb {
+  background: rgba(62, 220, 255, 0.2);
   border-radius: 999px;
 }
 
+.region-row {
+  display: grid;
+  grid-template-columns: 24px 54px 1fr 34px;
+  gap: 8px;
+  align-items: center;
+}
+
+.region-index {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(61, 220, 255, 0.25), rgba(141, 125, 255, 0.25));
+  color: #effbff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.region-name {
+  font-size: 12px;
+  color: #e8f8ff;
+}
+
+.region-bar {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(71, 109, 202, 0.22);
+}
+
+.region-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2ecfff, #7d8aff);
+  box-shadow: 0 0 12px rgba(62, 220, 255, 0.35);
+}
+
 .timeline-list {
-  padding-right: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
-.compact-card {
-  min-height: 0;
+.timeline-list::-webkit-scrollbar {
+  width: 4px;
 }
 
-.radar-tall {
-  height: 178px;
+.timeline-list::-webkit-scrollbar-thumb {
+  background: rgba(62, 220, 255, 0.2);
+  border-radius: 999px;
 }
 
 .timeline-item {
   display: grid;
-  grid-template-columns: 56px 1fr;
+  grid-template-columns: 48px 1fr;
   gap: 10px;
   align-items: start;
 }
@@ -1963,6 +1186,7 @@ onUnmounted(() => {
 .timeline-time {
   padding-top: 2px;
   font-size: 12px;
+  color: var(--text-soft);
 }
 
 .timeline-body {
@@ -1998,115 +1222,37 @@ onUnmounted(() => {
 
 .timeline-body strong {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  font-size: 12px;
 }
 
 .timeline-body p {
   margin: 0;
   color: #91b2f7;
+  font-size: 11px;
   line-height: 1.5;
 }
 
-.pulse-item {
-  padding: 10px 12px;
-  border: 1px solid rgba(95, 154, 255, 0.14);
-  border-radius: 14px;
-  background: rgba(3, 12, 30, 0.7);
+.alert-list {
+  gap: 8px;
+  max-height: calc(100vh - 240px);
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
-.pulse-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
+.alert-list::-webkit-scrollbar {
+  width: 4px;
 }
 
-.pulse-head strong {
-  color: #78f5ff;
-}
-
-.pulse-track,
-.region-bar,
-.agent-bar {
-  position: relative;
-  height: 8px;
-  overflow: hidden;
+.alert-list::-webkit-scrollbar-thumb {
+  background: rgba(62, 220, 255, 0.2);
   border-radius: 999px;
-  background: rgba(71, 109, 202, 0.22);
-}
-
-.pulse-fill,
-.region-bar-fill,
-.agent-bar-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: inherit;
-  box-shadow: 0 0 16px rgba(62, 220, 255, 0.4);
-}
-
-.pulse-fill {
-  background: linear-gradient(90deg, #35d9ff, #9b7bff);
-}
-
-.region-rank,
-.gate-list,
-.alert-list,
-.agent-rank {
-  display: grid;
-  gap: 10px;
-}
-
-.region-row {
-  display: grid;
-  grid-template-columns: 26px 54px 1fr 34px;
-  gap: 10px;
-  align-items: center;
-}
-
-.region-index,
-.rank-index {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(61, 220, 255, 0.25), rgba(141, 125, 255, 0.25));
-  color: #effbff;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.region-bar-fill {
-  background: linear-gradient(90deg, #2ecfff, #7d8aff);
-}
-
-.gate-item {
-  grid-template-columns: 1fr auto;
-  padding: 10px 12px;
-  border: 1px solid rgba(110, 172, 255, 0.14);
-  border-radius: 18px;
-  background: rgba(3, 14, 34, 0.74);
-}
-
-.gate-item p,
-.alert-item p {
-  margin: 0 0 6px;
-}
-
-.gate-values {
-  text-align: right;
-}
-
-.gate-values strong {
-  display: block;
-  font-size: 24px;
-  color: var(--cyan);
 }
 
 .alert-item {
-  padding: 14px;
+  padding: 10px 12px;
   border: 1px solid rgba(102, 158, 255, 0.14);
-  border-radius: 18px;
+  border-radius: 12px;
   background: rgba(3, 12, 30, 0.74);
 }
 
@@ -2114,13 +1260,30 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+}
+
+.alert-id {
+  font-size: 11px;
+  color: #8fb3ff;
+}
+
+.alert-item p {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: #e8f8ff;
+  line-height: 1.4;
+}
+
+.alert-item small {
+  font-size: 11px;
+  color: var(--text-soft);
 }
 
 .risk-tag {
-  padding: 4px 10px;
+  padding: 2px 8px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -2144,25 +1307,10 @@ onUnmounted(() => {
   color: #7df2c5;
 }
 
-.agent-item {
-  grid-template-columns: 28px minmax(0, 1fr) minmax(74px, 1fr) auto;
-  gap: 10px;
-}
-
-.rank-index {
-  width: 28px;
-  height: 28px;
-  font-size: 13px;
-}
-
-.agent-bar-fill {
-  background: linear-gradient(90deg, var(--cyan), #7a86ff);
-}
-
 .ticker {
   position: absolute;
   right: 18px;
-  bottom: 16px;
+  bottom: 14px;
   left: 18px;
   z-index: 2;
   overflow: hidden;
@@ -2172,43 +1320,11 @@ onUnmounted(() => {
 }
 
 .ticker-track {
-  padding: 10px 0;
+  padding: 8px 0;
   color: #b9d2ff;
+  font-size: 12px;
   white-space: nowrap;
-  animation: tickerMove 24s linear infinite;
-}
-
-@keyframes pulseGlow {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.24;
-  }
-  50% {
-    transform: scale(1.18);
-    opacity: 0.38;
-  }
-}
-
-@keyframes scan {
-  0% {
-    transform: translateY(-20vh);
-  }
-  100% {
-    transform: translateY(120vh);
-  }
-}
-
-@keyframes floatParticle {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(0.92);
-    opacity: 0.2;
-  }
-  50% {
-    transform: translate3d(18px, -28px, 0) scale(1.2);
-    opacity: 0.95;
-  }
+  animation: tickerMove 28s linear infinite;
 }
 
 @keyframes rotateRing {
@@ -2220,59 +1336,28 @@ onUnmounted(() => {
   }
 }
 
-.ring-1 {
-  --scale: 0.58;
-}
-
-.ring-2 {
-  --scale: 0.78;
-}
+.ring-1 { --scale: 0.58; }
+.ring-2 { --scale: 0.78; }
 
 @keyframes pulseRing {
-  0%,
-  100% {
+  0%, 100% {
     transform: scale(1);
-    opacity: 0.48;
+    opacity: 0.4;
   }
   50% {
     transform: scale(1.05);
-    opacity: 0.88;
+    opacity: 0.75;
   }
 }
 
 @keyframes tickerMove {
-  0% {
-    transform: translateX(100%);
-  }
-  100% {
-    transform: translateX(-100%);
-  }
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
 }
 
 @media (max-width: 1600px) {
   .screen-layout {
-    grid-template-columns: 20vw minmax(420px, 1fr) 20vw;
-  }
-
-  .hero-floating-right {
-    right: 26px;
-    top: 146px;
-  }
-
-  .map-side-overlay {
-    width: 230px;
-  }
-}
-
-@media (max-width: 1440px) {
-  .hero-floating,
-  .map-side-overlay,
-  .hero-floating-right {
-    display: none;
-  }
-
-  .mini-chart-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 22vw minmax(520px, 1fr) 22vw;
   }
 }
 
@@ -2283,7 +1368,7 @@ onUnmounted(() => {
 
   .topbar {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 12px;
     justify-items: center;
     text-align: center;
   }
@@ -2291,86 +1376,28 @@ onUnmounted(() => {
   .screen-layout {
     grid-template-columns: 1fr;
     height: auto;
-    padding-bottom: 100px;
+    padding-bottom: 80px;
+  }
+
+  .panel-left,
+  .panel-right {
+    overflow-y: visible;
+  }
+
+  .hero-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-side-panel {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .center-bottom-grid {
     grid-template-columns: 1fr;
   }
 
-  .mini-chart-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .map-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .panel-left,
-  .panel-right {
-    order: 2;
-  }
-
-  .panel-center {
-    order: 1;
-  }
-
-  .panel-right {
-    overflow: visible;
-    padding-right: 0;
-  }
-
   .map-chart {
     min-height: 420px;
   }
-}
-
-.quick-entry-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.quick-entry-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: rgba(118, 178, 255, 0.06);
-  border: 1px solid rgba(118, 178, 255, 0.12);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.25s ease;
-}
-
-.quick-entry-item:hover {
-  background: rgba(118, 178, 255, 0.15);
-  border-color: rgba(118, 178, 255, 0.35);
-  transform: translateY(-1px);
-}
-
-.qe-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.quick-entry-item strong {
-  display: block;
-  color: var(--text-main, #dff4ff);
-  font-size: 12px;
-  line-height: 1.3;
-}
-
-.quick-entry-item small {
-  display: block;
-  color: var(--text-soft, #85a8eb);
-  font-size: 10px;
-  margin-top: 1px;
 }
 </style>

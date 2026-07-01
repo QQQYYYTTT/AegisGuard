@@ -391,6 +391,40 @@ func (s *SQLiteStore) Count() (int64, error) {
 	return count, nil
 }
 
+func (s *SQLiteStore) AggregateThreatSources(since time.Time) ([]ThreatSourceRow, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	const query = `
+SELECT client_ip, risk_level, decision, timestamp
+FROM audit_events
+WHERE timestamp >= ?
+  AND risk_level IN ('high', 'critical')
+  AND decision IN ('Block', 'Deny')
+  AND client_ip IS NOT NULL AND client_ip != ''
+ORDER BY timestamp DESC
+LIMIT 5000`
+
+	rows, err := s.db.Query(query, since)
+	if err != nil {
+		return nil, fmt.Errorf("query threat sources: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ThreatSourceRow
+	for rows.Next() {
+		var r ThreatSourceRow
+		if err := rows.Scan(&r.ClientIP, &r.RiskLevel, &r.Decision, &r.Timestamp); err != nil {
+			continue
+		}
+		if isPrivateIP(r.ClientIP) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 func (s *SQLiteStore) DeleteBefore(before time.Time) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

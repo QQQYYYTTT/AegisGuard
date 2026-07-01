@@ -1,6 +1,10 @@
 {
   "Version": "0.2.0",
   "Title": "AegisGuard",
+  "gatewayLocation": {
+    "name": "自动推断",
+    "coord": [113.264, 23.129]
+  },
   "FixedHeader": true,
   "HiddenSideBar": false,
   "MultiTagsCache": false,

@@ -28,6 +28,8 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+const ip2regionXDB = "ip2region_v4.xdb"
+
 type bodyLogWriter struct {
 	gin.ResponseWriter
 	body *bytes.Buffer
@@ -44,6 +46,7 @@ type Router struct {
 	vkeyMgr       *vkey.Manager
 	auditor       *audit.Logger
 	auditStore    audit.Storer
+	threatMap     *audit.ThreatMapBuilder
 	tokenStore    *auth.TokenStore
 	verifier      *auth.Verifier
 	userService   *user.Service
@@ -149,6 +152,21 @@ func NewRouter(cfg config.Config) (*Router, error) {
 	}
 	proxy.SetSandbox(sandboxMgr, sandboxMgr, sandboxMgr)
 
+	xdbPath := filepath.Join(cfg.BackendDir, "data", ip2regionXDB)
+	locator, err := audit.NewLocator(audit.LocatorOptions{XDBPath: xdbPath})
+	if err != nil {
+		logger.Warn("threat map ip2region locator init failed, fallback to static locator", zap.Error(err))
+		locator = audit.NewStaticLocator()
+	}
+
+	target := audit.ThreatTarget{Name: cfg.ThreatMapTarget, Coord: cfg.ThreatMapTargetCoord}
+	if cfg.ThreatMapTarget == "" || cfg.ThreatMapTargetCoord[0] == 0 {
+		target = audit.NewServerLocationDetector(locator).Detect()
+		logger.Info("threat map target auto-detected", zap.String("city", target.Name), zap.Any("coord", target.Coord))
+	}
+
+	threatMap := audit.NewThreatMapBuilder(auditStore, locator, target)
+
 	decisionStore := proxy.GetDecisionStore()
 	gateQuery := gates.NewGateQuery(decisionStore)
 	actionGate := gates.NewActionGateWithRuntime(logger, cfg.TokenMode, policyRuntime)
@@ -167,6 +185,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 		vkeyMgr:       vkeyMgr,
 		auditor:       auditor,
 		auditStore:    auditStore,
+		threatMap:     threatMap,
 		tokenStore:    tokenStore,
 		verifier:      verifier,
 		userService:   userService,
@@ -197,6 +216,7 @@ func (r *Router) registerRoutes() {
 	r.engine.GET("/audit/logs", r.handleAuditLogs)
 	r.engine.GET("/aegis/audit/chains", r.handleAuditChains)
 	r.engine.GET("/aegis/audit/stats", r.handleAuditStats)
+	r.engine.GET("/aegis/audit/threat-map", r.handleThreatMap)
 
 	r.engine.GET("/aegis/gate/overview", r.handleGateOverview)
 	r.engine.GET("/aegis/gate/decisions", r.handleGateDecisions)
@@ -537,6 +557,43 @@ func (r *Router) handleAuditStats(c *gin.Context) {
 	stats["decision_distribution"] = decisionDistribution
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": stats})
+}
+
+func (r *Router) handleThreatMap(c *gin.Context) {
+	window := time.Hour
+	if w := c.Query("window"); w != "" {
+		if d, err := time.ParseDuration(w); err == nil && d > 0 && d <= 24*time.Hour {
+			window = d
+		}
+	}
+
+	target := audit.ThreatTarget{Name: "广州", Coord: [2]float64{113.264, 23.129}}
+	if r.threatMap != nil {
+		target = r.threatMap.Target()
+	}
+
+	if r.threatMap == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"data": audit.ThreatMapData{
+				Target:      target,
+				Stats:       audit.ThreatMapStats{},
+				Provinces:   []audit.ThreatMapProvince{},
+				Cities:      []audit.ThreatMapCity{},
+				Lines:       []audit.ThreatMapLine{},
+				GeneratedAt: time.Now().Format(time.RFC3339),
+			},
+		})
+		return
+	}
+
+	data, err := r.threatMap.Build(c.Request.Context(), window)
+	if err != nil {
+		r.logger.Error("build threat map failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "build threat map failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": data})
 }
 
 func firstNonEmpty(value, fallback string) string {

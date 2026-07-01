@@ -4,15 +4,18 @@ import {
   type AuditEvent,
   type AttackChain,
   type AuditStats,
+  type ThreatMapData,
   getAuditLogs,
   getAttackChains,
-  getAuditStats
+  getAuditStats,
+  getThreatMap
 } from "@/api/audit";
 
 export type AuditState = {
   events: AuditEvent[];
   attackChains: AttackChain[];
   stats: AuditStats | null;
+  threatMap: ThreatMapData | null;
   loading: boolean;
 };
 
@@ -21,6 +24,7 @@ export const useAuditStore = defineStore("aegis-audit", {
     events: [],
     attackChains: [],
     stats: null,
+    threatMap: null,
     loading: false
   }),
   actions: {
@@ -41,6 +45,11 @@ export const useAuditStore = defineStore("aegis-audit", {
     async fetchStats() {
       const res = await getAuditStats();
       this.stats = res.data;
+      return res.data;
+    },
+    async fetchThreatMap(params?: { window?: string }) {
+      const res = await getThreatMap(params);
+      this.threatMap = res.data;
       return res.data;
     }
   }
