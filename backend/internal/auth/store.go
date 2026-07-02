@@ -35,7 +35,7 @@ func (s *TokenStore) Issue(toolName, scope, agentID, sessionID, taskID string, t
 	s.active[token.Nonce] = &tokenCopy
 	s.latest = token.Nonce
 
-	return token, nil
+	return s.active[token.Nonce], nil
 }
 
 func (s *TokenStore) Revoke(tokenID string) error {

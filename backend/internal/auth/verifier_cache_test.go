@@ -109,6 +109,10 @@ func TestNonceGC(t *testing.T) {
 }
 
 func TestBuildCacheKeyDeterministic(t *testing.T) {
+	if err := InitSigningKey(""); err != nil {
+		t.Fatalf("init signing key: %v", err)
+	}
+
 	token1 := &RequireToken{
 		ToolName:   "test-tool",
 		Scope:      "read",
@@ -119,6 +123,10 @@ func TestBuildCacheKeyDeterministic(t *testing.T) {
 		RiskLevel:  1,
 		SchemaHash: "abc123",
 		MaxCalls:   10,
+		ExpiresAt:  time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC),
+	}
+	if err := token1.Sign(); err != nil {
+		t.Fatalf("failed to sign token1: %v", err)
 	}
 
 	token2 := &RequireToken{
@@ -131,17 +139,21 @@ func TestBuildCacheKeyDeterministic(t *testing.T) {
 		RiskLevel:  1,
 		SchemaHash: "abc123",
 		MaxCalls:   10,
+		ExpiresAt:  time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC),
+	}
+	if err := token2.Sign(); err != nil {
+		t.Fatalf("failed to sign token2: %v", err)
 	}
 
 	key1 := token1.buildCacheKey()
 	key2 := token2.buildCacheKey()
 
-	if key1 != key2 {
-		t.Error("cache key should be same for same stable fields despite different Nonce")
+	if key1 == key2 {
+		t.Error("cache key should differ when signed token contents differ")
 	}
 
 	token3 := &RequireToken{
-		ToolName:   "different-tool",
+		ToolName:   "test-tool",
 		Scope:      "read",
 		AgentID:    "agent-001",
 		SessionID:  "session-001",
@@ -150,10 +162,12 @@ func TestBuildCacheKeyDeterministic(t *testing.T) {
 		RiskLevel:  1,
 		SchemaHash: "abc123",
 		MaxCalls:   10,
+		ExpiresAt:  time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC),
+		Signature:  "different-signature",
 	}
 
 	key3 := token3.buildCacheKey()
 	if key1 == key3 {
-		t.Error("cache key should differ for different ToolName")
+		t.Error("cache key should differ when signature changes")
 	}
 }

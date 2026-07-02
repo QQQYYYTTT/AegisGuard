@@ -10,22 +10,22 @@ import (
 )
 
 type tokenInfoResponse struct {
-	TokenID            string            `json:"token_id"`
-	ToolName           string            `json:"tool_name"`
-	Scope              string            `json:"scope"`
-	AgentID            string            `json:"agent_id"`
-	SessionID          string            `json:"session_id"`
-	TaskID             string            `json:"task_id"`
-	ExpiresAt          string            `json:"expires_at"`
-	Nonce              string            `json:"nonce"`
-	RiskLevel          string            `json:"risk_level"`
-	SchemaHash         string            `json:"schema_hash"`
-	MaxCalls           int               `json:"max_calls"`
-	CallCount          int               `json:"call_count"`
-	Signature          string            `json:"signature"`
-	Signed             bool              `json:"signed"`
-	Verified           bool              `json:"verified"`
-	VerificationChecks map[string]bool   `json:"verification_checks"`
+	TokenID            string          `json:"token_id"`
+	ToolName           string          `json:"tool_name"`
+	Scope              string          `json:"scope"`
+	AgentID            string          `json:"agent_id"`
+	SessionID          string          `json:"session_id"`
+	TaskID             string          `json:"task_id"`
+	ExpiresAt          string          `json:"expires_at"`
+	Nonce              string          `json:"nonce"`
+	RiskLevel          string          `json:"risk_level"`
+	SchemaHash         string          `json:"schema_hash"`
+	MaxCalls           int             `json:"max_calls"`
+	CallCount          int             `json:"call_count"`
+	Signature          string          `json:"signature"`
+	Signed             bool            `json:"signed"`
+	Verified           bool            `json:"verified"`
+	VerificationChecks map[string]bool `json:"verification_checks"`
 }
 
 type authStatusResponse struct {
@@ -38,13 +38,14 @@ type authStatusResponse struct {
 }
 
 type issueTokenRequest struct {
-	ToolName  string `json:"tool_name"`
-	Scope     string `json:"scope"`
-	AgentID   string `json:"agent_id"`
-	SessionID string `json:"session_id"`
-	TaskID    string `json:"task_id"`
-	TTLSeconds int   `json:"ttl_seconds"`
-	MaxCalls  int    `json:"max_calls"`
+	ToolName   string `json:"tool_name"`
+	Scope      string `json:"scope"`
+	AgentID    string `json:"agent_id"`
+	SessionID  string `json:"session_id"`
+	TaskID     string `json:"task_id"`
+	SchemaHash string `json:"schema_hash"`
+	TTLSeconds int    `json:"ttl_seconds"`
+	MaxCalls   int    `json:"max_calls"`
 }
 
 type verifyTokenRequest struct {
@@ -132,6 +133,18 @@ func (r *Router) handleIssueToken(c *gin.Context) {
 			"error":   err.Error(),
 		})
 		return
+	}
+
+	if req.SchemaHash != "" {
+		token.SchemaHash = req.SchemaHash
+		if err := token.Sign(); err != nil {
+			r.auditManualResponse(requestID, start, http.StatusInternalServerError, "Block", err.Error(), "action", 0, "low", nil, "issue_failed", r.cfg.TokenMode)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   err.Error(),
+			})
+			return
+		}
 	}
 
 	r.auditManualResponse(requestID, start, http.StatusOK, "Allow", "require token issued", "action", 20, "low", nil, "issued", r.cfg.TokenMode)
@@ -263,10 +276,10 @@ func (r *Router) buildTokenInfo(token *auth.RequireToken) tokenInfoResponse {
 
 func verificationChecksMap(checks auth.VerificationChecks) map[string]bool {
 	return map[string]bool{
-		"signature_valid":  checks.SignatureValid,
-		"expiry_valid":     checks.ExpiryValid,
-		"nonce_valid":      checks.NonceValid,
-		"call_budget_ok":   checks.CallBudgetOK,
+		"signature_valid": checks.SignatureValid,
+		"expiry_valid":    checks.ExpiryValid,
+		"nonce_valid":     checks.NonceValid,
+		"call_budget_ok":  checks.CallBudgetOK,
 	}
 }
 

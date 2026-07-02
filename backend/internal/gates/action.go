@@ -1,6 +1,7 @@
 package gates
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -189,6 +190,49 @@ func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, h
 			zap.String("actual", toolName),
 		)
 		return makeEvaluateResult(Deny, fmt.Sprintf("tool name mismatch: token=%s, actual=%s", token.ToolName, toolName), score, rules)
+	}
+
+	requestSessionID := strings.TrimSpace(headers.Get("X-Aegis-Session-ID"))
+	if requestSessionID == "" || token.SessionID != requestSessionID {
+		ag.logger.Warn("action denied: session mismatch",
+			zap.String("expected", token.SessionID),
+			zap.String("actual", requestSessionID),
+		)
+		return makeEvaluateResult(Deny, fmt.Sprintf("session mismatch: token=%s, actual=%s", token.SessionID, requestSessionID), score, rules)
+	}
+
+	requestTaskID := strings.TrimSpace(headers.Get("X-Aegis-Task-ID"))
+	if requestTaskID == "" || token.TaskID != requestTaskID {
+		ag.logger.Warn("action denied: task mismatch",
+			zap.String("expected", token.TaskID),
+			zap.String("actual", requestTaskID),
+		)
+		return makeEvaluateResult(Deny, fmt.Sprintf("task mismatch: token=%s, actual=%s", token.TaskID, requestTaskID), score, rules)
+	}
+
+	if token.SchemaHash != "" {
+		schemaB64 := strings.TrimSpace(headers.Get("X-Aegis-Tool-Schema"))
+		if schemaB64 == "" {
+			ag.logger.Warn("action denied: missing tool schema for schema-bound token",
+				zap.String("tool", toolName),
+			)
+			return makeEvaluateResult(Deny, "missing tool schema for schema-bound token", score, rules)
+		}
+		toolSchema, err := base64.StdEncoding.DecodeString(schemaB64)
+		if err != nil {
+			ag.logger.Warn("action denied: invalid tool schema header encoding",
+				zap.String("tool", toolName),
+				zap.Error(err),
+			)
+			return makeEvaluateResult(Deny, fmt.Sprintf("invalid tool schema header: %v", err), score, rules)
+		}
+		if err := auth.CompareSchemaHash(&token, toolSchema); err != nil {
+			ag.logger.Warn("action denied: schema hash mismatch",
+				zap.String("tool", toolName),
+				zap.Error(err),
+			)
+			return makeEvaluateResult(Deny, fmt.Sprintf("schema verification failed: %v", err), score, rules)
+		}
 	}
 
 	if !ag.checkScope(token.Scope, toolName, params) {

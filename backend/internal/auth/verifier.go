@@ -97,6 +97,9 @@ func (v *Verifier) verifyChecks(token *RequireToken, consumeNonce bool) (Verific
 				return checks, fmt.Errorf("cached invalid signature")
 			}
 			checks.SignatureValid = true
+			if err := v.verifyExpiry(token); err != nil {
+				return checks, err
+			}
 			checks.ExpiryValid = true
 			if err := v.verifyNonce(token, consumeNonce); err != nil {
 				return checks, err

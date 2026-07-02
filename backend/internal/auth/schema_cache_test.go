@@ -3,6 +3,7 @@ package auth
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"aegisguard/pkg/smcrypto"
 )
@@ -90,6 +91,7 @@ func TestBuildSignMessageOptimization(t *testing.T) {
 		AgentID:    "agent-001",
 		SessionID:  "session-001",
 		TaskID:     "task-001",
+		ExpiresAt:  time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC),
 		Nonce:      "nonce-001",
 		RiskLevel:  1,
 		SchemaHash: "abc123",
@@ -103,7 +105,7 @@ func TestBuildSignMessageOptimization(t *testing.T) {
 		t.Error("buildSignMessage should return consistent result")
 	}
 
-	expected := "test-tool|read|agent-001|session-001|task-001|nonce-001|1|abc123|10"
+	expected := "test-tool|read|agent-001|session-001|task-001|2026-07-02T12:00:00Z|nonce-001|1|abc123|10"
 	if string(msg1) != expected {
 		t.Errorf("buildSignMessage output mismatch:\ngot:  %s\nexpected: %s", string(msg1), expected)
 	}
@@ -120,6 +122,7 @@ func TestBuildSignMessageOptimizationPerformance(t *testing.T) {
 		AgentID:    "agent-001-uuid",
 		SessionID:  "session-001-uuid",
 		TaskID:     "task-001-uuid",
+		ExpiresAt:  time.Date(2026, 7, 2, 12, 0, 0, 123000000, time.UTC),
 		Nonce:      "nonce-001-very-long-nonce",
 		RiskLevel:  5,
 		SchemaHash: "abc123def456",
@@ -129,7 +132,7 @@ func TestBuildSignMessageOptimizationPerformance(t *testing.T) {
 	t.Run("Deterministic", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			msg := token.buildSignMessage()
-			expected := "test-tool-with-longer-name|read-write-execute|agent-001-uuid|session-001-uuid|task-001-uuid|nonce-001-very-long-nonce|5|abc123def456|100"
+			expected := "test-tool-with-longer-name|read-write-execute|agent-001-uuid|session-001-uuid|task-001-uuid|2026-07-02T12:00:00.123Z|nonce-001-very-long-nonce|5|abc123def456|100"
 			if string(msg) != expected {
 				t.Errorf("iteration %d: mismatch", i)
 			}

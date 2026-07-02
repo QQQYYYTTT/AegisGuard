@@ -28,6 +28,20 @@ func TestHandleToolCallInjectsRealToken(t *testing.T) {
 	}
 
 	body := []byte(`{
+		"tools": [{
+			"type": "function",
+			"function": {
+				"name": "read_file",
+				"description": "Read a file from the workspace",
+				"parameters": {
+					"type": "object",
+					"properties": {
+						"path": {"type": "string"}
+					},
+					"required": ["path"]
+				}
+			}
+		}],
 		"messages": [{
 			"tool_calls": [{
 				"function": {
@@ -53,6 +67,18 @@ func TestHandleToolCallInjectsRealToken(t *testing.T) {
 	}
 	if !bytes.Contains([]byte(tokenHeader), []byte(`"tool_name":"read_file"`)) {
 		t.Fatalf("expected token payload to contain tool name, got %q", tokenHeader)
+	}
+	if !bytes.Contains([]byte(tokenHeader), []byte(`"schema_hash":"`)) {
+		t.Fatalf("expected token payload to contain schema hash, got %q", tokenHeader)
+	}
+	if req.Header.Get("X-Aegis-Session-ID") != "req-001" {
+		t.Fatalf("expected session header to be injected")
+	}
+	if req.Header.Get("X-Aegis-Task-ID") != "req-001" {
+		t.Fatalf("expected task header to be injected")
+	}
+	if req.Header.Get("X-Aegis-Tool-Schema") == "" {
+		t.Fatalf("expected tool schema header to be injected")
 	}
 }
 

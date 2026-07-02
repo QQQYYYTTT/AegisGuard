@@ -3,13 +3,16 @@ package gates
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"aegisguard/internal/auth"
 	"aegisguard/internal/interfaces"
+	"aegisguard/pkg/smcrypto"
 
 	"go.uber.org/zap"
 )
@@ -117,6 +120,59 @@ func TestActionGateToolValidation(t *testing.T) {
 				t.Errorf("Expected %s, got %s", tt.expected, result.Decision)
 			}
 		})
+	}
+}
+
+func TestActionGateEnforcesSessionTaskAndSchemaBinding(t *testing.T) {
+	auth.ResetNonces()
+	if err := auth.InitSigningKey(""); err != nil {
+		t.Fatalf("init signing key: %v", err)
+	}
+
+	schema := []byte(`{"name":"read_file","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}`)
+	gate := NewActionGateWithMode(zap.NewNop(), "strict")
+
+	buildHeaders := func(sessionID, taskID string, toolSchema []byte) http.Header {
+		token, err := auth.NewToken("read_file", "read_file:invoke", "agent-001", "session-001", "task-001", 5*time.Minute, 1)
+		if err != nil {
+			t.Fatalf("new token: %v", err)
+		}
+		token.SchemaHash = smcrypto.SM3Hex(schema)
+		if err := token.Sign(); err != nil {
+			t.Fatalf("resign token with schema hash: %v", err)
+		}
+		tokenJSON, err := json.Marshal(token)
+		if err != nil {
+			t.Fatalf("marshal token: %v", err)
+		}
+
+		headers := http.Header{}
+		headers.Set("X-Aegis-Token", string(tokenJSON))
+		headers.Set("X-Aegis-Token-Status", "issued")
+		headers.Set("X-Aegis-Session-ID", sessionID)
+		headers.Set("X-Aegis-Task-ID", taskID)
+		headers.Set("X-Aegis-Tool-Schema", base64.StdEncoding.EncodeToString(toolSchema))
+		return headers
+	}
+
+	result := gate.Evaluate("read_file", map[string]interface{}{"path": "D:/workspace/demo.txt"}, buildHeaders("session-001", "task-001", schema))
+	if result.Decision != Allow {
+		t.Fatalf("expected allow with matching bindings, got %s (%s)", result.Decision, result.Reason)
+	}
+
+	result = gate.Evaluate("read_file", map[string]interface{}{"path": "D:/workspace/demo.txt"}, buildHeaders("session-other", "task-001", schema))
+	if result.Decision != Deny || !strings.Contains(result.Reason, "session mismatch") {
+		t.Fatalf("expected session mismatch deny, got %s (%s)", result.Decision, result.Reason)
+	}
+
+	result = gate.Evaluate("read_file", map[string]interface{}{"path": "D:/workspace/demo.txt"}, buildHeaders("session-001", "task-other", schema))
+	if result.Decision != Deny || !strings.Contains(result.Reason, "task mismatch") {
+		t.Fatalf("expected task mismatch deny, got %s (%s)", result.Decision, result.Reason)
+	}
+
+	result = gate.Evaluate("read_file", map[string]interface{}{"path": "D:/workspace/demo.txt"}, buildHeaders("session-001", "task-001", []byte(`{"name":"read_file","parameters":{"type":"object","properties":{"other":{"type":"string"}}}}`)))
+	if result.Decision != Deny || !strings.Contains(result.Reason, "schema verification failed") {
+		t.Fatalf("expected schema mismatch deny, got %s (%s)", result.Decision, result.Reason)
 	}
 }
 

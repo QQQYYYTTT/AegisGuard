@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -219,7 +220,8 @@ func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) (gateResult
 		return result, false
 	}
 
-	if err := ap.injectToken(req, toolName, params); err != nil {
+	agentID, sessionID, taskID := ap.ensureExecutionContextHeaders(req)
+	if err := ap.injectToken(req, toolName, params, body, agentID, sessionID, taskID); err != nil {
 		ap.logger.Error("failed to issue or inject RequireToken", zap.String("tool", toolName), zap.Error(err))
 		req.Header.Set("X-Aegis-Token-Status", "error")
 	}
@@ -397,26 +399,25 @@ func (ap *AegisProxy) holdForApproval(req *http.Request, toolName string) {
 	ap.logger.Info("tool call waiting for human approval", zap.String("tool", toolName), zap.String("path", req.URL.Path))
 }
 
-func (ap *AegisProxy) injectToken(req *http.Request, toolName string, params map[string]interface{}) error {
+func (ap *AegisProxy) injectToken(req *http.Request, toolName string, params map[string]interface{}, body []byte, agentID, sessionID, taskID string) error {
 	if ap.tokenIssuer == nil {
 		req.Header.Set("X-Aegis-Token-Status", "skipped")
 		ap.logger.Debug("requiretoken skipped", zap.String("tool", toolName))
 		return nil
 	}
 
-	requestID, _ := req.Context().Value("request_id").(string)
-	gatewayKey, _ := req.Context().Value("gateway_key").(string)
-	if requestID == "" {
-		requestID = "request-anonymous"
-	}
-	if gatewayKey == "" {
-		gatewayKey = "agent-anonymous"
-	}
-
 	scope := toolName + ":invoke"
-	token, err := ap.tokenIssuer.Issue(toolName, scope, gatewayKey, requestID, requestID, 5*time.Minute, 1)
+	token, err := ap.tokenIssuer.Issue(toolName, scope, agentID, sessionID, taskID, 5*time.Minute, 1)
 	if err != nil {
 		return err
+	}
+
+	if toolSchema := ap.extractToolSchema(body, toolName); len(toolSchema) > 0 {
+		token.SchemaHash = smcrypto.SM3Hex(toolSchema)
+		if err := token.Sign(); err != nil {
+			return err
+		}
+		req.Header.Set("X-Aegis-Tool-Schema", base64.StdEncoding.EncodeToString(toolSchema))
 	}
 
 	payload, err := json.Marshal(token)
@@ -430,6 +431,69 @@ func (ap *AegisProxy) injectToken(req *http.Request, toolName string, params map
 		zap.String("tool", toolName),
 		zap.String("token_id", token.Nonce),
 	)
+	return nil
+}
+
+func (ap *AegisProxy) ensureExecutionContextHeaders(req *http.Request) (agentID, sessionID, taskID string) {
+	requestID, _ := req.Context().Value("request_id").(string)
+	gatewayKey, _ := req.Context().Value("gateway_key").(string)
+
+	agentID = strings.TrimSpace(req.Header.Get("X-Aegis-Agent-ID"))
+	if agentID == "" {
+		agentID = gatewayKey
+	}
+	if agentID == "" {
+		agentID = "agent-anonymous"
+	}
+
+	sessionID = strings.TrimSpace(req.Header.Get("X-Aegis-Session-ID"))
+	if sessionID == "" {
+		sessionID = requestID
+	}
+	if sessionID == "" {
+		sessionID = "session-anonymous"
+	}
+
+	taskID = strings.TrimSpace(req.Header.Get("X-Aegis-Task-ID"))
+	if taskID == "" {
+		taskID = requestID
+	}
+	if taskID == "" {
+		taskID = "task-anonymous"
+	}
+
+	req.Header.Set("X-Aegis-Agent-ID", agentID)
+	req.Header.Set("X-Aegis-Session-ID", sessionID)
+	req.Header.Set("X-Aegis-Task-ID", taskID)
+	return agentID, sessionID, taskID
+}
+
+func (ap *AegisProxy) extractToolSchema(body []byte, toolName string) []byte {
+	var req struct {
+		Tools []struct {
+			Type     string          `json:"type"`
+			Function json.RawMessage `json:"function"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil || len(req.Tools) == 0 {
+		return nil
+	}
+
+	for _, tool := range req.Tools {
+		if len(tool.Function) == 0 {
+			continue
+		}
+		var fn struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(tool.Function, &fn); err != nil {
+			continue
+		}
+		if fn.Name != toolName {
+			continue
+		}
+		return tool.Function
+	}
 	return nil
 }
 
