@@ -15,6 +15,7 @@ func TestCompareSchemaHashCaching(t *testing.T) {
 	correctHash := smcrypto.SM3Hex(toolSchema)
 
 	token := &RequireToken{
+		TokenID:    "token-001",
 		ToolName:   "test-tool",
 		SchemaHash: correctHash,
 	}
@@ -86,6 +87,7 @@ func TestCompareSchemaHashDifferentSchemas(t *testing.T) {
 
 func TestBuildSignMessageOptimization(t *testing.T) {
 	token := &RequireToken{
+		TokenID:    "token-001",
 		ToolName:   "test-tool",
 		Scope:      "read",
 		AgentID:    "agent-001",
@@ -105,7 +107,7 @@ func TestBuildSignMessageOptimization(t *testing.T) {
 		t.Error("buildSignMessage should return consistent result")
 	}
 
-	expected := "test-tool|read|agent-001|session-001|task-001|2026-07-02T12:00:00Z|nonce-001|1|abc123|10"
+	expected := "token-001|test-tool|read|agent-001|session-001|task-001|2026-07-02T12:00:00Z|nonce-001|1|abc123|10"
 	if string(msg1) != expected {
 		t.Errorf("buildSignMessage output mismatch:\ngot:  %s\nexpected: %s", string(msg1), expected)
 	}
@@ -117,6 +119,7 @@ func TestBuildSignMessageOptimizationPerformance(t *testing.T) {
 	}
 
 	token := &RequireToken{
+		TokenID:    "token-001",
 		ToolName:   "test-tool-with-longer-name",
 		Scope:      "read-write-execute",
 		AgentID:    "agent-001-uuid",
@@ -132,7 +135,7 @@ func TestBuildSignMessageOptimizationPerformance(t *testing.T) {
 	t.Run("Deterministic", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			msg := token.buildSignMessage()
-			expected := "test-tool-with-longer-name|read-write-execute|agent-001-uuid|session-001-uuid|task-001-uuid|2026-07-02T12:00:00.123Z|nonce-001-very-long-nonce|5|abc123def456|100"
+			expected := "token-001|test-tool-with-longer-name|read-write-execute|agent-001-uuid|session-001-uuid|task-001-uuid|2026-07-02T12:00:00.123Z|nonce-001-very-long-nonce|5|abc123def456|100"
 			if string(msg) != expected {
 				t.Errorf("iteration %d: mismatch", i)
 			}

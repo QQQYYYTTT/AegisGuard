@@ -74,7 +74,7 @@ func NewAegisProxyWithPolicyRuntime(targetURL string, vkeyMgr *vkey.Manager, tok
 		logger = zap.NewNop()
 	}
 
-	actionGate := gates.NewActionGateWithRuntime(logger, tokenMode, policyRuntime)
+	actionGate := gates.NewActionGateWithRuntimeAndStore(logger, tokenMode, policyRuntime, tokenIssuer)
 	actionGate.SetDynamicRuleRouting(dynamicRuleRouting)
 	actionGate.SetTDG(tdgSettings)
 
@@ -226,7 +226,7 @@ func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) (gateResult
 		req.Header.Set("X-Aegis-Token-Status", "error")
 	}
 
-	if traceID := computeTraceID(body); traceID != "" {
+	if traceID := ap.resolveTraceID(req, body, sessionID, taskID, agentID); traceID != "" {
 		req.Header.Set("X-Aegis-Trace-ID", traceID)
 	}
 	// X-Aegis-Tool-Name 供 modifyResponse 在响应阶段读回工具名，供 Phase 4 三态纯化引擎
@@ -417,6 +417,9 @@ func (ap *AegisProxy) injectToken(req *http.Request, toolName string, params map
 		if err := token.Sign(); err != nil {
 			return err
 		}
+		if err := ap.tokenIssuer.Save(token); err != nil {
+			return err
+		}
 		req.Header.Set("X-Aegis-Tool-Schema", base64.StdEncoding.EncodeToString(toolSchema))
 	}
 
@@ -580,6 +583,33 @@ func computeTraceID(body []byte) string {
 		return ""
 	}
 	return smcrypto.SM3Hex(anchor)
+}
+
+func (ap *AegisProxy) resolveTraceID(req *http.Request, body []byte, sessionID, taskID, agentID string) string {
+	if req != nil {
+		if existing := strings.TrimSpace(req.Header.Get("X-Aegis-Trace-ID")); existing != "" {
+			return existing
+		}
+	}
+	requestID := ""
+	if req != nil {
+		requestID = requestIDFromContext(req)
+	}
+	seedParts := []string{agentID}
+	if sessionID != "" && sessionID != requestID {
+		seedParts = append(seedParts, sessionID)
+	}
+	if taskID != "" && taskID != requestID {
+		seedParts = append(seedParts, taskID)
+	}
+	if base := computeTraceID(body); base != "" {
+		seedParts = append(seedParts, base)
+	}
+	joined := strings.Join(seedParts, "|")
+	if strings.Trim(joined, "|") == "" {
+		return ""
+	}
+	return smcrypto.SM3Hex([]byte(joined))
 }
 
 func (ap *AegisProxy) modifyResponse(resp *http.Response) error {

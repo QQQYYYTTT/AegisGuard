@@ -22,14 +22,15 @@ func TestBridgeActionEvaluateAllow(t *testing.T) {
 	if err := auth.InitSigningKey(""); err != nil {
 		t.Fatalf("init signing key: %v", err)
 	}
+	store := auth.NewTokenStore()
 
 	router := &Router{
 		engine:     gin.New(),
-		tokenStore: auth.NewTokenStore(),
-		verifier:   auth.NewVerifier(),
+		tokenStore: store,
+		verifier:   auth.NewVerifierWithStore(store),
 		gateEvaluator: gates.NewGateEvaluator(
 			gates.NewMessageGate(),
-			gates.NewActionGateWithMode(zap.NewNop(), "strict"),
+			gates.NewActionGateWithRuntimeAndStore(zap.NewNop(), "strict", nil, store),
 			gates.NewReturnGate(),
 			gates.NewDecisionStore(100),
 		),
@@ -52,6 +53,7 @@ func TestBridgeActionEvaluateAllow(t *testing.T) {
 	payload, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/aegis/bridge/evaluate/action", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Aegis-Bridge-Key", "bridge-test-key")
 	rec := httptest.NewRecorder()
 
 	router.engine.ServeHTTP(rec, req)
@@ -73,7 +75,8 @@ func TestBridgeActionEvaluateAllow(t *testing.T) {
 
 func testHTTPConfig() config.Config {
 	return config.Config{
-		TokenMode: "strict",
+		TokenMode:       "strict",
+		BridgeSharedKey: "bridge-test-key",
 	}
 }
 
@@ -98,6 +101,7 @@ func TestBridgeReturnEvaluateFiltersSensitiveResponse(t *testing.T) {
 	payload, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/aegis/bridge/evaluate/return", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Aegis-Bridge-Key", "bridge-test-key")
 	rec := httptest.NewRecorder()
 
 	router.engine.ServeHTTP(rec, req)

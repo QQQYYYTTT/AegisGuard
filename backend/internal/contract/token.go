@@ -32,6 +32,7 @@ import (
 //   - GetByID [UNDEFINED] 无 token 查询
 type TokenIssuer interface {
 	Issue(toolName, scope, agentID, sessionID, taskID string, ttl time.Duration, maxCalls int) (*auth.RequireToken, error)
+	Save(token *auth.RequireToken) error
 	Revoke(tokenID string) error
 	ListActive() []auth.RequireToken
 	GetByID(tokenID string) (*auth.RequireToken, error)

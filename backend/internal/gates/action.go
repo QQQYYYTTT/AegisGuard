@@ -32,15 +32,19 @@ func NewActionGate(logger *zap.Logger) *ActionGate {
 }
 
 func NewActionGateWithMode(logger *zap.Logger, tokenMode string) *ActionGate {
-	return NewActionGateWithRuntime(logger, tokenMode, nil)
+	return NewActionGateWithRuntimeAndStore(logger, tokenMode, nil, nil)
 }
 
 func NewActionGateWithRuntime(logger *zap.Logger, tokenMode string, runtime *PolicyRuntime) *ActionGate {
+	return NewActionGateWithRuntimeAndStore(logger, tokenMode, runtime, nil)
+}
+
+func NewActionGateWithRuntimeAndStore(logger *zap.Logger, tokenMode string, runtime *PolicyRuntime, store auth.TokenStore) *ActionGate {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &ActionGate{
-		verifier:     auth.NewVerifier(),
+		verifier:     auth.NewVerifierWithStore(store),
 		enableBatch:  false,
 		logger:       logger,
 		policyEngine: NewPolicyEngineWithRuntime(runtime),
@@ -241,10 +245,6 @@ func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, h
 			zap.String("tool", toolName),
 		)
 		return makeEvaluateResult(Deny, fmt.Sprintf("scope violation: %s not allowed for %s", token.Scope, toolName), score, rules)
-	}
-
-	if token.MaxCalls > 0 {
-		token.CallCount++
 	}
 
 	if ag.enableBatch && ag.batchJudge != nil {

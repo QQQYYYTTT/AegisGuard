@@ -98,6 +98,7 @@ func (pe *PolicyEngine) Score(text string) (int, []string) {
 	if pe == nil || pe.runtime == nil || strings.TrimSpace(text) == "" {
 		return 0, nil
 	}
+	text = NormalizeForPolicy(text)
 	score, rules, _ := evaluateRules(text, pe.runtime.rules, pe.runtime.config.GlobalThreshold)
 	return score, rules
 }
@@ -106,6 +107,7 @@ func (pe *PolicyEngine) ScoreForTool(toolName, text string) (int, []string) {
 	if pe == nil || pe.runtime == nil || strings.TrimSpace(text) == "" {
 		return 0, nil
 	}
+	text = NormalizeForPolicy(text)
 	activeIDs := resolveRuleIDs(toolName)
 	routed := make([]runtimeRule, 0, len(pe.runtime.rules))
 	for _, rule := range pe.runtime.rules {
@@ -124,6 +126,7 @@ func (pe *PolicyEngine) ScoreForGate(gateType, text string) (int, []string, Deci
 	if pe == nil || pe.runtime == nil || strings.TrimSpace(text) == "" {
 		return 0, nil, Allow
 	}
+	text = NormalizeForPolicy(text)
 	score, rules, topRule := pe.runtime.Evaluate(gateType, text)
 	if topRule == nil {
 		return score, rules, Allow
@@ -135,6 +138,7 @@ func (pe *PolicyEngine) ScoreForGateAndTool(gateType, toolName, text string, dyn
 	if pe == nil || pe.runtime == nil || strings.TrimSpace(text) == "" {
 		return 0, nil, Allow
 	}
+	text = NormalizeForPolicy(text)
 	score, rules, topRule := pe.runtime.EvaluateForTool(gateType, toolName, text, dynamic)
 	if topRule == nil {
 		return score, rules, Allow

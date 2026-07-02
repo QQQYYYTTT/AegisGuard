@@ -63,11 +63,16 @@ func (r *Router) handleHTTPToolProxy(c *gin.Context, proxyKind string) {
 	}
 
 	agentID, sessionID, taskID := ensureToolExecutionContext(c.Request, gatewayKey, requestID)
-	token, err := r.issueToolToken(toolName, agentID, sessionID, taskID, c.Request.Header.Get("X-Aegis-Tool-Schema"))
+	token, err := r.issueToolToken(toolName, agentID, sessionID, taskID, "")
 	if err != nil {
 		r.logger.Error("issue tool proxy token failed", zap.String("tool", toolName), zap.Error(err))
 		r.writeToolProxyError(c, requestID, start, http.StatusInternalServerError, "failed to issue require token")
 		return
+	}
+	if trustedSchema, ok := r.resolveTrustedToolSchema(toolName); ok {
+		c.Request.Header.Set("X-Aegis-Tool-Schema", base64.StdEncoding.EncodeToString(trustedSchema))
+	} else {
+		c.Request.Header.Del("X-Aegis-Tool-Schema")
 	}
 	c.Request.Header.Set("X-Aegis-Token", token)
 	c.Request.Header.Set("X-Aegis-Token-Status", "issued")
@@ -116,20 +121,37 @@ func (r *Router) handleHTTPToolProxy(c *gin.Context, proxyKind string) {
 	contentType := resp.Header.Get("Content-Type")
 
 	if strings.Contains(strings.ToLower(contentType), "text/event-stream") {
-		setToolProxyHeaders(c.Writer.Header(), "return", interfaces.EvaluateResult{
-			Decision:  interfaces.Allow,
-			Reason:    "streaming response forwarded without return filtering",
-			RiskScore: 0,
-			RiskLevel: "none",
-		})
-		c.Status(resp.StatusCode)
-		_, _ = io.Copy(c.Writer, resp.Body)
-		r.auditToolProxyResponse(requestID, start, resp.StatusCode, interfaces.EvaluateResult{
-			Decision:  interfaces.Allow,
-			Reason:    "streaming response forwarded without return filtering",
-			RiskScore: 0,
-			RiskLevel: "none",
-		})
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			r.writeToolProxyError(c, requestID, start, http.StatusBadGateway, "failed to read upstream streaming response")
+			return
+		}
+		returnResult := r.gateEvaluator.EvaluateReturn(requestID, respBody, agentID)
+		setToolProxyHeaders(c.Writer.Header(), "return", returnResult)
+		switch returnResult.Decision {
+		case interfaces.Block, interfaces.Deny:
+			r.auditToolProxyResponse(requestID, start, http.StatusForbidden, returnResult)
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": gin.H{
+					"message":  "response stopped by AegisGuard",
+					"type":     "aegis_gate_decision",
+					"decision": returnResult.Decision.String(),
+					"reason":   returnResult.Reason,
+				},
+			})
+			return
+		case interfaces.Degrade:
+			if r.contentFilter != nil {
+				filtered, removed := r.contentFilter.FilterToolResponse(respBody, toolName)
+				respBody = filtered
+				if len(removed) > 0 {
+					c.Writer.Header().Set("X-Aegis-Filtered-Fields", strings.Join(removed, ","))
+				}
+			}
+			c.Writer.Header().Set("X-Aegis-Filtered", "true")
+		}
+		r.auditToolProxyResponse(requestID, start, resp.StatusCode, returnResult)
+		c.Data(resp.StatusCode, contentType, respBody)
 		return
 	}
 
@@ -211,12 +233,22 @@ func (r *Router) issueToolToken(toolName, agentID, sessionID, taskID, schemaHead
 		if err := token.Sign(); err != nil {
 			return "", err
 		}
+		if err := r.tokenStore.Save(token); err != nil {
+			return "", err
+		}
 	}
 	payload, err := json.Marshal(token)
 	if err != nil {
 		return "", err
 	}
 	return string(payload), nil
+}
+
+func (r *Router) resolveTrustedToolSchema(toolName string) ([]byte, bool) {
+	if r.toolMeta == nil {
+		return nil, false
+	}
+	return r.toolMeta.Schema(toolName)
 }
 
 func decodeSchemaHeader(schemaHeader string) ([]byte, error) {

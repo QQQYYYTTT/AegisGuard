@@ -43,9 +43,26 @@ type bridgeEvaluateResult struct {
 
 func (r *Router) registerBridgeRoutes() {
 	group := r.engine.Group("/aegis/bridge")
+	group.Use(r.bridgeAuthMiddleware())
 	{
 		group.POST("/evaluate/action", r.handleBridgeEvaluateAction)
 		group.POST("/evaluate/return", r.handleBridgeEvaluateReturn)
+	}
+}
+
+func (r *Router) bridgeAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		expected := strings.TrimSpace(r.cfg.BridgeSharedKey)
+		if expected == "" && r.cfg.DevMode {
+			c.Next()
+			return
+		}
+		provided := strings.TrimSpace(c.GetHeader("X-Aegis-Bridge-Key"))
+		if expected == "" || provided == "" || provided != expected {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "error": "unauthorized bridge request"})
+			return
+		}
+		c.Next()
 	}
 }
 

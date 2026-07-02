@@ -65,6 +65,7 @@ func GetSigningPublicKey() *ecdsa.PublicKey {
 // 该令牌由控制平面签发，执行平面（Agent）携带此令牌访问受保护资源
 // 所有字段都参与签名，确保令牌的完整性和真实性
 type RequireToken struct {
+	TokenID    string    `json:"token_id"`    // 令牌家族 ID，服务端状态闭环的主键
 	ToolName   string    `json:"tool_name"`   // 工具名称，标识请求的工具类型
 	Scope      string    `json:"scope"`       // 权限范围，如 "read", "write", "admin"
 	AgentID    string    `json:"agent_id"`    // Agent 唯一标识符
@@ -98,7 +99,12 @@ func NewToken(toolName, scope, agentID, sessionID, taskID string, ttl time.Durat
 	}
 
 	// 创建令牌对象（此时签名尚未生成）
+	tokenID, err := newTokenID()
+	if err != nil {
+		return nil, err
+	}
 	token := &RequireToken{
+		TokenID:   tokenID,
 		ToolName:  toolName,
 		Scope:     scope,
 		AgentID:   agentID,
@@ -151,6 +157,8 @@ func (t *RequireToken) buildSignMessage() []byte {
 	var sb strings.Builder
 	sb.Grow(256)
 
+	sb.WriteString(t.TokenID)
+	sb.WriteByte('|')
 	sb.WriteString(t.ToolName)
 	sb.WriteByte('|')
 	sb.WriteString(t.Scope)

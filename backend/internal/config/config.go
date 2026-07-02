@@ -51,6 +51,10 @@ type Config struct {
 	AuditDBPath      string
 	SQLiteWALMode    bool
 
+	TokenDBPath       string
+	ToolMetadataPath string
+	BridgeSharedKey  string
+
 	ThreatMapTarget      string
 	ThreatMapTargetCoord [2]float64
 }
@@ -120,6 +124,7 @@ func Load() Config {
 	auditStorageMode := normalizeAuditStorageMode(getEnv("AEGIS_AUDIT_STORAGE_MODE", "sqlite"))
 	auditDBPath := getEnv("AEGIS_AUDIT_DB_PATH", filepath.Join(backendDir, "data", "audit-store.db"))
 	sqliteWALMode := strings.EqualFold(getEnv("AEGIS_SQLITE_WAL_MODE", "true"), "true")
+	tokenDBPath := getEnv("AEGIS_TOKEN_DB_PATH", filepath.Join(backendDir, "data", "token-store.db"))
 
 	threatMapTarget, threatMapCoord := parseThreatMapTarget(getEnv("AEGIS_THREAT_MAP_TARGET", ""))
 
@@ -157,6 +162,9 @@ func Load() Config {
 		AuditStorageMode:          auditStorageMode,
 		AuditDBPath:               auditDBPath,
 		SQLiteWALMode:             sqliteWALMode,
+		TokenDBPath:               tokenDBPath,
+		ToolMetadataPath:          getEnv("AEGIS_TOOL_METADATA_PATH", filepath.Join(backendDir, "config", "tool-metadata.json")),
+		BridgeSharedKey:           getEnv("AEGIS_BRIDGE_SHARED_KEY", ""),
 		ThreatMapTarget:           threatMapTarget,
 		ThreatMapTargetCoord:      threatMapCoord,
 	}

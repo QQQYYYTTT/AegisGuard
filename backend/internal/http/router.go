@@ -20,6 +20,7 @@ import (
 	"aegisguard/internal/gateway"
 	"aegisguard/internal/interfaces"
 	memorysandbox "aegisguard/internal/sandbox"
+	"aegisguard/internal/toolmeta"
 	"aegisguard/internal/user"
 	"aegisguard/internal/vkey"
 
@@ -48,7 +49,7 @@ type Router struct {
 	auditor       *audit.Logger
 	auditStore    audit.Storer
 	threatMap     *audit.ThreatMapBuilder
-	tokenStore    *auth.TokenStore
+	tokenStore    auth.TokenStore
 	verifier      *auth.Verifier
 	userService   *user.Service
 	policyRuntime *gates.PolicyRuntime
@@ -57,6 +58,7 @@ type Router struct {
 	sandboxMgr    contract.SandboxManager
 	transferMgr   contract.TransferManager
 	contentFilter contract.ContentFilter
+	toolMeta      *toolmeta.Store
 	logger        *zap.Logger
 	targetURL     string
 	cfg           config.Config
@@ -115,8 +117,17 @@ func NewRouter(cfg config.Config) (*Router, error) {
 	engine.Use(gin.Recovery())
 	engine.Use(requestLogger(logger))
 
-	tokenStore := auth.NewTokenStore()
-	verifier := auth.NewVerifier()
+	var tokenStore auth.TokenStore
+	tokenStore, err = auth.NewSQLiteTokenStore(cfg.TokenDBPath)
+	if err != nil {
+		logger.Warn("sqlite token store init failed, falling back to memory", zap.Error(err))
+		tokenStore = auth.NewMemoryTokenStore()
+	}
+	verifier := auth.NewVerifierWithStore(tokenStore)
+	toolMetaStore, err := toolmeta.NewStoreFromFile(cfg.ToolMetadataPath)
+	if err != nil {
+		return nil, err
+	}
 
 	userDB, err := db.OpenSQLite(cfg.UserDBPath)
 	if err != nil {
@@ -170,7 +181,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 
 	decisionStore := proxy.GetDecisionStore()
 	gateQuery := gates.NewGateQuery(decisionStore)
-	actionGate := gates.NewActionGateWithRuntime(logger, cfg.TokenMode, policyRuntime)
+	actionGate := gates.NewActionGateWithRuntimeAndStore(logger, cfg.TokenMode, policyRuntime, tokenStore)
 	actionGate.SetDynamicRuleRouting(cfg.DynamicRuleRoutingEnabled)
 	actionGate.SetTDG(tdgSettings)
 	gateEvaluator := gates.NewGateEvaluator(
@@ -196,6 +207,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 		sandboxMgr:    sandboxMgr,
 		transferMgr:   sandboxMgr,
 		contentFilter: sandboxMgr,
+		toolMeta:      toolMetaStore,
 		logger:        logger,
 		targetURL:     vkeyMgr.GetTargetURL(),
 		cfg:           cfg,

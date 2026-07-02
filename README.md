@@ -63,6 +63,16 @@ AegisGuard 是一个面向 **Agent 运行时安全** 的原型系统。当前版
 | Action Gate | 工具执行前 | 检测高风险动作、校验 RequireToken、scope、SchemaHash、Session/Task 绑定 |
 | Return Gate | 工具/模型返回后 | 检测反向注入、敏感信息泄露、外部结果污染，并可降级过滤 |
 
+当前规则快路径在进入匹配前还会执行一层轻量归一化，用于覆盖常见的工程性混淆手法，包括：
+
+- Unicode `NFKC` 归一化
+- 零宽字符清洗
+- HTML Entity 解码
+- URL 百分号编码解码
+- 可读 Base64 片段解码
+
+这层能力的目标是提升对编码混淆、字段伪装、简单对抗样本的覆盖率，不等同于“通用语义理解”。
+
 关键代码：
 
 - [backend/internal/gates/message.go](backend/internal/gates/message.go)

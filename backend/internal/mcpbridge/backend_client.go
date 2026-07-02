@@ -13,6 +13,7 @@ import (
 type BackendClient struct {
 	baseURL string
 	client  *http.Client
+	bridgeKey string
 }
 
 type BridgeActionRequest struct {
@@ -47,9 +48,10 @@ type EvaluateResponse struct {
 	} `json:"data"`
 }
 
-func NewBackendClient(baseURL string) *BackendClient {
+func NewBackendClient(baseURL string, bridgeKey string) *BackendClient {
 	return &BackendClient{
 		baseURL: baseURL,
+		bridgeKey: bridgeKey,
 		client: &http.Client{
 			Timeout: 3 * time.Second,
 		},
@@ -74,6 +76,9 @@ func (c *BackendClient) doJSON(ctx context.Context, path string, payload any) (*
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	if c.bridgeKey != "" {
+		httpReq.Header.Set("X-Aegis-Bridge-Key", c.bridgeKey)
+	}
 	resp, err := c.client.Do(httpReq)
 	if err != nil {
 		return nil, err

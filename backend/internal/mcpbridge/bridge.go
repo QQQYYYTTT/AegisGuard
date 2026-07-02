@@ -21,6 +21,7 @@ type Bridge struct {
 
 type Config struct {
 	BackendURL string
+	BridgeKey  string
 	AgentID    string
 	SessionID  string
 	TaskID     string
@@ -48,7 +49,7 @@ func New(cfg Config) (*Bridge, error) {
 	}
 	return &Bridge{
 		cfg:      cfg,
-		client:   NewBackendClient(strings.TrimRight(cfg.BackendURL, "/")),
+		client:   NewBackendClient(strings.TrimRight(cfg.BackendURL, "/"), cfg.BridgeKey),
 		registry: NewSchemaRegistry(),
 	}, nil
 }

@@ -66,6 +66,7 @@ func runServer(cfg config.Config, logger *zap.Logger) {
 func runBridge(cfg config.Config, logger *zap.Logger, args []string) error {
 	fs := flag.NewFlagSet("bridge-stdio", flag.ContinueOnError)
 	backendURL := fs.String("backend", "http://127.0.0.1:"+cfg.Port, "AegisGuard backend base URL")
+	bridgeKey := fs.String("bridge-key", cfg.BridgeSharedKey, "shared key for bridge control-plane auth")
 	agentID := fs.String("agent-id", "agent-bridge", "agent identifier")
 	sessionID := fs.String("session-id", fmt.Sprintf("session-%d", time.Now().UnixNano()), "session identifier")
 	taskID := fs.String("task-id", fmt.Sprintf("task-%d", time.Now().UnixNano()), "task identifier")
@@ -78,6 +79,7 @@ func runBridge(cfg config.Config, logger *zap.Logger, args []string) error {
 	}
 	bridge, err := mcpbridge.New(mcpbridge.Config{
 		BackendURL: *backendURL,
+		BridgeKey:  *bridgeKey,
 		AgentID:    *agentID,
 		SessionID:  *sessionID,
 		TaskID:     *taskID,
@@ -113,4 +115,3 @@ func buildLogger(cfg config.Config) *zap.Logger {
 func isServerCommand(arg string) bool {
 	return arg == "server"
 }
-

@@ -44,14 +44,20 @@ type Verifier struct {
 	publicKey *ecdsa.PublicKey // SM2 公钥，用于验证签名
 	cache     sync.Map         // 缓存已验证的 token 结果，key 为签名消息哈希
 	cacheTTL  time.Duration    // 缓存 TTL
+	store     TokenStore
 }
 
 // NewVerifier 创建新的验证器实例
 // 返回：Verifier 对象
 func NewVerifier() *Verifier {
+	return NewVerifierWithStore(nil)
+}
+
+func NewVerifierWithStore(store TokenStore) *Verifier {
 	v := &Verifier{
 		publicKey: GetSigningPublicKey(),
 		cacheTTL:  5 * time.Minute,
+		store:     store,
 	}
 	return v
 }
@@ -109,6 +115,9 @@ func (v *Verifier) verifyChecks(token *RequireToken, consumeNonce bool) (Verific
 				return checks, err
 			}
 			checks.CallBudgetOK = true
+			if err := v.consumeStoreState(token); err != nil {
+				return checks, err
+			}
 			return checks, nil
 		}
 		v.cache.Delete(cacheKey)
@@ -136,6 +145,10 @@ func (v *Verifier) verifyChecks(token *RequireToken, consumeNonce bool) (Verific
 	checks.CallBudgetOK = true
 
 	if err := v.verifySchemaHash(token); err != nil {
+		return checks, err
+	}
+
+	if err := v.consumeStoreState(token); err != nil {
 		return checks, err
 	}
 
@@ -243,6 +256,19 @@ func CompareSchemaHash(token *RequireToken, toolSchema []byte) error {
 
 // verifyCallBudget 验证调用次数预算（SAGA 风格防 DoS）
 func (v *Verifier) verifyCallBudget(token *RequireToken) error {
+	if v.store != nil && token.TokenID != "" {
+		stored, err := v.store.State(token.TokenID)
+		if err != nil {
+			return err
+		}
+		token.CallCount = stored.CallCount
+		token.MaxCalls = stored.MaxCalls
+		if token.MaxCalls > 0 && token.CallCount >= token.MaxCalls {
+			return fmt.Errorf("call budget exceeded: %d/%d calls used", token.CallCount, token.MaxCalls)
+		}
+		return nil
+	}
+
 	if token.MaxCalls == 0 {
 		return nil
 	}
@@ -251,6 +277,20 @@ func (v *Verifier) verifyCallBudget(token *RequireToken) error {
 		return fmt.Errorf("call budget exceeded: %d/%d calls used", token.CallCount, token.MaxCalls)
 	}
 
+	return nil
+}
+
+func (v *Verifier) consumeStoreState(token *RequireToken) error {
+	if v.store == nil || token.TokenID == "" {
+		return nil
+	}
+	updated, err := v.store.Consume(token.TokenID)
+	if err != nil {
+		return err
+	}
+	token.CallCount = updated.CallCount
+	token.MaxCalls = updated.MaxCalls
+	token.ExpiresAt = updated.ExpiresAt
 	return nil
 }
 

@@ -2,15 +2,12 @@ package gateway
 
 import (
 	"net/http"
-	"time"
 
 	"aegisguard/internal/auth"
 )
 
-// TokenIssuer 提供最小可运行的 RequireToken 签发能力。
-type TokenIssuer interface {
-	Issue(toolName, scope, agentID, sessionID, taskID string, ttl time.Duration, maxCalls int) (*auth.RequireToken, error)
-}
+// TokenIssuer 复用 auth.TokenStore 存储契约，避免网关层持有一套更弱的并行接口。
+type TokenIssuer = auth.TokenStore
 
 // TokenInjector [WRONG] [分工2] Token 注入器
 //

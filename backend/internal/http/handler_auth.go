@@ -145,6 +145,14 @@ func (r *Router) handleIssueToken(c *gin.Context) {
 			})
 			return
 		}
+		if err := r.tokenStore.Save(token); err != nil {
+			r.auditManualResponse(requestID, start, http.StatusInternalServerError, "Block", err.Error(), "action", 0, "low", nil, "issue_failed", r.cfg.TokenMode)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   err.Error(),
+			})
+			return
+		}
 	}
 
 	r.auditManualResponse(requestID, start, http.StatusOK, "Allow", "require token issued", "action", 20, "low", nil, "issued", r.cfg.TokenMode)
@@ -255,7 +263,7 @@ func (r *Router) buildTokenInfo(token *auth.RequireToken) tokenInfoResponse {
 	checkMap["risk_level_ok"] = true
 
 	return tokenInfoResponse{
-		TokenID:            token.Nonce,
+		TokenID:            token.TokenID,
 		ToolName:           token.ToolName,
 		Scope:              token.Scope,
 		AgentID:            token.AgentID,
