@@ -212,6 +212,7 @@ func (r *Router) registerRoutes() {
 	r.registerAuthRoutes()
 	r.registerAssistantRoutes()
 	r.registerToolProxyRoutes()
+	r.registerBridgeRoutes()
 
 	r.engine.Any("/v1/*path", r.handleProxy)
 
