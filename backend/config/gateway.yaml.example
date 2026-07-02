@@ -3,7 +3,7 @@
 # 使用方式：
 #   1. 复制此文件为 gateway.yaml
 #       copy config\gateway.yaml.example config\gateway.yaml
-#   2. 修改 target_url 和 llm_api_key 为你的真实凭据
+#   2. 修改 target_url；如使用 gateway_managed 或 passthrough fallback，再填写 llm_api_key
 #   3. 启动网关
 #
 # 安全说明：
@@ -11,6 +11,8 @@
 # - 生产环境建议通过环境变量注入敏感字段：
 #     set AEGIS_TARGET_URL=https://api.openai.com
 #     set AEGIS_LLM_API_KEY=sk-xxxxx
+# - 入口鉴权默认建议使用 X-Gateway-Key 请求头，而不是把网关凭据放在 Authorization
+# - llm_api_key 在 AEGIS_AUTH_MODE=passthrough 且客户端始终自带真实 Authorization 时可留空
 
 gateway_key: agk-dev-001
 target_url: https://api.openai.com

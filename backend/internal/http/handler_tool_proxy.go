@@ -14,6 +14,7 @@ import (
 
 	"aegisguard/internal/audit"
 	"aegisguard/internal/interfaces"
+	"aegisguard/internal/vkey"
 	"aegisguard/pkg/smcrypto"
 
 	"github.com/gin-gonic/gin"
@@ -191,9 +192,8 @@ func (r *Router) handleHTTPToolProxy(c *gin.Context, proxyKind string) {
 }
 
 func (r *Router) authorizeGatewayRequest(c *gin.Context, requestID string, start time.Time, body []byte) string {
-	authHeader := c.GetHeader("Authorization")
 	gatewayKey := r.vkeyMgr.GatewayKeyID()
-	providedKey := extractBearerToken(authHeader)
+	providedKey := vkey.ExtractGatewayCredential(c.Request.Header)
 
 	r.auditor.LogRequest(auditInput(requestID, providedKey, c, body))
 
@@ -330,18 +330,6 @@ func validateUpstreamURL(raw string) (*url.URL, bool) {
 		return nil, false
 	}
 	return parsed, true
-}
-
-func extractBearerToken(authHeader string) string {
-	authHeader = strings.TrimSpace(authHeader)
-	if authHeader == "" {
-		return ""
-	}
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return ""
-	}
-	return strings.TrimSpace(parts[1])
 }
 
 func copyToolProxyHeaders(dst, src http.Header) {

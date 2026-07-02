@@ -26,6 +26,7 @@ type Config struct {
 	SigningPrivateKey        string
 	UserTokenSecret          string
 	TokenMode                string
+	AuthMode                 string
 
 	GatewayConfigPath string
 	LogLevel          string
@@ -51,7 +52,7 @@ type Config struct {
 	AuditDBPath      string
 	SQLiteWALMode    bool
 
-	TokenDBPath       string
+	TokenDBPath      string
 	ToolMetadataPath string
 	BridgeSharedKey  string
 
@@ -100,6 +101,7 @@ func Load() Config {
 	logEncoding := getEnv("AEGIS_LOG_ENCODING", "console")
 	policyMode := getEnv("AEGIS_POLICY_MODE", "balanced")
 	tokenMode := normalizeTokenMode(getEnv("AEGIS_TOKEN_MODE", "strict"))
+	authMode := normalizeAuthMode(getEnv("AEGIS_AUTH_MODE", "gateway_managed"))
 	devMode := strings.EqualFold(getEnv("AEGIS_DEV_MODE", "true"), "true")
 	// Phase 1（动态规则路由）默认关闭，需显式开启；开关关闭时行为与开发前完全一致。
 	dynamicRuleRoutingEnabled := strings.EqualFold(getEnv("AEGIS_DYNAMIC_RULE_ROUTING", "false"), "true")
@@ -144,6 +146,7 @@ func Load() Config {
 		SigningPrivateKey:         getEnv("AEGIS_SIGNING_PRIVATE_KEY", ""),
 		UserTokenSecret:           getEnv("AEGIS_USER_TOKEN_SECRET", "aegisguard-dev-user-secret"),
 		TokenMode:                 tokenMode,
+		AuthMode:                  authMode,
 		GatewayConfigPath:         gatewayConfigPath,
 		LogLevel:                  logLevel,
 		LogEncoding:               logEncoding,
@@ -234,5 +237,14 @@ func normalizeAuditStorageMode(mode string) string {
 		return strings.TrimSpace(strings.ToLower(mode))
 	default:
 		return "sqlite"
+	}
+}
+
+func normalizeAuthMode(mode string) string {
+	switch strings.TrimSpace(strings.ToLower(mode)) {
+	case "gateway_managed", "passthrough":
+		return strings.TrimSpace(strings.ToLower(mode))
+	default:
+		return "gateway_managed"
 	}
 }

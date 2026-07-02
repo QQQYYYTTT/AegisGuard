@@ -49,6 +49,7 @@ type AegisProxy struct {
 	transferMgr   contract.TransferManager
 	contentFilter contract.ContentFilter
 	tokenMode     string
+	authMode      string
 	logger        *zap.Logger
 
 	provenanceEnabled bool
@@ -61,11 +62,11 @@ type AegisProxy struct {
 	purificationEnabled bool
 }
 
-func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIssuer, tokenMode string, dynamicRuleRouting bool, tdgSettings gates.TDGSettings, provenanceSettings gates.ProvenanceSettings, purificationEnabled bool, logger *zap.Logger) (*AegisProxy, error) {
-	return NewAegisProxyWithPolicyRuntime(targetURL, vkeyMgr, tokenIssuer, tokenMode, dynamicRuleRouting, tdgSettings, provenanceSettings, purificationEnabled, logger, nil)
+func NewAegisProxy(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIssuer, tokenMode, authMode string, dynamicRuleRouting bool, tdgSettings gates.TDGSettings, provenanceSettings gates.ProvenanceSettings, purificationEnabled bool, logger *zap.Logger) (*AegisProxy, error) {
+	return NewAegisProxyWithPolicyRuntime(targetURL, vkeyMgr, tokenIssuer, tokenMode, authMode, dynamicRuleRouting, tdgSettings, provenanceSettings, purificationEnabled, logger, nil)
 }
 
-func NewAegisProxyWithPolicyRuntime(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIssuer, tokenMode string, dynamicRuleRouting bool, tdgSettings gates.TDGSettings, provenanceSettings gates.ProvenanceSettings, purificationEnabled bool, logger *zap.Logger, policyRuntime *gates.PolicyRuntime) (*AegisProxy, error) {
+func NewAegisProxyWithPolicyRuntime(targetURL string, vkeyMgr *vkey.Manager, tokenIssuer TokenIssuer, tokenMode, authMode string, dynamicRuleRouting bool, tdgSettings gates.TDGSettings, provenanceSettings gates.ProvenanceSettings, purificationEnabled bool, logger *zap.Logger, policyRuntime *gates.PolicyRuntime) (*AegisProxy, error) {
 	target, err := url.Parse(targetURL)
 	if err != nil {
 		return nil, err
@@ -87,6 +88,7 @@ func NewAegisProxyWithPolicyRuntime(targetURL string, vkeyMgr *vkey.Manager, tok
 		tokenIssuer:       tokenIssuer,
 		decisionStore:     gates.NewDecisionStore(1000),
 		tokenMode:         normalizeGatewayTokenMode(tokenMode),
+		authMode:          normalizeUpstreamAuthMode(authMode),
 		logger:            logger,
 		provenanceEnabled: provenanceSettings.Enabled,
 		provenanceMode:    gates.NormalizeProvenanceMode(provenanceSettings.Mode),
@@ -115,12 +117,27 @@ func (ap *AegisProxy) director(req *http.Request) {
 		maskedAuth = originalAuth[:30] + "..."
 	}
 
-	req.Header.Set("Authorization", "Bearer "+ap.vkeyMgr.GetLLMAPIKey())
+	switch ap.authMode {
+	case "passthrough":
+		if clientAuth := strings.TrimSpace(req.Header.Get("Authorization")); clientAuth != "" {
+			if vkey.ExtractGatewayKey(clientAuth) != "" {
+				req.Header.Del("Authorization")
+			}
+		}
+		if strings.TrimSpace(req.Header.Get("Authorization")) == "" {
+			if fallback := strings.TrimSpace(ap.vkeyMgr.GetLLMAPIKey()); fallback != "" {
+				req.Header.Set("Authorization", "Bearer "+fallback)
+			}
+		}
+	default:
+		req.Header.Set("Authorization", "Bearer "+ap.vkeyMgr.GetLLMAPIKey())
+	}
 	req.Host = ap.target.Host
 	req.URL.Scheme = ap.target.Scheme
 	req.URL.Host = ap.target.Host
 
-	ap.logger.Debug("gateway credential replaced",
+	ap.logger.Debug("upstream authorization prepared",
+		zap.String("auth_mode", ap.authMode),
 		zap.String("original_auth", maskedAuth),
 		zap.String("target_host", ap.target.Host),
 		zap.String("target_path", req.URL.Path),
@@ -187,6 +204,14 @@ func hasToolCalls(messages []struct {
 }
 
 func (ap *AegisProxy) handleChatRequest(req *http.Request, body []byte) (gateResult, bool) {
+	if missingReason := ap.missingUpstreamAuthorizationReason(req); missingReason != "" {
+		er := interfaces.EvaluateResult{Decision: gates.Deny, Reason: missingReason}
+		gr := ap.newGateResult("message", er, http.StatusUnauthorized)
+		ap.recordDecision(req, gr, "", "")
+		ap.blockRequest(req, missingReason)
+		return gr, false
+	}
+
 	result := ap.messageGate.Evaluate(body)
 	gr := ap.newGateResult("message", result, http.StatusOK)
 	ap.recordDecision(req, gr, "", "")
@@ -215,7 +240,6 @@ func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) (gateResult
 		er := interfaces.EvaluateResult{Decision: gates.Deny, Reason: "tool call detected but tool name is empty"}
 		result := ap.newGateResult("action", er, http.StatusBadRequest)
 		result.TokenStatus = firstTokenStatus(req.Header)
-		result.AuthMode = ap.tokenMode
 		ap.recordDecision(req, result, "", "")
 		return result, false
 	}
@@ -236,7 +260,6 @@ func (ap *AegisProxy) handleToolCall(req *http.Request, body []byte) (gateResult
 	result := ap.actionGate.Evaluate(toolName, params, req.Header)
 	gr := ap.newGateResult("action", result, http.StatusOK)
 	gr.TokenStatus = firstTokenStatus(req.Header)
-	gr.AuthMode = ap.tokenMode
 	gr.UnauthorizedAllow = result.Decision == gates.Allow && req.Header.Get("X-Aegis-Token") == "" && ap.tokenMode != "strict"
 
 	// 溯源校验与其它信号并行运行、不受它们先前结论限制：即便 PolicyEngine/TDG 已经判定
@@ -302,7 +325,7 @@ func (ap *AegisProxy) newGateResult(gateType string, er interfaces.EvaluateResul
 		RiskScore:  er.RiskScore,
 		RiskLevel:  er.RiskLevel,
 		Rules:      er.MatchedRules,
-		AuthMode:   ap.tokenMode,
+		AuthMode:   ap.authMode,
 	}
 }
 
@@ -826,6 +849,37 @@ func normalizeGatewayTokenMode(mode string) string {
 		return strings.TrimSpace(strings.ToLower(mode))
 	default:
 		return "strict"
+	}
+}
+
+func normalizeUpstreamAuthMode(mode string) string {
+	switch strings.TrimSpace(strings.ToLower(mode)) {
+	case "gateway_managed", "passthrough":
+		return strings.TrimSpace(strings.ToLower(mode))
+	default:
+		return "gateway_managed"
+	}
+}
+
+func (ap *AegisProxy) missingUpstreamAuthorizationReason(req *http.Request) string {
+	if ap == nil {
+		return ""
+	}
+	switch ap.authMode {
+	case "passthrough":
+		clientAuth := strings.TrimSpace(req.Header.Get("Authorization"))
+		if clientAuth != "" && vkey.ExtractGatewayKey(clientAuth) == "" {
+			return ""
+		}
+		if strings.TrimSpace(ap.vkeyMgr.GetLLMAPIKey()) != "" {
+			return ""
+		}
+		return "missing upstream Authorization"
+	default:
+		if strings.TrimSpace(ap.vkeyMgr.GetLLMAPIKey()) != "" {
+			return ""
+		}
+		return "gateway-managed upstream Authorization is not configured"
 	}
 }
 

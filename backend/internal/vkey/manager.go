@@ -2,6 +2,7 @@ package vkey
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
@@ -16,20 +17,20 @@ type gatewayConfig struct {
 }
 
 const gatewayKeyPrefix = "agk-"
+const gatewayKeyHeader = "X-Gateway-Key"
 
-func ExtractGatewayKey(authHeader string) string {
-	if !strings.HasPrefix(authHeader, "Bearer ") {
+func ExtractGatewayCredential(headers http.Header) string {
+	if headers == nil {
 		return ""
 	}
-
-	key := strings.TrimPrefix(authHeader, "Bearer ")
-	key = strings.TrimSpace(key)
-
-	if strings.HasPrefix(key, gatewayKeyPrefix) {
+	if key := normalizeGatewayKey(headers.Get(gatewayKeyHeader)); key != "" {
 		return key
 	}
+	return ExtractGatewayKey(headers.Get("Authorization"))
+}
 
-	return ""
+func ExtractGatewayKey(authHeader string) string {
+	return normalizeGatewayKey(extractBearerToken(authHeader))
 }
 
 type Manager struct {
@@ -59,9 +60,6 @@ func NewManager(logger *zap.Logger, configPath string) (*Manager, error) {
 	}
 	if cfg.TargetURL == "" {
 		return nil, fmt.Errorf("target_url 不能为空，请在 %s 中配置", configPath)
-	}
-	if cfg.LLMAPIKey == "" {
-		return nil, fmt.Errorf("llm_api_key 不能为空，请在 %s 中配置", configPath)
 	}
 
 	// 环境变量优先级高于配置文件，方便生产环境注入
@@ -104,8 +102,31 @@ func (m *Manager) GatewayKeyID() string {
 }
 
 func maskKey(key string) string {
+	if strings.TrimSpace(key) == "" {
+		return ""
+	}
 	if len(key) <= 8 {
 		return "***"
 	}
 	return key[:7] + "..."
+}
+
+func extractBearerToken(authHeader string) string {
+	authHeader = strings.TrimSpace(authHeader)
+	if authHeader == "" {
+		return ""
+	}
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+	return strings.TrimSpace(parts[1])
+}
+
+func normalizeGatewayKey(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, gatewayKeyPrefix) {
+		return raw
+	}
+	return ""
 }

@@ -77,6 +77,9 @@ def require_file(path: Path, label: str) -> None:
 
 def main() -> None:
     args = parse_args()
+    # 如果 ASB 调 OpenAI-compatible endpoint 经过 AegisGuard，
+    # 入口鉴权现在推荐使用 X-Gateway-Key；真实上游 Authorization 是否需要同时携带
+    # 取决于网关侧 AEGIS_AUTH_MODE（gateway_managed / passthrough）。
     if not args.asb_root:
         raise SystemExit("Missing --asb-root or ASB_ROOT.")
 

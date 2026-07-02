@@ -26,7 +26,9 @@ func TestHTTPToolProxyForwardsAllowedRequest(t *testing.T) {
 	router := newToolProxyTestRouter(t)
 
 	var upstreamBody map[string]any
+	var upstreamAuth string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamAuth = r.Header.Get("Authorization")
 		if err := json.NewDecoder(r.Body).Decode(&upstreamBody); err != nil {
 			t.Fatalf("decode upstream body: %v", err)
 		}
@@ -48,8 +50,34 @@ func TestHTTPToolProxyForwardsAllowedRequest(t *testing.T) {
 	if upstreamBody["city"] != "beijing" {
 		t.Fatalf("unexpected upstream body: %+v", upstreamBody)
 	}
+	if upstreamAuth != "" {
+		t.Fatalf("tool proxy should not forward authorization, got %q", upstreamAuth)
+	}
 	if got := rec.Header().Get("X-Aegis-Decision"); got != "Allow" {
 		t.Fatalf("expected allow decision header, got %q", got)
+	}
+}
+
+func TestHTTPToolProxyAcceptsXGatewayKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := newToolProxyTestRouter(t)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer upstream.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/proxy/weather?upstream="+upstream.URL, bytes.NewBufferString(`{"city":"beijing"}`))
+	req.Header.Set("X-Gateway-Key", "agk-test-001")
+	req.Header.Set("Authorization", "Bearer sk-real-upstream")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

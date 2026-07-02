@@ -158,7 +158,7 @@ func NewRouter(cfg config.Config) (*Router, error) {
 	// 的具体生效方式，proxy 只需要知道"要不要在 Allow 分支也调用纯化"这一个布尔开关。
 	sandboxMgr.SetPurification(cfg.PurificationEnabled, cfg.PurificationMode)
 
-	proxy, err := gateway.NewAegisProxyWithPolicyRuntime(vkeyMgr.GetTargetURL(), vkeyMgr, tokenStore, cfg.TokenMode, cfg.DynamicRuleRoutingEnabled, tdgSettings, provenanceSettings, cfg.PurificationEnabled, logger, policyRuntime)
+	proxy, err := gateway.NewAegisProxyWithPolicyRuntime(vkeyMgr.GetTargetURL(), vkeyMgr, tokenStore, cfg.TokenMode, cfg.AuthMode, cfg.DynamicRuleRoutingEnabled, tdgSettings, provenanceSettings, cfg.PurificationEnabled, logger, policyRuntime)
 	if err != nil {
 		return nil, err
 	}
@@ -288,8 +288,7 @@ func (r *Router) handleProxy(c *gin.Context) {
 	bodyBytes, _ := c.GetRawData()
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
-	authHeader := c.GetHeader("Authorization")
-	gatewayKey := vkey.ExtractGatewayKey(authHeader)
+	gatewayKey := vkey.ExtractGatewayCredential(c.Request.Header)
 
 	r.logger.Info("received agent request",
 		zap.String("request_id", requestID),
@@ -315,7 +314,7 @@ func (r *Router) handleProxy(c *gin.Context) {
 			Decision:   "block",
 			Reason:     "missing gateway key",
 		})
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing gateway key, expected Authorization: Bearer agk-xxx"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing gateway key, expected X-Gateway-Key or Authorization: Bearer agk-xxx"})
 		return
 	}
 

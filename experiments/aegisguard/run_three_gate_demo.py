@@ -238,6 +238,10 @@ def llm_judge(context: GateContext, hard_verdict: dict[str, Any], timeout: int =
     api_key = os.getenv("OPENAI_API_KEY") or os.getenv("CUSTOM_API_KEY") or os.getenv("LANGGRAPH_OPENAI_API_KEY")
     base_url = os.getenv("OPENAI_BASE_URL") or os.getenv("CUSTOM_BASE_URL") or os.getenv("LANGGRAPH_OPENAI_BASE_URL") or "https://api.openai.com/v1"
     model = os.getenv("OPENAI_MODEL") or os.getenv("CUSTOM_MODEL_ID") or os.getenv("LANGGRAPH_OPENAI_MODEL") or "gpt-4o-mini"
+    # 若这里的 base_url 指向 AegisGuard 的 /v1 代理：
+    # 1. 推荐额外携带 X-Gateway-Key 做入口鉴权
+    # 2. passthrough 模式下仍需保留下方真实 Authorization
+    gateway_key = os.getenv("AEGIS_GATEWAY_KEY", "").strip()
     if not api_key:
         raise RuntimeError("Missing OPENAI_API_KEY/CUSTOM_API_KEY in environment or .env")
 
@@ -284,10 +288,13 @@ def llm_judge(context: GateContext, hard_verdict: dict[str, Any], timeout: int =
             },
         ],
     }
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+    if gateway_key:
+        headers["X-Gateway-Key"] = gateway_key
     request = urllib.request.Request(
         endpoint,
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        headers=headers,
         method="POST",
     )
     try:

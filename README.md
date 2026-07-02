@@ -223,7 +223,7 @@ llm_api_key: your-real-api-key
 
 - `gateway_key`：调用 `/v1/*`、`/api/proxy`、`/mcp/proxy` 时使用
 - `target_url`：真实上游模型地址
-- `llm_api_key`：真实模型 API Key
+- `llm_api_key`：`gateway_managed` 模式或 `passthrough` fallback 使用的真实模型 API Key；纯透传部署可留空
 
 ### 2. 常用环境变量
 
@@ -231,6 +231,7 @@ llm_api_key: your-real-api-key
 $env:PORT="8090"
 $env:AEGIS_DEV_MODE="true"
 $env:AEGIS_TOKEN_MODE="strict"
+$env:AEGIS_AUTH_MODE="gateway_managed"
 $env:AEGIS_AUDIT_STORAGE_MODE="sqlite"
 $env:AEGIS_GATEWAY_CONFIG="backend\config\gateway.yaml"
 ```
@@ -241,6 +242,7 @@ $env:AEGIS_GATEWAY_CONFIG="backend\config\gateway.yaml"
 | --- | --- | --- |
 | `PORT` | `8090` | 后端端口 |
 | `AEGIS_TOKEN_MODE` | `strict` | `strict` / `warn` / `compat` |
+| `AEGIS_AUTH_MODE` | `gateway_managed` | `/v1/*` 上游鉴权模式：`gateway_managed` / `passthrough` |
 | `AEGIS_AUDIT_STORAGE_MODE` | `sqlite` | `sqlite` / `jsonl` |
 | `AEGIS_DYNAMIC_RULE_ROUTING` | `false` | Action Gate 是否按工具名做规则子集路由 |
 | `AEGIS_TDG_ENABLED` | `false` | 是否开启工具调用拓扑校验 |
@@ -308,17 +310,29 @@ http://127.0.0.1:8848
 http://127.0.0.1:8090/v1/chat/completions
 ```
 
-并带上：
+入口鉴权默认建议带上：
 
 ```text
-Authorization: Bearer agk-dev-001
+X-Gateway-Key: agk-dev-001
 ```
 
-示例：
+`Authorization: Bearer agk-dev-001` 仍作为兼容旧客户端的回退方式保留。
+
+`gateway_managed` 模式示例：
 
 ```powershell
 curl -X POST http://127.0.0.1:8090/v1/chat/completions `
-  -H "Authorization: Bearer agk-dev-001" `
+  -H "X-Gateway-Key: agk-dev-001" `
+  -H "Content-Type: application/json" `
+  -d "{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}"
+```
+
+`passthrough` 模式示例：
+
+```powershell
+curl -X POST http://127.0.0.1:8090/v1/chat/completions `
+  -H "X-Gateway-Key: agk-dev-001" `
+  -H "Authorization: Bearer sk-real-upstream-key" `
   -H "Content-Type: application/json" `
   -d "{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}"
 ```
@@ -335,10 +349,16 @@ http://127.0.0.1:8090/api/proxy/<tool>?upstream=<REAL_URL>
 
 ```powershell
 curl -X POST "http://127.0.0.1:8090/api/proxy/weather?upstream=http://127.0.0.1:9000/weather" `
-  -H "Authorization: Bearer agk-dev-001" `
+  -H "X-Gateway-Key: agk-dev-001" `
   -H "Content-Type: application/json" `
   -d "{\"city\":\"beijing\"}"
 ```
+
+说明：
+
+- `/api/proxy` 与 `/mcp/proxy` 入口同样支持 `X-Gateway-Key`，并兼容旧的 `Authorization: Bearer agk-...`
+- 当前 Phase 5 只为 `/v1/*` 主代理链路提供上游 `Authorization` passthrough
+- `/api/proxy`、`/mcp/proxy` 仍不会把调用方的 `Authorization` 转发到上游工具
 
 ### 3. 接入 HTTP MCP
 
