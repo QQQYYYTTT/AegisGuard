@@ -22,8 +22,62 @@ var paramSourceRegistry = map[string][]ParamSourcePolicy{
 		{Param: "recipient", SourceType: "user_prompt"},
 		{Param: "amount", SourceType: "user_prompt"},
 	},
+	"wire_transfer": {
+		{Param: "recipient", SourceType: "user_prompt"},
+		{Param: "amount", SourceType: "user_prompt"},
+	},
+	"send_email": {
+		{Param: "recipient", SourceType: "user_prompt"},
+	},
+	"shell_exec": {
+		{Param: "command", SourceType: "user_prompt"},
+		{Param: "script", SourceType: "user_prompt"},
+		{Param: "path", SourceType: "user_prompt"},
+	},
+	"shell.exec": {
+		{Param: "command", SourceType: "user_prompt"},
+		{Param: "script", SourceType: "user_prompt"},
+		{Param: "path", SourceType: "user_prompt"},
+	},
+	"exec_shell": {
+		{Param: "command", SourceType: "user_prompt"},
+		{Param: "script", SourceType: "user_prompt"},
+		{Param: "path", SourceType: "user_prompt"},
+	},
+	"write_file": {
+		{Param: "path", SourceType: "user_prompt"},
+		{Param: "target", SourceType: "user_prompt"},
+		{Param: "filename", SourceType: "user_prompt"},
+	},
+	"delete_file": {
+		{Param: "path", SourceType: "user_prompt"},
+		{Param: "target", SourceType: "user_prompt"},
+		{Param: "filename", SourceType: "user_prompt"},
+	},
 	"delete_record": {
 		{Param: "record_id", SourceTools: []string{"search_records", "list_records"}, SourceType: "observation_direct"},
+	},
+	"update_record": {
+		{Param: "record_id", SourceTools: []string{"search_records", "list_records", "get_record"}, SourceType: "observation_direct"},
+	},
+	"query_db": {
+		{Param: "query", SourceType: "user_prompt"},
+		{Param: "table", SourceType: "user_prompt"},
+		{Param: "record_id", SourceTools: []string{"search_records", "list_records", "get_record"}, SourceType: "observation_direct"},
+	},
+	"database.query": {
+		{Param: "query", SourceType: "user_prompt"},
+		{Param: "table", SourceType: "user_prompt"},
+		{Param: "record_id", SourceTools: []string{"search_records", "list_records", "get_record"}, SourceType: "observation_direct"},
+	},
+	"http_request": {
+		{Param: "url", SourceType: "user_prompt"},
+		{Param: "host", SourceType: "user_prompt"},
+		{Param: "recipient", SourceType: "user_prompt"},
+	},
+	"fetch_url": {
+		{Param: "url", SourceType: "user_prompt"},
+		{Param: "host", SourceType: "user_prompt"},
 	},
 }
 

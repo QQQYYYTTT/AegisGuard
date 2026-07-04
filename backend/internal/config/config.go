@@ -27,6 +27,8 @@ type Config struct {
 	UserTokenSecret          string
 	TokenMode                string
 	AuthMode                 string
+	NonceMaxEntries          int
+	NonceTTL                 time.Duration
 
 	GatewayConfigPath string
 	LogLevel          string
@@ -102,6 +104,8 @@ func Load() Config {
 	policyMode := getEnv("AEGIS_POLICY_MODE", "balanced")
 	tokenMode := normalizeTokenMode(getEnv("AEGIS_TOKEN_MODE", "strict"))
 	authMode := normalizeAuthMode(getEnv("AEGIS_AUTH_MODE", "gateway_managed"))
+	nonceMaxEntries := getEnvInt("AEGIS_NONCE_MAX_ENTRIES", 10000)
+	nonceTTL := getEnvDuration("AEGIS_NONCE_TTL", 24*time.Hour)
 	devMode := strings.EqualFold(getEnv("AEGIS_DEV_MODE", "true"), "true")
 	// Phase 1（动态规则路由）默认关闭，需显式开启；开关关闭时行为与开发前完全一致。
 	dynamicRuleRoutingEnabled := strings.EqualFold(getEnv("AEGIS_DYNAMIC_RULE_ROUTING", "false"), "true")
@@ -147,6 +151,8 @@ func Load() Config {
 		UserTokenSecret:           getEnv("AEGIS_USER_TOKEN_SECRET", "aegisguard-dev-user-secret"),
 		TokenMode:                 tokenMode,
 		AuthMode:                  authMode,
+		NonceMaxEntries:           nonceMaxEntries,
+		NonceTTL:                  nonceTTL,
 		GatewayConfigPath:         gatewayConfigPath,
 		LogLevel:                  logLevel,
 		LogEncoding:               logEncoding,

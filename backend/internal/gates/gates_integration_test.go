@@ -176,6 +176,44 @@ func TestActionGateEnforcesSessionTaskAndSchemaBinding(t *testing.T) {
 	}
 }
 
+func TestActionGateAgentBoundaryRequiresCallerIdentity(t *testing.T) {
+	gate := NewActionGateWithMode(zap.NewNop(), "warn")
+	headers := http.Header{}
+	headers.Set("X-Aegis-Boundary-Channel", "mcp_stdio")
+	headers.Set("X-Aegis-Agent-ID", "agent-sub")
+
+	result := gate.Evaluate("weather.query", map[string]interface{}{"city": "beijing"}, headers)
+	if result.Decision != Deny || !strings.Contains(result.Reason, "missing caller agent identity") {
+		t.Fatalf("expected missing caller identity deny, got %s (%s)", result.Decision, result.Reason)
+	}
+}
+
+func TestActionGateAgentBoundaryDeniesDelegatedHighRiskTool(t *testing.T) {
+	gate := NewActionGateWithMode(zap.NewNop(), "warn")
+	headers := http.Header{}
+	headers.Set("X-Aegis-Boundary-Channel", "mcp_stdio")
+	headers.Set("X-Aegis-Agent-ID", "agent-sub")
+	headers.Set("X-Aegis-Caller-Agent-ID", "agent-parent")
+
+	result := gate.Evaluate("shell.exec", map[string]interface{}{"command": "pwd"}, headers)
+	if result.Decision != Deny || !strings.Contains(result.Reason, "delegated low-privilege agent") {
+		t.Fatalf("expected delegated high-risk deny, got %s (%s)", result.Decision, result.Reason)
+	}
+}
+
+func TestActionGateAgentBoundaryAllowsSameAgentLowRiskToolInWarnMode(t *testing.T) {
+	gate := NewActionGateWithMode(zap.NewNop(), "warn")
+	headers := http.Header{}
+	headers.Set("X-Aegis-Boundary-Channel", "mcp_stdio")
+	headers.Set("X-Aegis-Agent-ID", "agent-sub")
+	headers.Set("X-Aegis-Caller-Agent-ID", "agent-sub")
+
+	result := gate.Evaluate("weather.query", map[string]interface{}{"city": "beijing"}, headers)
+	if result.Decision != Allow {
+		t.Fatalf("expected same-agent low-risk call to pass boundary in warn mode, got %s (%s)", result.Decision, result.Reason)
+	}
+}
+
 // 测试样例3：ReturnGate - 返回内容过滤
 func TestReturnGatePIIFiltering(t *testing.T) {
 	gate := NewReturnGate()

@@ -160,17 +160,20 @@ type SandboxContext struct {
 }
 
 type TransferRecord struct {
-	ID        string    `json:"id"`
-	ContextID string    `json:"context_id,omitempty"`
-	From      string    `json:"from"`
-	To        string    `json:"to"`
-	Fields    []string  `json:"fields"`
-	Summary   string    `json:"summary"`
-	SM3Hash   string    `json:"sm3_hash"`
-	RiskScore int       `json:"risk_score,omitempty"`
-	RiskLevel string    `json:"risk_level,omitempty"`
-	Action    string    `json:"action,omitempty"`
-	Approved  bool      `json:"approved"`
-	Reason    string    `json:"reason,omitempty"`
-	Timestamp time.Time `json:"timestamp"`
+	ID              string    `json:"id"`
+	ContextID       string    `json:"context_id,omitempty"`
+	From            string    `json:"from"`
+	To              string    `json:"to"`
+	Fields          []string  `json:"fields"`
+	Summary         string    `json:"summary"`
+	SM3Hash         string    `json:"sm3_hash"`
+	RiskScore       int       `json:"risk_score,omitempty"`
+	RiskLevel       string    `json:"risk_level,omitempty"`
+	Action          string    `json:"action,omitempty"`
+	ToolName        string    `json:"tool_name,omitempty"`
+	Approved        bool      `json:"approved"`
+	Reason          string    `json:"reason,omitempty"`
+	MemorySource    string    `json:"memory_source,omitempty"`
+	PromotionReason string    `json:"promotion_reason,omitempty"`
+	Timestamp       time.Time `json:"timestamp"`
 }

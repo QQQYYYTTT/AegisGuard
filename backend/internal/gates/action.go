@@ -132,6 +132,15 @@ func (ag *ActionGate) Evaluate(toolName string, params map[string]interface{}, h
 		)
 		return makeEvaluateResult(Deny, "action combines prompt-injection markers with privileged or sensitive operation", score, rules)
 	}
+
+	if decision, ok := ag.evaluateMemoryAction(toolName, params, score, rules); ok {
+		return decision
+	}
+
+	if decision, ok := ag.evaluateAgentBoundary(toolName, headers, score, rules); ok {
+		return decision
+	}
+
 	if ruleAction == Deny && ag.policyEngine.ShouldHumanReview(score) {
 		return makeEvaluateResult(Deny, "action denied by policy rule", score, rules)
 	}
@@ -353,6 +362,113 @@ func (ag *ActionGate) extractContentSummary(params map[string]interface{}) strin
 		return ""
 	}
 	return string(raw)
+}
+
+func (ag *ActionGate) evaluateMemoryAction(toolName string, params map[string]interface{}, score int, rules []string) (interfaces.EvaluateResult, bool) {
+	normalized := strings.TrimSpace(strings.ToLower(toolName))
+	switch normalized {
+	case "memory.write", "memory.update", "memory.promote":
+	default:
+		return interfaces.EvaluateResult{}, false
+	}
+
+	memorySource := firstStringParam(params, "memory_source", "source")
+	if strings.TrimSpace(memorySource) == "" {
+		return makeEvaluateResult(Deny, "memory action missing memory source", score, append(rules, "memory_action")), true
+	}
+
+	if normalized == "memory.update" || normalized == "memory.promote" {
+		if strings.TrimSpace(firstStringParam(params, "context_id")) == "" {
+			return makeEvaluateResult(Deny, "memory action missing context_id", score, append(rules, "memory_action")), true
+		}
+	}
+
+	if normalized == "memory.promote" {
+		if !strings.EqualFold(memorySource, "safe_summary") {
+			return makeEvaluateResult(Deny, "memory.promote only accepts safe_summary as memory source", score, append(rules, "memory_action")), true
+		}
+		if strings.TrimSpace(firstStringParam(params, "promotion_reason")) == "" {
+			return makeEvaluateResult(Deny, "memory.promote requires promotion_reason", score, append(rules, "memory_action")), true
+		}
+	}
+
+	return interfaces.EvaluateResult{}, false
+}
+
+func firstStringParam(params map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		if params == nil {
+			continue
+		}
+		if value, ok := params[key]; ok {
+			if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func (ag *ActionGate) evaluateAgentBoundary(toolName string, headers http.Header, score int, rules []string) (interfaces.EvaluateResult, bool) {
+	if headers == nil {
+		return interfaces.EvaluateResult{}, false
+	}
+	channel := strings.TrimSpace(strings.ToLower(headers.Get("X-Aegis-Boundary-Channel")))
+	if channel == "" {
+		return interfaces.EvaluateResult{}, false
+	}
+	switch channel {
+	case "mcp_http", "mcp_stdio", "multi_agent":
+	default:
+		return makeEvaluateResult(Deny, "unknown agent boundary channel: "+channel, score, append(rules, "agent_boundary")), true
+	}
+
+	callerAgentID := strings.TrimSpace(headers.Get("X-Aegis-Caller-Agent-ID"))
+	if callerAgentID == "" {
+		return makeEvaluateResult(Deny, "agent boundary call missing caller agent identity", score, append(rules, "agent_boundary")), true
+	}
+
+	targetAgentID := strings.TrimSpace(headers.Get("X-Aegis-Agent-ID"))
+	if targetAgentID == "" {
+		targetAgentID = strings.TrimSpace(headers.Get("X-Aegis-Target-Agent-ID"))
+	}
+	if targetAgentID == "" {
+		return makeEvaluateResult(Deny, "agent boundary call missing target agent identity", score, append(rules, "agent_boundary")), true
+	}
+
+	if callerAgentID != targetAgentID && isBoundaryHighRiskTool(toolName, rules) {
+		ag.logger.Warn("delegated boundary call denied for high-risk tool",
+			zap.String("caller_agent_id", callerAgentID),
+			zap.String("target_agent_id", targetAgentID),
+			zap.String("channel", channel),
+			zap.String("tool", toolName),
+			zap.Strings("rules", rules),
+		)
+		return makeEvaluateResult(Deny, "delegated low-privilege agent cannot request high-risk tool over "+channel, score, append(rules, "agent_boundary")), true
+	}
+
+	return interfaces.EvaluateResult{}, false
+}
+
+func isBoundaryHighRiskTool(toolName string, rules []string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(toolName))
+	for _, marker := range []string{
+		"shell", "exec", "cmd", "powershell", "bash",
+		"delete", "remove", "write", "update", "drop", "truncate",
+		"transfer", "wire", "pay", "refund", "withdraw",
+		"database", "query_db", "http_request", "fetch_url",
+	} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	for _, rule := range rules {
+		switch rule {
+		case "high_impact_action", "privileged_scope", "sensitive_access", "illegal_finance", "rule-10":
+			return true
+		}
+	}
+	return false
 }
 
 func (ag *ActionGate) Close() {

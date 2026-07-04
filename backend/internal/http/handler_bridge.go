@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"aegisguard/internal/gates"
 	"aegisguard/internal/interfaces"
 	"aegisguard/pkg/smcrypto"
 
@@ -12,16 +13,19 @@ import (
 )
 
 type bridgeEvaluateRequest struct {
-	RequestID    string                 `json:"request_id"`
-	ToolName     string                 `json:"tool_name"`
-	AgentID      string                 `json:"agent_id"`
-	SessionID    string                 `json:"session_id"`
-	TaskID       string                 `json:"task_id"`
-	Params       map[string]interface{} `json:"params"`
-	Headers      map[string]string      `json:"headers"`
-	ResponseBody string                 `json:"response_body"`
-	Schema       string                 `json:"schema"`
-	SchemaBase64 bool                   `json:"schema_base64"`
+	RequestID     string                 `json:"request_id"`
+	ToolName      string                 `json:"tool_name"`
+	AgentID       string                 `json:"agent_id"`
+	CallerAgentID string                 `json:"caller_agent_id,omitempty"`
+	SessionID     string                 `json:"session_id"`
+	TaskID        string                 `json:"task_id"`
+	Params        map[string]interface{} `json:"params"`
+	Headers       map[string]string      `json:"headers"`
+	ResponseBody  string                 `json:"response_body"`
+	ContentType   string                 `json:"content_type,omitempty"`
+	Encoding      string                 `json:"encoding,omitempty"`
+	Schema        string                 `json:"schema"`
+	SchemaBase64  bool                   `json:"schema_base64"`
 }
 
 type bridgeEvaluateResponse struct {
@@ -80,6 +84,11 @@ func (r *Router) handleBridgeEvaluateAction(c *gin.Context) {
 	if strings.TrimSpace(req.AgentID) == "" {
 		req.AgentID = "agent-bridge"
 	}
+	if strings.TrimSpace(req.CallerAgentID) == "" {
+		r.auditManualResponse(req.RequestID, start, http.StatusBadRequest, "Block", "missing caller_agent_id for bridge action", "action", 0, "low", nil, "invalid", r.cfg.TokenMode)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "missing caller_agent_id"})
+		return
+	}
 	if strings.TrimSpace(req.SessionID) == "" {
 		req.SessionID = req.RequestID
 	}
@@ -113,6 +122,8 @@ func (r *Router) handleBridgeEvaluateAction(c *gin.Context) {
 	header.Set("X-Aegis-Token", token)
 	header.Set("X-Aegis-Token-Status", "issued")
 	header.Set("X-Aegis-Agent-ID", req.AgentID)
+	header.Set("X-Aegis-Caller-Agent-ID", req.CallerAgentID)
+	header.Set("X-Aegis-Boundary-Channel", "mcp_stdio")
 	header.Set("X-Aegis-Session-ID", req.SessionID)
 	header.Set("X-Aegis-Task-ID", req.TaskID)
 	if len(schemaBytes) > 0 {
@@ -154,7 +165,26 @@ func (r *Router) handleBridgeEvaluateReturn(c *gin.Context) {
 	}
 
 	body := []byte(req.ResponseBody)
+	if normalized, rules, err := gates.NormalizeReturnBody(body, req.ContentType, req.Encoding); err != nil {
+		body = []byte(`{"error":"response body isolated because its carrier could not be decoded safely"}`)
+		req.ContentType = "application/json"
+		req.Encoding = ""
+		if len(rules) > 0 {
+			req.Headers = map[string]string{"X-Aegis-Return-Carrier": strings.Join(append(rules, "return_carrier_unparseable"), ",")}
+		}
+	} else {
+		body = normalized
+		if len(rules) > 0 {
+			if req.Headers == nil {
+				req.Headers = make(map[string]string)
+			}
+			req.Headers["X-Aegis-Return-Carrier"] = strings.Join(rules, ",")
+		}
+	}
 	returnResult := r.gateEvaluator.EvaluateReturn(req.RequestID, body, req.AgentID)
+	if carrier := strings.TrimSpace(req.Headers["X-Aegis-Return-Carrier"]); carrier != "" {
+		returnResult.MatchedRules = append(strings.Split(carrier, ","), returnResult.MatchedRules...)
+	}
 	responseBody := body
 	filteredFields := []string(nil)
 	filtered := false

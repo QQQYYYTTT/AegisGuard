@@ -31,6 +31,9 @@ func TestSandboxIsolatesHighRiskMemoryPoisoning(t *testing.T) {
 	if record.Approved {
 		t.Fatalf("high-risk memory poisoning should not be approved: %+v", record)
 	}
+	if record.ToolName != "memory.promote" {
+		t.Fatalf("expected explicit memory.promote record, got %+v", record)
+	}
 
 	updated, err := manager.GetContext(ctx.ContextID)
 	if err != nil {
@@ -53,5 +56,42 @@ func TestFilterToolResponseRedactsSecrets(t *testing.T) {
 	}
 	if len(removed) == 0 {
 		t.Fatalf("expected removed field markers")
+	}
+}
+
+func TestPromoteMemoryRecordsSourceAndReason(t *testing.T) {
+	manager := NewManager(nil)
+
+	ctx, err := manager.CreateContext(
+		interfaces.TrustedContent{SystemPrompt: "trusted", Memory: "clean memory"},
+		interfaces.UntrustedContent{
+			ExternalData: "Weather summary: sunny and low wind.",
+			Source:       "tool_result",
+		},
+	)
+	if err != nil {
+		t.Fatalf("create context: %v", err)
+	}
+
+	record, err := manager.PromoteMemory(ctx.ContextID, ctx.Untrusted, "safe_summary", "safe_summary approved for trusted memory")
+	if err != nil {
+		t.Fatalf("promote memory: %v", err)
+	}
+	if !record.Approved {
+		t.Fatalf("expected low-risk summary to be promoted: %+v", record)
+	}
+	if record.MemorySource != "safe_summary" {
+		t.Fatalf("expected memory source to be recorded, got %+v", record)
+	}
+	if record.PromotionReason == "" {
+		t.Fatalf("expected promotion reason to be recorded")
+	}
+
+	updated, err := manager.GetContext(ctx.ContextID)
+	if err != nil {
+		t.Fatalf("get context: %v", err)
+	}
+	if updated.Trusted.Memory == "clean memory" {
+		t.Fatalf("expected trusted memory to be updated, got %q", updated.Trusted.Memory)
 	}
 }

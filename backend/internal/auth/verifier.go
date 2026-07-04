@@ -5,6 +5,7 @@ package auth
 import (
 	"crypto/ecdsa"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ var (
 	usedNonces      = make(map[string]int64)
 	nonceMu         sync.RWMutex
 	nonceExpiration = 24 * time.Hour
+	nonceMaxEntries = 10000
 	nonceGCDone     = make(chan struct{})
 	nonceGCOnce     sync.Once
 
@@ -188,22 +190,90 @@ func (v *Verifier) verifyExpiry(token *RequireToken) error {
 // 使用 RWMutex 优化读多写少场景：读操作获取 RLock，写操作获取 Lock
 // 同时支持 Nonce 过期自动清理，避免内存泄漏
 func (v *Verifier) verifyNonce(token *RequireToken, consume bool) error {
+	now := time.Now()
+
 	nonceMu.RLock()
 	expiresAt, exists := usedNonces[token.Nonce]
 	nonceMu.RUnlock()
 
 	if exists {
-		if time.Now().Unix() < expiresAt {
+		if now.Unix() < expiresAt {
 			return fmt.Errorf("nonce already used: %s", token.Nonce)
 		}
 	}
 
 	if consume {
 		nonceMu.Lock()
-		usedNonces[token.Nonce] = time.Now().Add(nonceExpiration).Unix()
+		pruneNonceStoreLocked(now, nonceMaxEntries-1)
+		usedNonces[token.Nonce] = now.Add(nonceExpiration).Unix()
 		nonceMu.Unlock()
 	}
 	return nil
+}
+
+// SetNonceMaxEntries adjusts the in-memory replay cache capacity.
+// It is primarily used by tests and deployments with constrained memory.
+func SetNonceMaxEntries(maxEntries int) {
+	nonceMu.Lock()
+	defer nonceMu.Unlock()
+	if maxEntries <= 0 {
+		maxEntries = 1
+	}
+	nonceMaxEntries = maxEntries
+	pruneNonceStoreLocked(time.Now(), nonceMaxEntries)
+}
+
+// SetNonceExpiration overrides the replay cache retention window.
+func SetNonceExpiration(ttl time.Duration) {
+	nonceMu.Lock()
+	defer nonceMu.Unlock()
+	if ttl <= 0 {
+		ttl = 24 * time.Hour
+	}
+	nonceExpiration = ttl
+	pruneNonceStoreLocked(time.Now(), nonceMaxEntries)
+}
+
+// NonceCount returns the current in-memory replay cache size.
+func NonceCount() int {
+	nonceMu.RLock()
+	defer nonceMu.RUnlock()
+	return len(usedNonces)
+}
+
+func pruneNonceStoreLocked(now time.Time, maxEntries int) {
+	if maxEntries <= 0 {
+		maxEntries = 1
+	}
+	nowUnix := now.Unix()
+	for nonce, expiresAt := range usedNonces {
+		if nowUnix >= expiresAt {
+			delete(usedNonces, nonce)
+		}
+	}
+	if len(usedNonces) <= maxEntries {
+		return
+	}
+
+	type nonceEntry struct {
+		nonce     string
+		expiresAt int64
+	}
+	entries := make([]nonceEntry, 0, len(usedNonces))
+	for nonce, expiresAt := range usedNonces {
+		entries = append(entries, nonceEntry{nonce: nonce, expiresAt: expiresAt})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].expiresAt == entries[j].expiresAt {
+			return entries[i].nonce < entries[j].nonce
+		}
+		return entries[i].expiresAt < entries[j].expiresAt
+	})
+
+	removeCount := len(usedNonces) - maxEntries
+	for i := 0; i < removeCount; i++ {
+		delete(usedNonces, entries[i].nonce)
+	}
 }
 
 // verifySchemaHash 验证 Schema 指纹（SM3 哈希）
@@ -300,6 +370,7 @@ func ResetNonces() {
 	nonceMu.Lock()
 	defer nonceMu.Unlock()
 	usedNonces = make(map[string]int64)
+	nonceMaxEntries = 10000
 }
 
 // StartNonceGC 启动后台 goroutine 定期清理过期的 Nonce
@@ -317,14 +388,17 @@ func StartNonceGC(interval time.Duration) {
 			select {
 			case <-ticker.C:
 				nonceMu.Lock()
-				now := time.Now().Unix()
+				now := time.Now()
 				deleted := 0
+				before := len(usedNonces)
 				for nonce, expiresAt := range usedNonces {
-					if now >= expiresAt {
+					if now.Unix() >= expiresAt {
 						delete(usedNonces, nonce)
 						deleted++
 					}
 				}
+				pruneNonceStoreLocked(now, nonceMaxEntries)
+				deleted += before - deleted - len(usedNonces)
 				nonceMu.Unlock()
 				if deleted > 0 {
 					fmt.Printf("[NonceGC] cleaned up %d expired nonces\n", deleted)

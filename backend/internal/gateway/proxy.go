@@ -639,10 +639,6 @@ func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
 	if resp.Body == nil || ap.returnGate == nil {
 		return nil
 	}
-	if encoding := resp.Header.Get("Content-Encoding"); encoding != "" && encoding != "identity" {
-		ap.logger.Debug("return gate skipped encoded response", zap.String("content_encoding", encoding))
-		return nil
-	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -650,7 +646,33 @@ func (ap *AegisProxy) modifyResponse(resp *http.Response) error {
 	}
 	_ = resp.Body.Close()
 
+	normalizedBody, carrierRules, carrierErr := gates.NormalizeReturnBody(body, resp.Header.Get("Content-Type"), resp.Header.Get("Content-Encoding"))
+	if carrierErr != nil {
+		ap.logger.Warn("return carrier isolated",
+			zap.String("content_type", resp.Header.Get("Content-Type")),
+			zap.String("content_encoding", resp.Header.Get("Content-Encoding")),
+			zap.Error(carrierErr),
+		)
+		normalizedBody = []byte(`{"error":"response body isolated because its carrier could not be decoded safely"}`)
+	}
+	if len(carrierRules) > 0 || strings.TrimSpace(resp.Header.Get("Content-Encoding")) != "" {
+		body = normalizedBody
+		resp.Header.Del("Content-Encoding")
+		resp.Header.Del("Content-Length")
+		resp.Header.Set("X-Aegis-Return-Carrier", strings.Join(carrierRules, ","))
+	}
+
 	result := ap.returnGate.Evaluate(body)
+	if len(carrierRules) > 0 {
+		result.MatchedRules = append(carrierRules, result.MatchedRules...)
+	}
+	if carrierErr != nil && result.Decision == gates.Allow {
+		result.Decision = gates.Degrade
+		result.Reason = "return carrier could not be decoded and must be isolated"
+		result.RiskScore = 55
+		result.RiskLevel = "medium"
+		result.MatchedRules = append(result.MatchedRules, "return_carrier_unparseable")
+	}
 	gr := ap.newGateResult("return", result, resp.StatusCode)
 	ap.recordDecision(resp.Request, gr, "", "")
 	setGateHeaders(resp.Header, gr)
@@ -742,20 +764,17 @@ func (ap *AegisProxy) captureSandboxResponse(resp *http.Response, body []byte, r
 		}
 		return
 	}
-	if ap.transferMgr == nil {
-		return
+	if ap.transferMgr != nil {
+		if writer, ok := ap.transferMgr.(interface {
+			RecordMemoryWrite(contextID string, data interfaces.UntrustedContent, memorySource string) (*interfaces.TransferRecord, error)
+		}); ok {
+			if record, err := writer.RecordMemoryWrite(ctx.ContextID, untrusted, "return_gate"); err == nil {
+				resp.Header.Set("X-Aegis-Sandbox-Transfer-ID", record.ID)
+				resp.Header.Set("X-Aegis-Sandbox-Approved", strconv.FormatBool(record.Approved))
+			}
+		}
 	}
-
-	record, err := ap.transferMgr.UntrustedToTrusted(ctx.ContextID, untrusted)
-	if err != nil {
-		ap.logger.Warn("failed to record sandbox transfer",
-			zap.String("context_id", ctx.ContextID),
-			zap.Error(err),
-		)
-		return
-	}
-	resp.Header.Set("X-Aegis-Sandbox-Transfer-ID", record.ID)
-	resp.Header.Set("X-Aegis-Sandbox-Approved", strconv.FormatBool(record.Approved))
+	resp.Header.Set("X-Aegis-Sandbox-Promotion-Required", "true")
 }
 
 func contentTypeFromHeader(value string) string {

@@ -11,26 +11,29 @@ import (
 )
 
 type BackendClient struct {
-	baseURL string
-	client  *http.Client
+	baseURL   string
+	client    *http.Client
 	bridgeKey string
 }
 
 type BridgeActionRequest struct {
-	RequestID string                 `json:"request_id"`
-	ToolName  string                 `json:"tool_name"`
-	AgentID   string                 `json:"agent_id"`
-	SessionID string                 `json:"session_id"`
-	TaskID    string                 `json:"task_id"`
-	Params    map[string]interface{} `json:"params"`
-	Schema    string                 `json:"schema,omitempty"`
+	RequestID     string                 `json:"request_id"`
+	ToolName      string                 `json:"tool_name"`
+	AgentID       string                 `json:"agent_id"`
+	CallerAgentID string                 `json:"caller_agent_id,omitempty"`
+	SessionID     string                 `json:"session_id"`
+	TaskID        string                 `json:"task_id"`
+	Params        map[string]interface{} `json:"params"`
+	Schema        string                 `json:"schema,omitempty"`
 }
 
 type BridgeReturnRequest struct {
-	RequestID    string `json:"request_id"`
-	ToolName     string `json:"tool_name"`
-	AgentID      string `json:"agent_id"`
-	ResponseBody string `json:"response_body"`
+	RequestID        string `json:"request_id"`
+	ToolName         string `json:"tool_name"`
+	AgentID          string `json:"agent_id"`
+	ResponseBody     string `json:"response_body"`
+	ResponseType     string `json:"content_type,omitempty"`
+	ResponseEncoding string `json:"encoding,omitempty"`
 }
 
 type EvaluateResponse struct {
@@ -50,7 +53,7 @@ type EvaluateResponse struct {
 
 func NewBackendClient(baseURL string, bridgeKey string) *BackendClient {
 	return &BackendClient{
-		baseURL: baseURL,
+		baseURL:   baseURL,
 		bridgeKey: bridgeKey,
 		client: &http.Client{
 			Timeout: 3 * time.Second,

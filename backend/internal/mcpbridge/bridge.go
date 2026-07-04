@@ -20,15 +20,16 @@ type Bridge struct {
 }
 
 type Config struct {
-	BackendURL string
-	BridgeKey  string
-	AgentID    string
-	SessionID  string
-	TaskID     string
-	Command    []string
-	Stdin      io.Reader
-	Stdout     io.Writer
-	Stderr     io.Writer
+	BackendURL    string
+	BridgeKey     string
+	AgentID       string
+	CallerAgentID string
+	SessionID     string
+	TaskID        string
+	Command       []string
+	Stdin         io.Reader
+	Stdout        io.Writer
+	Stderr        io.Writer
 }
 
 func New(cfg Config) (*Bridge, error) {
@@ -46,6 +47,9 @@ func New(cfg Config) (*Bridge, error) {
 	}
 	if cfg.Stderr == nil {
 		cfg.Stderr = os.Stderr
+	}
+	if strings.TrimSpace(cfg.CallerAgentID) == "" {
+		cfg.CallerAgentID = cfg.AgentID
 	}
 	return &Bridge{
 		cfg:      cfg,
@@ -211,13 +215,14 @@ func (b *Bridge) handleToolsCall(ctx context.Context, frame []byte, msg *RPCMess
 	}
 	schema := b.registry.Schema(toolName)
 	eval, err := b.client.EvaluateAction(ctx, BridgeActionRequest{
-		RequestID: msg.IDKey(),
-		ToolName:  toolName,
-		AgentID:   b.cfg.AgentID,
-		SessionID: b.cfg.SessionID,
-		TaskID:    b.cfg.TaskID,
-		Params:    params,
-		Schema:    schema,
+		RequestID:     msg.IDKey(),
+		ToolName:      toolName,
+		AgentID:       b.cfg.AgentID,
+		CallerAgentID: b.cfg.CallerAgentID,
+		SessionID:     b.cfg.SessionID,
+		TaskID:        b.cfg.TaskID,
+		Params:        params,
+		Schema:        schema,
 	})
 	if err != nil {
 		return nil, err
@@ -240,10 +245,12 @@ func (b *Bridge) handleToolsCallResult(ctx context.Context, frame []byte) ([]byt
 	}
 
 	eval, err := b.client.EvaluateReturn(ctx, BridgeReturnRequest{
-		RequestID:    msg.IDKey(),
-		ToolName:     toolName,
-		AgentID:      b.cfg.AgentID,
-		ResponseBody: string(frame),
+		RequestID:        msg.IDKey(),
+		ToolName:         toolName,
+		AgentID:          b.cfg.AgentID,
+		ResponseBody:     string(frame),
+		ResponseType:     "application/json",
+		ResponseEncoding: "",
 	})
 	if err != nil {
 		return nil, err

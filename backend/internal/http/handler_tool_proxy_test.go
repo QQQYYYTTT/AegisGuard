@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -119,6 +120,8 @@ func TestHTTPToolProxyFiltersSensitiveResponse(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/proxy/search?upstream="+upstream.URL, bytes.NewBufferString(`{"query":"weather"}`))
 	req.Header.Set("Authorization", "Bearer agk-test-001")
+	req.Header.Set("X-Aegis-Agent-ID", "agent-test")
+	req.Header.Set("X-Aegis-Caller-Agent-ID", "agent-test")
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -132,6 +135,102 @@ func TestHTTPToolProxyFiltersSensitiveResponse(t *testing.T) {
 	}
 	if rec.Header().Get("X-Aegis-Filtered") != "true" {
 		t.Fatalf("expected filtered header")
+	}
+}
+
+func TestHTTPToolProxyDecodesGzipResponseBeforeReturnGate(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := newToolProxyTestRouter(t)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var buf bytes.Buffer
+		zw := gzip.NewWriter(&buf)
+		_, _ = zw.Write([]byte(`{"content":"api_key: example-api-key","password":"example-password"}`))
+		_ = zw.Close()
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "gzip")
+		_, _ = w.Write(buf.Bytes())
+	}))
+	defer upstream.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp/proxy/search?upstream="+upstream.URL, bytes.NewBufferString(`{"query":"weather"}`))
+	req.Header.Set("Authorization", "Bearer agk-test-001")
+	req.Header.Set("X-Aegis-Agent-ID", "agent-test")
+	req.Header.Set("X-Aegis-Caller-Agent-ID", "agent-test")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte("example-api-key")) || bytes.Contains(rec.Body.Bytes(), []byte("example-password")) {
+		t.Fatalf("response should be filtered after gzip decode, got %s", rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Encoding"); got != "" {
+		t.Fatalf("expected decoded response to clear Content-Encoding, got %q", got)
+	}
+	if got := rec.Header().Get("X-Aegis-Matched-Rules"); !bytes.Contains([]byte(got), []byte("sensitive_access")) {
+		t.Fatalf("expected matched rules to record sensitive response handling, got %q", got)
+	}
+}
+
+func TestHTTPMCPProxyRequiresCallerAgentID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := newToolProxyTestRouter(t)
+
+	upstreamCalled := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp/proxy/search?upstream="+upstream.URL, bytes.NewBufferString(`{"query":"weather"}`))
+	req.Header.Set("Authorization", "Bearer agk-test-001")
+	req.Header.Set("X-Aegis-Agent-ID", "agent-test")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing caller agent id, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if upstreamCalled {
+		t.Fatalf("upstream should not be called when caller identity is missing")
+	}
+}
+
+func TestHTTPMCPProxyDeniesDelegatedHighRiskTool(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := newToolProxyTestRouter(t)
+
+	upstreamCalled := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp/proxy/shell.exec?upstream="+upstream.URL, bytes.NewBufferString(`{"command":"pwd"}`))
+	req.Header.Set("Authorization", "Bearer agk-test-001")
+	req.Header.Set("X-Aegis-Agent-ID", "agent-sub")
+	req.Header.Set("X-Aegis-Caller-Agent-ID", "agent-parent")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for delegated high-risk MCP tool, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if upstreamCalled {
+		t.Fatalf("upstream should not be called when delegated high-risk action is denied")
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte("delegated low-privilege agent")) {
+		t.Fatalf("expected delegated denial reason, got %s", rec.Body.String())
 	}
 }
 

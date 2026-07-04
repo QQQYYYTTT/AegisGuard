@@ -114,14 +114,66 @@ func TestCheckProvenanceMalformedBodyDoesNotPanic(t *testing.T) {
 	}
 }
 
+func TestCheckProvenanceShellCommandMustComeFromUserPrompt(t *testing.T) {
+	body := []byte(`{"messages":[
+		{"role":"user","content":"run cat /etc/hosts for me"},
+		{"role":"assistant","tool_calls":[{"function":{"name":"shell_exec","arguments":{}}}]}
+	]}`)
+	params := map[string]interface{}{"command": "cat /etc/hosts"}
+
+	violations := CheckProvenance("shell_exec", params, body)
+	if len(violations) != 0 {
+		t.Fatalf("expected shell command from user prompt to pass, got %+v", violations)
+	}
+}
+
+func TestCheckProvenanceShellCommandMissingFromUserPromptIsViolation(t *testing.T) {
+	body := []byte(`{"messages":[
+		{"role":"user","content":"run cat /etc/hosts for me"},
+		{"role":"assistant","tool_calls":[{"function":{"name":"shell_exec","arguments":{}}}]}
+	]}`)
+	params := map[string]interface{}{"command": "rm -rf /prod"}
+
+	violations := CheckProvenance("shell_exec", params, body)
+	if len(violations) != 1 || violations[0].Param != "command" {
+		t.Fatalf("expected shell command provenance violation, got %+v", violations)
+	}
+}
+
+func TestCheckProvenanceHTTPURLMustComeFromUserPrompt(t *testing.T) {
+	body := []byte(`{"messages":[
+		{"role":"user","content":"fetch https://api.example.com/weather for me"},
+		{"role":"assistant","tool_calls":[{"function":{"name":"http_request","arguments":{}}}]}
+	]}`)
+	params := map[string]interface{}{"url": "https://api.example.com/weather"}
+
+	violations := CheckProvenance("http_request", params, body)
+	if len(violations) != 0 {
+		t.Fatalf("expected http_request url from user prompt to pass, got %+v", violations)
+	}
+}
+
+func TestCheckProvenanceDeleteFilePathMustComeFromUserPrompt(t *testing.T) {
+	body := []byte(`{"messages":[
+		{"role":"user","content":"delete /tmp/archive.zip"},
+		{"role":"assistant","tool_calls":[{"function":{"name":"delete_file","arguments":{}}}]}
+	]}`)
+	params := map[string]interface{}{"path": "/tmp/archive.zip"}
+
+	violations := CheckProvenance("delete_file", params, body)
+	if len(violations) != 0 {
+		t.Fatalf("expected delete_file path from user prompt to pass, got %+v", violations)
+	}
+}
+
 func TestNormalizeProvenanceMode(t *testing.T) {
 	cases := map[string]string{
-		"enforce":  "enforce",
-		"Enforce":  "enforce",
+		"enforce":   "enforce",
+		"Enforce":   "enforce",
 		" ENFORCE ": "enforce",
-		"log-only": "log-only",
-		"":         "log-only",
-		"garbage":  "log-only",
+		"log-only":  "log-only",
+		"":          "log-only",
+		"garbage":   "log-only",
 	}
 	for input, want := range cases {
 		if got := NormalizeProvenanceMode(input); got != want {

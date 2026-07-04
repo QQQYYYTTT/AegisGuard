@@ -11,7 +11,11 @@ defineProps<{
     fields: string[];
     summary: string;
     sm3_hash: string;
+    tool_name?: string;
     approved: boolean;
+    reason?: string;
+    memory_source?: string;
+    promotion_reason?: string;
     timestamp: string;
   }>;
 }>();
@@ -44,8 +48,14 @@ defineProps<{
         </div>
         <div class="text-sm mb-1">{{ t.summary }}</div>
         <div class="flex items-center gap-4 text-xs text-gray-500">
+          <span v-if="t.tool_name">Tool: {{ t.tool_name }}</span>
           <span>Fields: {{ t.fields.join(", ") }}</span>
+          <span v-if="t.memory_source">Source: {{ t.memory_source }}</span>
+          <span v-if="t.promotion_reason">Reason: {{ t.promotion_reason }}</span>
           <span>Hash: {{ t.sm3_hash }}</span>
+        </div>
+        <div v-if="t.reason" class="text-xs text-gray-500 mt-1">
+          {{ t.reason }}
         </div>
       </div>
     </div>

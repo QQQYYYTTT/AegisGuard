@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"aegisguard/internal/audit"
+	"aegisguard/internal/gates"
 	"aegisguard/internal/interfaces"
 	"aegisguard/internal/vkey"
 	"aegisguard/pkg/smcrypto"
@@ -64,6 +65,11 @@ func (r *Router) handleHTTPToolProxy(c *gin.Context, proxyKind string) {
 	}
 
 	agentID, sessionID, taskID := ensureToolExecutionContext(c.Request, gatewayKey, requestID)
+	callerAgentID := strings.TrimSpace(c.GetHeader("X-Aegis-Caller-Agent-ID"))
+	if proxyKind == "mcp" && callerAgentID == "" {
+		r.writeToolProxyError(c, requestID, start, http.StatusBadRequest, "missing caller agent identity for MCP proxy")
+		return
+	}
 	token, err := r.issueToolToken(toolName, agentID, sessionID, taskID, "")
 	if err != nil {
 		r.logger.Error("issue tool proxy token failed", zap.String("tool", toolName), zap.Error(err))
@@ -80,6 +86,10 @@ func (r *Router) handleHTTPToolProxy(c *gin.Context, proxyKind string) {
 	c.Request.Header.Set("X-Aegis-Session-ID", sessionID)
 	c.Request.Header.Set("X-Aegis-Task-ID", taskID)
 	c.Request.Header.Set("X-Aegis-Agent-ID", agentID)
+	if proxyKind == "mcp" {
+		c.Request.Header.Set("X-Aegis-Caller-Agent-ID", callerAgentID)
+		c.Request.Header.Set("X-Aegis-Boundary-Channel", "mcp_http")
+	}
 
 	params := extractToolProxyParams(bodyBytes, c.Request.URL.Query())
 	actionResult := r.gateEvaluator.EvaluateAction(requestID, toolName, params, c.Request.Header, agentID)
@@ -127,7 +137,12 @@ func (r *Router) handleHTTPToolProxy(c *gin.Context, proxyKind string) {
 			r.writeToolProxyError(c, requestID, start, http.StatusBadGateway, "failed to read upstream streaming response")
 			return
 		}
+		carrierRules := []string(nil)
+		respBody, carrierRules = normalizeToolProxyResponse(respBody, contentType, resp.Header.Get("Content-Encoding"), c.Writer.Header())
 		returnResult := r.gateEvaluator.EvaluateReturn(requestID, respBody, agentID)
+		if len(carrierRules) > 0 {
+			returnResult.MatchedRules = append(carrierRules, returnResult.MatchedRules...)
+		}
 		setToolProxyHeaders(c.Writer.Header(), "return", returnResult)
 		switch returnResult.Decision {
 		case interfaces.Block, interfaces.Deny:
@@ -162,7 +177,15 @@ func (r *Router) handleHTTPToolProxy(c *gin.Context, proxyKind string) {
 		return
 	}
 
+	respBody, carrierRules := normalizeToolProxyResponse(respBody, contentType, resp.Header.Get("Content-Encoding"), c.Writer.Header())
+	if len(carrierRules) > 0 && strings.Contains(strings.Join(carrierRules, ","), "unparseable") {
+		contentType = "application/json"
+	}
+
 	returnResult := r.gateEvaluator.EvaluateReturn(requestID, respBody, agentID)
+	if len(carrierRules) > 0 {
+		returnResult.MatchedRules = append(carrierRules, returnResult.MatchedRules...)
+	}
 	setToolProxyHeaders(c.Writer.Header(), "return", returnResult)
 	switch returnResult.Decision {
 	case interfaces.Block, interfaces.Deny:
@@ -365,6 +388,21 @@ func setToolProxyHeaders(header http.Header, gateType string, result interfaces.
 	header.Set("X-Aegis-Risk-Score", intToString(result.RiskScore))
 	header.Set("X-Aegis-Risk-Level", result.RiskLevel)
 	header.Set("X-Aegis-Matched-Rules", strings.Join(result.MatchedRules, ","))
+}
+
+func normalizeToolProxyResponse(respBody []byte, contentType, contentEncoding string, header http.Header) ([]byte, []string) {
+	normalized, rules, err := gates.NormalizeReturnBody(respBody, contentType, contentEncoding)
+	if err != nil {
+		rules = append(rules, "return_carrier_unparseable")
+		header.Del("Content-Encoding")
+		header.Set("X-Aegis-Return-Carrier", strings.Join(rules, ","))
+		return []byte(`{"error":"response body isolated because its carrier could not be decoded safely"}`), rules
+	}
+	if len(rules) > 0 || strings.TrimSpace(contentEncoding) != "" {
+		header.Del("Content-Encoding")
+		header.Set("X-Aegis-Return-Carrier", strings.Join(rules, ","))
+	}
+	return normalized, rules
 }
 
 func intToString(value int) string {

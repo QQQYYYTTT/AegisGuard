@@ -108,6 +108,52 @@ func TestNonceGC(t *testing.T) {
 	nonceMu.RUnlock()
 }
 
+func TestSetNonceMaxEntriesPrunesOldestExpirations(t *testing.T) {
+	ResetNonces()
+	nonceMu.Lock()
+	usedNonces["nonce-1"] = time.Now().Add(1 * time.Minute).Unix()
+	usedNonces["nonce-2"] = time.Now().Add(2 * time.Minute).Unix()
+	usedNonces["nonce-3"] = time.Now().Add(3 * time.Minute).Unix()
+	nonceMu.Unlock()
+
+	SetNonceMaxEntries(2)
+
+	nonceMu.RLock()
+	defer nonceMu.RUnlock()
+	if len(usedNonces) != 2 {
+		t.Fatalf("expected nonce cache to be pruned to 2 entries, got %d", len(usedNonces))
+	}
+	if _, exists := usedNonces["nonce-1"]; exists {
+		t.Fatalf("expected earliest-expiring nonce to be evicted")
+	}
+}
+
+func TestVerifyNoncePrunesExpiredEntriesBeforeInsert(t *testing.T) {
+	ResetNonces()
+	SetNonceMaxEntries(1)
+	SetNonceExpiration(time.Hour)
+
+	nonceMu.Lock()
+	usedNonces["expired-nonce"] = time.Now().Add(-time.Minute).Unix()
+	nonceMu.Unlock()
+
+	v := NewVerifier()
+	if err := v.verifyNonce(&RequireToken{Nonce: "fresh-nonce"}, true); err != nil {
+		t.Fatalf("verifyNonce returned error: %v", err)
+	}
+	if got := NonceCount(); got != 1 {
+		t.Fatalf("expected exactly one nonce after pruning + insert, got %d", got)
+	}
+	nonceMu.RLock()
+	defer nonceMu.RUnlock()
+	if _, exists := usedNonces["expired-nonce"]; exists {
+		t.Fatalf("expired nonce should have been pruned before insert")
+	}
+	if _, exists := usedNonces["fresh-nonce"]; !exists {
+		t.Fatalf("fresh nonce should have been inserted")
+	}
+}
+
 func TestBuildCacheKeyDeterministic(t *testing.T) {
 	if err := InitSigningKey(""); err != nil {
 		t.Fatalf("init signing key: %v", err)

@@ -224,7 +224,7 @@ func (m *Manager) TrustedToUntrusted(contextID string, fields []string) (*interf
 
 	selected := trustedFieldValues(ctx.Trusted, fields)
 	summary := "trusted fields exported to sandbox: " + strings.Join(sortedKeys(selected), ", ")
-	record := m.newRecord(ctx.ContextID, "trusted", "untrusted", fields, summary, 0, "low", "export", true, "")
+	record := m.newRecord(ctx.ContextID, "trusted", "untrusted", fields, summary, 0, "low", "export", "", true, "", "", "")
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -238,44 +238,7 @@ func (m *Manager) TrustedToUntrusted(contextID string, fields []string) (*interf
 }
 
 func (m *Manager) UntrustedToTrusted(contextID string, data interfaces.UntrustedContent) (*interfaces.TransferRecord, error) {
-	ctx, err := m.GetContext(contextID)
-	if err != nil {
-		return nil, err
-	}
-
-	content := joinUntrusted(m.normalizeUntrusted(data))
-	if strings.TrimSpace(content) == "" {
-		content = joinUntrusted(ctx.Untrusted)
-	}
-
-	score, level := assessRisk(content)
-	summary := m.ExtractSafeSummary(content)
-	approved := score < 70
-	action := "summary"
-	reason := "sanitized summary approved for trusted memory"
-	if !approved {
-		action = "quarantine"
-		reason = "high-risk sandbox content remains isolated"
-	}
-
-	record := m.newRecord(ctx.ContextID, "untrusted", "trusted", []string{"safe_summary"}, summary, score, level, action, approved, reason)
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	stored, ok := m.contexts[ctx.ContextID]
-	if !ok {
-		return nil, fmt.Errorf("sandbox context %s not found", ctx.ContextID)
-	}
-	if approved && summary != "" {
-		stored.Trusted.Memory = appendTrustedMemory(stored.Trusted.Memory, summary)
-	}
-	stored.RiskScore = score
-	stored.RiskLevel = level
-	stored.Status = statusForRisk(score)
-	stored.UpdatedAt = time.Now()
-	stored.SM3Fingerprint = m.ComputeFingerprint(stored)
-	m.appendRecordLocked(ctx.ContextID, record)
-	return &record, nil
+	return m.PromoteMemory(contextID, data, "safe_summary", "legacy sandbox promote compatibility path")
 }
 
 func (m *Manager) RecordQuarantine(contextID string, data interfaces.UntrustedContent, reason string) (*interfaces.TransferRecord, error) {
@@ -290,7 +253,7 @@ func (m *Manager) RecordQuarantine(contextID string, data interfaces.UntrustedCo
 	}
 	score, level := assessRisk(content)
 	summary := m.ExtractSafeSummary(content)
-	record := m.newRecord(ctx.ContextID, "untrusted", "trusted", []string{"safe_summary"}, summary, score, level, "quarantine", false, firstNonEmpty(reason, "sandbox content quarantined"))
+	record := m.newRecord(ctx.ContextID, "untrusted", "trusted", []string{"safe_summary"}, summary, score, level, "quarantine", "", false, firstNonEmpty(reason, "sandbox content quarantined"), data.Source, "")
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -328,6 +291,169 @@ func (m *Manager) GetRecords(contextID string, limit int) ([]interfaces.Transfer
 		records[i], records[j] = records[j], records[i]
 	}
 	return records, nil
+}
+
+func (m *Manager) RecordMemoryWrite(contextID string, data interfaces.UntrustedContent, memorySource string) (*interfaces.TransferRecord, error) {
+	ctx, err := m.GetContext(contextID)
+	if err != nil {
+		return nil, err
+	}
+
+	content := joinUntrusted(m.normalizeUntrusted(data))
+	if strings.TrimSpace(content) == "" {
+		content = joinUntrusted(ctx.Untrusted)
+	}
+	score, level := assessRisk(content)
+	summary := m.ExtractSafeSummary(content)
+	record := m.newRecord(
+		ctx.ContextID,
+		"external",
+		"sandbox",
+		[]string{"memory_candidate"},
+		summary,
+		score,
+		level,
+		"memory.write",
+		"memory.write",
+		true,
+		"memory candidate isolated in sandbox",
+		firstNonEmpty(memorySource, data.Source, ctx.Untrusted.Source, "external"),
+		"",
+	)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	stored, ok := m.contexts[ctx.ContextID]
+	if !ok {
+		return nil, fmt.Errorf("sandbox context %s not found", ctx.ContextID)
+	}
+	stored.RiskScore = score
+	stored.RiskLevel = level
+	stored.Status = statusForRisk(score)
+	stored.UpdatedAt = time.Now()
+	stored.SM3Fingerprint = m.ComputeFingerprint(stored)
+	m.appendRecordLocked(ctx.ContextID, record)
+	return &record, nil
+}
+
+func (m *Manager) UpdateMemoryCandidate(contextID string, data interfaces.UntrustedContent, memorySource string) (*interfaces.TransferRecord, error) {
+	if m == nil {
+		return nil, errors.New("sandbox manager is nil")
+	}
+	id := strings.TrimSpace(contextID)
+	if id == "" {
+		return nil, errors.New("context_id is required")
+	}
+
+	normalized := m.normalizeUntrusted(data)
+	content := joinUntrusted(normalized)
+	score, level := assessRisk(content)
+	summary := m.ExtractSafeSummary(content)
+	record := m.newRecord(
+		id,
+		"sandbox",
+		"sandbox",
+		[]string{"memory_candidate"},
+		summary,
+		score,
+		level,
+		"memory.update",
+		"memory.update",
+		true,
+		"memory candidate updated in sandbox",
+		firstNonEmpty(memorySource, normalized.Source, "sandbox"),
+		"",
+	)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	stored, ok := m.contexts[id]
+	if !ok {
+		return nil, fmt.Errorf("sandbox context %s not found", id)
+	}
+	stored.Untrusted = normalized
+	stored.Source = firstNonEmpty(normalized.Source, stored.Source, "manual")
+	stored.RiskScore = score
+	stored.RiskLevel = level
+	stored.Status = statusForRisk(score)
+	stored.UpdatedAt = time.Now()
+	stored.SM3Fingerprint = m.ComputeFingerprint(stored)
+	m.appendRecordLocked(id, record)
+	return &record, nil
+}
+
+func (m *Manager) PromoteMemory(contextID string, data interfaces.UntrustedContent, memorySource, promotionReason string) (*interfaces.TransferRecord, error) {
+	ctx, err := m.GetContext(contextID)
+	if err != nil {
+		return nil, err
+	}
+
+	normalized := m.normalizeUntrusted(data)
+	content := joinUntrusted(normalized)
+	if strings.TrimSpace(content) == "" {
+		content = joinUntrusted(ctx.Untrusted)
+	}
+
+	score, level := assessRisk(content)
+	summary := m.ExtractSafeSummary(content)
+	memorySource = strings.TrimSpace(memorySource)
+	promotionReason = strings.TrimSpace(promotionReason)
+
+	approved := score < 70 && summary != "" && strings.EqualFold(memorySource, "safe_summary")
+	reason := promotionReason
+	if reason == "" && approved {
+		reason = "safe_summary approved for trusted memory"
+	}
+	if !strings.EqualFold(memorySource, "safe_summary") {
+		approved = false
+		reason = "only safe_summary can be promoted to trusted memory"
+	}
+	if summary == "" {
+		approved = false
+		if reason == "" {
+			reason = "safe_summary is empty and cannot be promoted"
+		}
+	}
+	if score >= 70 {
+		approved = false
+		reason = "high-risk sandbox content remains isolated"
+	}
+
+	record := m.newRecord(
+		ctx.ContextID,
+		"sandbox",
+		"trusted",
+		[]string{"safe_summary"},
+		summary,
+		score,
+		level,
+		"memory.promote",
+		"memory.promote",
+		approved,
+		reason,
+		firstNonEmpty(memorySource, normalized.Source, ctx.Untrusted.Source, "safe_summary"),
+		promotionReason,
+	)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	stored, ok := m.contexts[ctx.ContextID]
+	if !ok {
+		return nil, fmt.Errorf("sandbox context %s not found", ctx.ContextID)
+	}
+	if approved {
+		stored.Trusted.Memory = appendTrustedMemory(stored.Trusted.Memory, summary)
+	}
+	stored.RiskScore = score
+	stored.RiskLevel = level
+	stored.Status = statusForRisk(score)
+	if !approved {
+		stored.Status = "quarantined"
+	}
+	stored.UpdatedAt = time.Now()
+	stored.SM3Fingerprint = m.ComputeFingerprint(stored)
+	m.appendRecordLocked(ctx.ContextID, record)
+	return &record, nil
 }
 
 func (m *Manager) ExtractSafeSummary(content string) string {
@@ -432,21 +558,24 @@ func (m *Manager) normalizeUntrusted(content interfaces.UntrustedContent) interf
 	return content
 }
 
-func (m *Manager) newRecord(contextID, from, to string, fields []string, summary string, score int, level, action string, approved bool, reason string) interfaces.TransferRecord {
+func (m *Manager) newRecord(contextID, from, to string, fields []string, summary string, score int, level, action, toolName string, approved bool, reason, memorySource, promotionReason string) interfaces.TransferRecord {
 	return interfaces.TransferRecord{
-		ID:        uuid.NewString(),
-		ContextID: contextID,
-		From:      from,
-		To:        to,
-		Fields:    append([]string(nil), fields...),
-		Summary:   summary,
-		SM3Hash:   smcrypto.SM3Hex([]byte(summary)),
-		RiskScore: score,
-		RiskLevel: level,
-		Action:    action,
-		Approved:  approved,
-		Reason:    reason,
-		Timestamp: time.Now(),
+		ID:              uuid.NewString(),
+		ContextID:       contextID,
+		From:            from,
+		To:              to,
+		Fields:          append([]string(nil), fields...),
+		Summary:         summary,
+		SM3Hash:         smcrypto.SM3Hex([]byte(summary)),
+		RiskScore:       score,
+		RiskLevel:       level,
+		Action:          action,
+		ToolName:        toolName,
+		Approved:        approved,
+		Reason:          reason,
+		MemorySource:    memorySource,
+		PromotionReason: promotionReason,
+		Timestamp:       time.Now(),
 	}
 }
 

@@ -30,16 +30,19 @@ export type SandboxContext = {
 export type TransferRecord = {
   id: string;
   context_id?: string;
-  from: "trusted" | "untrusted";
-  to: "trusted" | "untrusted";
+  from: string;
+  to: string;
   fields: string[];
   summary: string;
   sm3_hash: string;
   risk_score?: number;
   risk_level?: string;
   action?: string;
+  tool_name?: string;
   approved: boolean;
   reason?: string;
+  memory_source?: string;
+  promotion_reason?: string;
   timestamp: string;
 };
 

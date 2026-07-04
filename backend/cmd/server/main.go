@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"aegisguard/internal/auth"
@@ -26,6 +27,8 @@ func main() {
 		logger.Fatal("failed to initialize RequireToken signing key", zap.Error(err))
 	}
 
+	auth.SetNonceMaxEntries(cfg.NonceMaxEntries)
+	auth.SetNonceExpiration(cfg.NonceTTL)
 	auth.StartNonceGC(time.Hour)
 	defer auth.StopNonceGC()
 
@@ -68,6 +71,7 @@ func runBridge(cfg config.Config, logger *zap.Logger, args []string) error {
 	backendURL := fs.String("backend", "http://127.0.0.1:"+cfg.Port, "AegisGuard backend base URL")
 	bridgeKey := fs.String("bridge-key", cfg.BridgeSharedKey, "shared key for bridge control-plane auth")
 	agentID := fs.String("agent-id", "agent-bridge", "agent identifier")
+	callerAgentID := fs.String("caller-agent-id", "", "calling/delegating agent identifier")
 	sessionID := fs.String("session-id", fmt.Sprintf("session-%d", time.Now().UnixNano()), "session identifier")
 	taskID := fs.String("task-id", fmt.Sprintf("task-%d", time.Now().UnixNano()), "task identifier")
 	if err := fs.Parse(args); err != nil {
@@ -78,12 +82,13 @@ func runBridge(cfg config.Config, logger *zap.Logger, args []string) error {
 		command = command[1:]
 	}
 	bridge, err := mcpbridge.New(mcpbridge.Config{
-		BackendURL: *backendURL,
-		BridgeKey:  *bridgeKey,
-		AgentID:    *agentID,
-		SessionID:  *sessionID,
-		TaskID:     *taskID,
-		Command:    command,
+		BackendURL:    *backendURL,
+		BridgeKey:     *bridgeKey,
+		AgentID:       *agentID,
+		CallerAgentID: firstNonEmpty(*callerAgentID, *agentID),
+		SessionID:     *sessionID,
+		TaskID:        *taskID,
+		Command:       command,
 	})
 	if err != nil {
 		return err
@@ -93,6 +98,15 @@ func runBridge(cfg config.Config, logger *zap.Logger, args []string) error {
 		zap.String("agent_id", *agentID),
 	)
 	return bridge.Run(context.Background())
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func buildLogger(cfg config.Config) *zap.Logger {

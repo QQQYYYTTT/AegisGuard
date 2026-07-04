@@ -40,11 +40,12 @@ func TestBridgeActionEvaluateAllow(t *testing.T) {
 	router.registerBridgeRoutes()
 
 	body := map[string]any{
-		"request_id": "req-bridge-1",
-		"tool_name":  "weather.query",
-		"agent_id":   "agent-test",
-		"session_id": "session-test",
-		"task_id":    "task-test",
+		"request_id":      "req-bridge-1",
+		"tool_name":       "weather.query",
+		"agent_id":        "agent-test",
+		"caller_agent_id": "agent-test",
+		"session_id":      "session-test",
+		"task_id":         "task-test",
 		"params": map[string]any{
 			"city": "beijing",
 		},
@@ -70,6 +71,110 @@ func TestBridgeActionEvaluateAllow(t *testing.T) {
 	}
 	if resp.Data.Token == "" || resp.Data.SchemaHash == "" {
 		t.Fatalf("expected token and schema hash, got %+v", resp.Data)
+	}
+}
+
+func TestBridgeActionEvaluateRequiresCallerAgentID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	auth.ResetNonces()
+	if err := auth.InitSigningKey(""); err != nil {
+		t.Fatalf("init signing key: %v", err)
+	}
+	store := auth.NewTokenStore()
+
+	router := &Router{
+		engine:     gin.New(),
+		tokenStore: store,
+		verifier:   auth.NewVerifierWithStore(store),
+		gateEvaluator: gates.NewGateEvaluator(
+			gates.NewMessageGate(),
+			gates.NewActionGateWithRuntimeAndStore(zap.NewNop(), "strict", nil, store),
+			gates.NewReturnGate(),
+			gates.NewDecisionStore(100),
+		),
+		logger: zap.NewNop(),
+		cfg:    testHTTPConfig(),
+	}
+	router.registerBridgeRoutes()
+
+	body := map[string]any{
+		"request_id": "req-bridge-missing-caller",
+		"tool_name":  "weather.query",
+		"agent_id":   "agent-test",
+		"session_id": "session-test",
+		"task_id":    "task-test",
+		"params": map[string]any{
+			"city": "beijing",
+		},
+		"schema": `{"name":"weather.query","inputSchema":{"type":"object"}}`,
+	}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/aegis/bridge/evaluate/action", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Aegis-Bridge-Key", "bridge-test-key")
+	rec := httptest.NewRecorder()
+
+	router.engine.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing caller_agent_id, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestBridgeActionEvaluateDeniesDelegatedHighRiskTool(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	auth.ResetNonces()
+	if err := auth.InitSigningKey(""); err != nil {
+		t.Fatalf("init signing key: %v", err)
+	}
+	store := auth.NewTokenStore()
+
+	router := &Router{
+		engine:     gin.New(),
+		tokenStore: store,
+		verifier:   auth.NewVerifierWithStore(store),
+		gateEvaluator: gates.NewGateEvaluator(
+			gates.NewMessageGate(),
+			gates.NewActionGateWithRuntimeAndStore(zap.NewNop(), "strict", nil, store),
+			gates.NewReturnGate(),
+			gates.NewDecisionStore(100),
+		),
+		logger: zap.NewNop(),
+		cfg:    testHTTPConfig(),
+	}
+	router.registerBridgeRoutes()
+
+	body := map[string]any{
+		"request_id":      "req-bridge-delegated-shell",
+		"tool_name":       "shell.exec",
+		"agent_id":        "agent-sub",
+		"caller_agent_id": "agent-parent",
+		"session_id":      "session-test",
+		"task_id":         "task-test",
+		"params": map[string]any{
+			"command": "pwd",
+		},
+		"schema": `{"name":"shell.exec","inputSchema":{"type":"object"}}`,
+	}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/aegis/bridge/evaluate/action", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Aegis-Bridge-Key", "bridge-test-key")
+	rec := httptest.NewRecorder()
+
+	router.engine.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for delegated high-risk tool, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp bridgeEvaluateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Data.Action.Decision.String() != "Deny" {
+		t.Fatalf("expected Deny, got %+v", resp.Data.Action)
+	}
+	if !bytes.Contains([]byte(resp.Data.Action.Reason), []byte("delegated low-privilege agent")) {
+		t.Fatalf("expected delegated denial reason, got %q", resp.Data.Action.Reason)
 	}
 }
 
